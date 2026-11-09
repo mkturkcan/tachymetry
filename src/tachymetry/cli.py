@@ -227,7 +227,7 @@ def cmd_demo(args: argparse.Namespace) -> int:
 def cmd_download(args: argparse.Namespace) -> int:
     from .detect import download_weights
 
-    _print(download_weights(args.detector))
+    print(download_weights(args.detector))  # plain print: a long path must not be wrapped
     return 0
 
 
