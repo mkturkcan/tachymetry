@@ -259,6 +259,8 @@ class Camera:
         if not rectified:
             uv = self.lens.rectify(uv)
         line = self.horizon()
+        if not np.any(line[:2]):  # nadir view: no horizon in the image
+            return np.all(np.isfinite(uv), axis=1)
         return (uv @ line[:2] + line[2]) > margin_px
 
     def ground_sampling_distance(self, uv: Any, mode: str = "max") -> np.ndarray:
@@ -288,7 +290,16 @@ class Camera:
         return np.linalg.norm(xy - self.center[:2], axis=1)
 
     def _forward_xy(self) -> np.ndarray:
-        f = self.R[2, :2]
+        return self.ground_up()
+
+    def ground_up(self) -> np.ndarray:
+        """Unit ground direction that appears as "up" in the image.
+
+        Sum of the ground projections of the optical axis and of the image's up
+        axis: the first vanishes for a nadir camera, the second for a level one,
+        so the direction stays defined from horizontal to straight-down views.
+        """
+        f = self.R[2, :2] - self.R[1, :2]
         n = np.linalg.norm(f)
         return f / n if n > 1e-9 else np.array([1.0, 0.0])
 

@@ -97,3 +97,18 @@ def test_horizon_and_gsd(pole_camera):
     assert pole_camera.below_horizon([[640, 700]])[0]
     gsd = pole_camera.ground_sampling_distance([[640, 400], [640, 700]])
     assert gsd[0] > gsd[1] > 0
+
+
+def test_nadir_camera():
+    """Straight-down (drone) cameras: no horizon, constant ground sampling distance, image-up stays up."""
+    cam = Camera.from_pose((3840, 2160), focal=2825.0, height=111.7, pitch=90.0, yaw=90.0)
+    uv = [[0, 0], [1919.5, 1079.5], [3839, 2159]]
+    assert cam.below_horizon(uv, margin_px=2.0).all()
+    gsd = cam.ground_sampling_distance(uv)
+    assert np.allclose(gsd, 111.7 / 2825.0, rtol=1e-6)
+    top, centre = cam.image_to_ground([[1919.5, 0.0], [1919.5, 1079.5]])
+    up = (top - centre) / np.linalg.norm(top - centre)
+    assert np.allclose(cam.ground_up(), up, atol=1e-9)
+    # for an oblique camera the image-up direction on the ground is the forward direction
+    oblique = Camera.from_pose((1920, 1080), focal=1400, height=10, pitch=30, yaw=90)
+    assert np.allclose(oblique.ground_up(), [0.0, 1.0], atol=1e-9)

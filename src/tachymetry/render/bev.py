@@ -40,9 +40,8 @@ class BEVCanvas:
         self.W, self.H = size
         self.center = np.asarray(center, dtype=np.float64)
         self.mpp = span / min(self.W, self.H)
-        fwd = camera.R[2, :2]
-        fwd = fwd / max(np.linalg.norm(fwd), 1e-9)
-        # canvas up (-v) = camera forward; canvas right (+u) = forward rotated clockwise
+        fwd = camera.ground_up()
+        # canvas up (-v) = the image's up direction on the ground; canvas right (+u) = up rotated clockwise
         self.up = fwd
         self.right = np.array([fwd[1], -fwd[0]])
         if fit_points is not None and len(fit_points) >= 2:

@@ -13,6 +13,7 @@ import hashlib
 import json
 import platform
 import time
+import warnings
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,9 @@ from .results import RunResult, TrackSet
 __all__ = ["Pipeline", "resolve_camera"]
 
 ProgressFn = Callable[[str, int, int], None]
+
+#: Automatic calibrations that place the camera higher than this are reported as implausible.
+MAX_PLAUSIBLE_HEIGHT_M = 250.0
 
 
 def _detector_key(cfg: PipelineConfig) -> str:
@@ -199,6 +203,14 @@ class Pipeline:
                 "with --set calibration.scale=height=<metres>, or calibrate manually "
                 "(tachymetry calibrate pick / manual)."
             )
+        if res.camera.height > MAX_PLAUSIBLE_HEIGHT_M:
+            note = (
+                f"{src.path.name}: automatic calibration placed the camera {res.camera.height:.0f} m above the ground, "
+                "which is implausible for traffic footage. Straight-down (nadir) drone views are a known failure "
+                "case: supply the camera instead (altitude and field of view, see the drone-footage example)."
+            )
+            warnings.warn(note, stacklevel=2)
+            res.camera.meta.setdefault("warnings", []).append(note)
         if out_dir is not None:
             import cv2
 
