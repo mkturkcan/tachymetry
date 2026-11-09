@@ -131,6 +131,7 @@ class BoxFitResult:
     heading: np.ndarray  #: (n,) fitted headings (rad), NaN where not fitted
     cost: np.ndarray  #: (n,) silhouette cost, inf where not fitted
     fill: np.ndarray  #: (n,) share of the fitted silhouette covered by the mask, NaN where not fitted
+    miss: np.ndarray  #: (n,) share of the mask outside the fitted silhouette, NaN where not fitted
     L: float
     W: float
     H: float
@@ -232,6 +233,7 @@ def fit_track_boxes(
     heading = np.full(n, np.nan)
     cost = np.full(n, np.inf)
     fill = np.full(n, np.nan)
+    miss = np.full(n, np.nan)
     pose = idx if pose_frames is None else [i for i in idx if pose_frames[i]]
     for i in pose:
         lp = None
@@ -253,12 +255,13 @@ def fit_track_boxes(
             lon_prior=lp,
         )
         centre[i], cost[i], heading[i] = c, f, th
-        fill[i] = silhouette_fill(project_box(camera, c, th, L, W, H, gap), rasters[i])
+        fill[i], miss[i] = silhouette_fill(project_box(camera, c, th, L, W, H, gap), rasters[i])
     return BoxFitResult(
         centre,
         heading,
         cost,
         fill,
+        miss,
         L,
         W,
         H,

@@ -152,6 +152,7 @@ class HygieneConfig:
     boxfit_min_depression_deg: float = 8.5  #: ... nor vehicles seen below this depression angle (grazing views)
     boxfit_max_cost: float = 2.5  #: per-frame fits with a higher silhouette cost are not used
     boxfit_dim_frames: int = 6  #: evidence frames for the shared box dimensions
+    boxfit_max_hz: float = 7.5  #: pose-fit rate of moving vehicles (other frames interpolate the fit residual)
     boxfit_slow_hz: float = 3.0  #: pose-fit rate inside stopped stretches (offsets are frozen there)
 
 

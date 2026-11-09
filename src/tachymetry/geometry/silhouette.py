@@ -34,7 +34,7 @@ occluder's edge.
 
 Evaluation is local to the mask: :class:`MaskRaster` stores the mask crop
 block-averaged by ``down`` (4 by default) with per-row prefix sums, so
-``|M n S|`` is a sum of exact row-span integrals of the convex polygon
+``|M n S|`` is a sum of row-span integrals of the convex polygon
 (``O(rows)`` per evaluation, continuous in the box parameters along the rows),
 and ``|S n F|`` is the analytic area of the polygon clipped to the frame. No
 full-frame raster is built per evaluation.
@@ -153,6 +153,7 @@ class MaskRaster:
             ms.flat[int(np.argmax(small))] = True
         self.X0, self.Y0 = X0, Y0
         self.offset = 0.5 * (d - 1)
+        self._origin = np.array([X0 + self.offset, Y0 + self.offset])
         self.mask = ms
         self.shape = ms.shape
         self.area = float(ms.sum())
@@ -190,8 +191,7 @@ class MaskRaster:
     # ---------------------------------------------------------------- coords
     def to_raster(self, uv: np.ndarray) -> np.ndarray:
         """Full-resolution pixel coordinates ``(N, 2)`` to raster coordinates ``(x, y)``."""
-        uv = np.asarray(uv, np.float64)
-        return np.column_stack([(uv[:, 0] - self.X0 - self.offset), (uv[:, 1] - self.Y0 - self.offset)]) / self.down
+        return (np.asarray(uv, np.float64) - self._origin) / self.down
 
     # ----------------------------------------------------------------- terms
     def overlap(self, poly: np.ndarray) -> float:
@@ -203,7 +203,7 @@ class MaskRaster:
             return 0.0
         ys = np.arange(y_lo, y_hi + 1, dtype=np.float64)
         p1 = poly
-        p2 = np.roll(poly, -1, axis=0)
+        p2 = _next(poly)
         dy = p2[:, 1] - p1[:, 1]
         ok = np.abs(dy) > 1e-12
         if not ok.any():
@@ -230,12 +230,13 @@ class MaskRaster:
     def chamfer(self, poly: np.ndarray, spacing: float = 1.5, cap: float = 5.0) -> float:
         """Mean truncated distance (raster pixels) from points along the outline of ``poly`` to the mask outline."""
         p1 = poly
-        p2 = np.roll(poly, -1, axis=0)
-        seg = np.linalg.norm(p2 - p1, axis=1)
+        p2 = _next(poly)
+        d = p2 - p1
+        seg = np.sqrt(d[:, 0] * d[:, 0] + d[:, 1] * d[:, 1])
         n = np.maximum(np.ceil(seg / spacing).astype(np.int64), 1)
         idx = np.repeat(np.arange(len(poly)), n)
         frac = (np.arange(int(n.sum())) - np.repeat(np.cumsum(n) - n, n)) / np.repeat(n, n)
-        pts = p1[idx] + frac[:, None] * (p2[idx] - p1[idx])
+        pts = p1[idx] + frac[:, None] * d[idx]
         if self.frame is not None:
             (fx0, fy0), (fx1, fy1) = self.frame
             keep = (pts[:, 0] >= fx0) & (pts[:, 0] <= fx1) & (pts[:, 1] >= fy0) & (pts[:, 1] <= fy1)
@@ -263,13 +264,18 @@ class MaskRaster:
             x.min() >= self.frame[0, 0] and y.min() >= self.frame[0, 1] and x.max() <= self.frame[1, 0]
             and y.max() <= self.frame[1, 1]
         ):  # fmt: skip
-            return 0.5 * abs(float(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))))
+            return 0.5 * abs(float(np.dot(x[:-1], y[1:]) - np.dot(y[:-1], x[1:]) + x[-1] * y[0] - y[-1] * x[0]))
         import cv2
 
         (fx0, fy0), (fx1, fy1) = self.frame
         rect = np.array([[fx0, fy0], [fx1, fy0], [fx1, fy1], [fx0, fy1]], np.float32)
         area, _ = cv2.intersectConvexConvex(poly.astype(np.float32), rect)
         return max(float(area), 0.0)
+
+
+def _next(poly: np.ndarray) -> np.ndarray:
+    """Polygon vertices shifted by one (the end point of each edge)."""
+    return np.concatenate([poly[1:], poly[:1]])
 
 
 def _hull(pts: np.ndarray) -> np.ndarray:
@@ -306,21 +312,24 @@ def silhouette_cost(
     return float(c)
 
 
-def silhouette_fill(pts8: np.ndarray, raster: MaskRaster) -> float:
-    """Share of the in-frame box silhouette covered by the mask, ``|M n S| / |S n F|`` (NaN if undefined).
+def silhouette_fill(pts8: np.ndarray, raster: MaskRaster) -> tuple[float, float]:
+    """``(fill, miss)``: ``|M n S| / |S n F|`` and ``|M \\ S| / |M|`` (NaN if undefined).
 
     A fully visible vehicle fills most of its box silhouette (the box is more
-    angular than the body); an occluder lowers the share in proportion to the
-    hidden part of the silhouette.
+    angular than the body); an occluder lowers the fill in proportion to the
+    hidden part of the silhouette while the visible mask stays covered (low
+    miss). A box at the wrong heading or position lowers the fill too, but also
+    leaves mask pixels uncovered.
     """
     pts8 = np.asarray(pts8, np.float64)
     if raster.area <= 0 or not np.all(np.isfinite(pts8)):
-        return float("nan")
+        return float("nan"), float("nan")
     poly = _hull(raster.to_raster(pts8))
     if len(poly) < 3:
-        return float("nan")
+        return float("nan"), float("nan")
     a = raster.clipped_area(poly)
-    return float(raster.overlap(poly) / a) if a > 0 else float("nan")
+    inter = raster.overlap(poly)
+    return (float(inter / a) if a > 0 else float("nan")), float(max(raster.area - inter, 0.0) / raster.area)
 
 
 def fit_centre(

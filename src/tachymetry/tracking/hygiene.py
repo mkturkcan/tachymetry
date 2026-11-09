@@ -617,6 +617,8 @@ def _build(rows: np.ndarray, ctx: TrackContext, cls: str, stats: HygieneStats) -
             "source": geo.source,
             "clearance_m": round(geo.gap, 3),
             "silhouette_share": round(float(np.mean(has_fp)), 3),
+            "occluded_samples": int(geo.info.get("box", {}).get("occluded", 0)),
+            "hidden_samples": int(geo.info.get("box", {}).get("hidden", 0)),
             "seconds": round(geo.seconds, 3),
         }
     reason = _validity(tr, ctx) if (state == "moving" and cfg.validity) else ""
