@@ -1,0 +1,2448 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Correspondence picker · tachymetry</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect x='1' y='1' width='20' height='20' rx='7' fill='%23171a1f'/%3E%3Ccircle cx='7.5' cy='8.5' r='2.8' fill='%23ffb547'/%3E%3Ccircle cx='14.5' cy='13.5' r='2.8' fill='%236fe3ff'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #0a0b0d;
+  --surface: #111317;
+  --surface-2: #171a1f;
+  --surface-3: #1e2228;
+  --canvas: #0d0f12;
+  --hairline: rgba(255, 255, 255, 0.08);
+  --hairline-2: rgba(255, 255, 255, 0.14);
+  --text: #ecebe8;
+  --muted: #9b9ca3;
+  --faint: #6e7078;
+  --amber: #ffb547;
+  --cyan: #6fe3ff;
+  --warn: #ff7b72;
+  --ok: #7ee2a8;
+  --radius: 14px;
+  --font: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: "Geist Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 13px/1.45 var(--font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+button, input { font: inherit; color: inherit; }
+[hidden] { display: none !important; }
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.faint { color: var(--faint); }
+kbd {
+  display: inline-block; min-width: 18px; text-align: center;
+  font: 500 11px/1 var(--mono); padding: 3px 5px; border-radius: 6px;
+  border: 1px solid var(--hairline-2); border-bottom-width: 2px;
+  background: var(--surface-2); color: var(--text);
+}
+
+/* ------------------------------------------------------------------ top bar */
+.topbar {
+  display: flex; align-items: center; gap: 14px; min-width: 0;
+  padding: 10px 14px; border-bottom: 1px solid var(--hairline);
+}
+.brand { display: flex; align-items: center; gap: 9px; white-space: nowrap; min-width: 0; }
+.brand svg { flex: none; }
+.brand-name { font-weight: 600; letter-spacing: -0.01em; }
+.brand-sep { color: var(--faint); }
+.brand-title { color: var(--muted); }
+.toolbar { display: flex; align-items: center; gap: 6px; margin: 0 auto; flex-wrap: wrap; }
+.toolbar .sep { width: 1px; height: 18px; background: var(--hairline-2); margin: 0 4px; }
+.actions { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.save-target {
+  color: var(--muted); font: 500 11.5px var(--mono); max-width: 220px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.save-target.done { color: var(--ok); }
+
+/* ------------------------------------------------------------------ pills */
+.pill {
+  appearance: none; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  height: 30px; padding: 0 13px; border-radius: 999px;
+  border: 1px solid var(--hairline); background: var(--surface-2); color: var(--text);
+  font: 500 12.5px/1 var(--font); white-space: nowrap; cursor: pointer;
+  transition: background-color .12s ease, border-color .12s ease, color .12s ease, opacity .12s ease;
+}
+.pill:hover { background: var(--surface-3); border-color: var(--hairline-2); }
+.pill:active { transform: translateY(0.5px); }
+.pill[disabled] { opacity: .42; cursor: default; transform: none; }
+.pill[disabled]:hover { background: var(--surface-2); border-color: var(--hairline); }
+.pill.primary { background: var(--text); color: var(--bg); border-color: transparent; font-weight: 600; }
+.pill.primary:hover { background: #ffffff; }
+.pill.primary[disabled]:hover { background: var(--text); }
+.pill.icon { width: 30px; padding: 0; }
+.pill.small { height: 26px; padding: 0 10px; font-size: 12px; }
+.pill.small.icon { width: 26px; padding: 0; }
+.pill svg { flex: none; }
+.pill.toggle .led { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); transition: background-color .12s, box-shadow .12s; }
+.pill.toggle[aria-pressed="true"] { border-color: var(--hairline-2); }
+.pill.toggle[aria-pressed="true"] .led { background: var(--cyan); box-shadow: 0 0 8px rgba(111, 227, 255, .7); }
+.segmented { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px; background: var(--surface); border: 1px solid var(--hairline); }
+.segmented .pill { height: 26px; border-color: transparent; background: transparent; color: var(--muted); }
+.segmented .pill:hover { color: var(--text); background: var(--surface-2); }
+.segmented .pill[aria-pressed="true"] { background: var(--text); color: var(--bg); font-weight: 600; }
+
+/* ------------------------------------------------------------------ panes */
+.workspace {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px; padding: 10px 10px 0; min-height: 0;
+}
+.pane {
+  position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0;
+  background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius);
+  overflow: hidden; transition: border-color .2s ease, box-shadow .2s ease;
+}
+.pane.expect-amber { border-color: rgba(255, 181, 71, .5); box-shadow: 0 0 0 1px rgba(255, 181, 71, .16), 0 0 28px -10px rgba(255, 181, 71, .45); }
+.pane.expect-cyan { border-color: rgba(111, 227, 255, .5); box-shadow: 0 0 0 1px rgba(111, 227, 255, .16), 0 0 28px -10px rgba(111, 227, 255, .45); }
+.pane-head {
+  display: flex; align-items: center; gap: 8px; flex: none; min-width: 0;
+  height: 42px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--hairline);
+}
+.pane-head h2, .card-head h2 { margin: 0; font-size: 12.5px; font-weight: 600; letter-spacing: .01em; white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.dot.amber { background: var(--amber); box-shadow: 0 0 10px rgba(255, 181, 71, .55); }
+.dot.cyan { background: var(--cyan); box-shadow: 0 0 10px rgba(111, 227, 255, .55); }
+.meta { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.pane-tools { margin-left: auto; display: flex; align-items: center; gap: 6px; flex: none; }
+.zoom { font: 500 11.5px var(--mono); color: var(--muted); min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
+.gsd { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.gsd input {
+  width: 70px; height: 26px; padding: 0 9px; border-radius: 999px;
+  border: 1px solid var(--hairline-2); background: var(--bg); color: var(--text);
+  font: 500 12px var(--mono); text-align: right;
+}
+.gsd input:focus-visible { outline-offset: 1px; }
+.gsd input[aria-invalid="true"] { border-color: var(--warn); }
+.pane-body { position: relative; flex: 1; min-height: 0; background: var(--canvas); }
+.pane-body canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+  touch-action: none; cursor: crosshair;
+}
+.pane-body canvas:focus-visible { outline: 2px solid rgba(236, 235, 232, 0.55); outline-offset: -2px; }
+.pane-body.drop { box-shadow: inset 0 0 0 2px var(--cyan); }
+.pane-hint {
+  position: absolute; left: 10px; bottom: 10px; max-width: calc(100% - 20px);
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 11px; border-radius: 999px; pointer-events: none;
+  background: rgba(10, 11, 13, .8); border: 1px solid var(--hairline); color: var(--muted);
+  font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+}
+.pane-hint:empty { display: none; }
+.expect-amber .pane-hint { color: var(--text); border-color: rgba(255, 181, 71, .4); }
+.expect-cyan .pane-hint { color: var(--text); border-color: rgba(111, 227, 255, .4); }
+.empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; text-align: center; color: var(--muted); }
+.empty-card {
+  display: grid; justify-items: center; gap: 10px; max-width: 320px; padding: 26px 24px;
+  border: 1px dashed var(--hairline-2); border-radius: var(--radius); background: rgba(17, 19, 23, .6);
+}
+.empty-card h3 { margin: 0; color: var(--text); font-size: 14px; font-weight: 600; }
+.empty-card p { margin: 0; }
+
+/* ------------------------------------------------------------------ point form */
+.popover {
+  position: absolute; z-index: 5; width: 244px; padding: 12px;
+  display: grid; gap: 10px;
+  background: var(--surface-2); border: 1px solid var(--hairline-2); border-radius: var(--radius);
+  box-shadow: 0 18px 40px -12px rgba(0, 0, 0, .75);
+}
+.popover-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 12.5px; }
+.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.field { display: grid; gap: 4px; font-size: 11.5px; color: var(--muted); }
+.field input {
+  width: 100%; height: 30px; padding: 0 10px; border-radius: 10px;
+  border: 1px solid var(--hairline-2); background: var(--bg); color: var(--text);
+  font: 500 13px var(--mono);
+}
+.field input:focus-visible { outline-offset: 0; border-color: transparent; }
+.field input[aria-invalid="true"] { border-color: var(--warn); }
+.form-note { margin: -2px 0 0; color: var(--faint); font: 500 11px var(--mono); }
+.form-error { margin: 0; color: var(--warn); font-size: 12px; }
+.form-error:empty { display: none; }
+.popover-actions { display: flex; justify-content: flex-end; gap: 6px; }
+
+/* ------------------------------------------------------------------ drawer */
+.drawer {
+  display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 10px;
+  padding: 10px; height: clamp(230px, 35vh, 380px); min-height: 0;
+}
+.card {
+  display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius);
+}
+.card-head {
+  display: flex; align-items: center; gap: 10px; flex: none; min-width: 0;
+  height: 40px; padding: 0 14px; border-bottom: 1px solid var(--hairline);
+}
+.fit-status { margin-left: auto; color: var(--muted); font: 500 12px var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.fit-status.good { color: var(--text); }
+.fit-status.warn { color: var(--warn); font-family: var(--font); }
+.table-wrap { flex: 1; min-height: 0; overflow: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th {
+  position: sticky; top: 0; z-index: 1; background: var(--surface);
+  padding: 7px 10px; text-align: left; white-space: nowrap;
+  color: var(--muted); font-size: 11.5px; font-weight: 500; border-bottom: 1px solid var(--hairline);
+}
+td { padding: 4px 10px; border-bottom: 1px solid var(--hairline); white-space: nowrap; }
+td.num, th.num { text-align: right; }
+td.num { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+td.name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+tbody tr { cursor: pointer; scroll-margin-top: 34px; }
+tbody tr:hover { background: rgba(255, 255, 255, .025); }
+tbody tr.selected { background: rgba(255, 255, 255, .06); box-shadow: inset 2px 0 0 var(--text); }
+tbody tr.pending td { color: var(--muted); }
+tbody tr.empty-row { cursor: default; }
+tbody tr.empty-row td { color: var(--faint); padding: 14px 12px; white-space: normal; }
+td.res.warn { color: var(--warn); }
+.wait { color: var(--faint); font-family: var(--font); }
+.col-act { width: 1%; text-align: right; }
+.chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 22px; height: 18px; padding: 0 6px; border-radius: 999px;
+  font: 600 11px/1 var(--font); color: var(--bg); background: var(--text);
+}
+.chip.amber { background: var(--amber); }
+.chip.cyan { background: var(--cyan); }
+.chip.pair { background: linear-gradient(90deg, var(--amber) 50%, var(--cyan) 50%); }
+.icon-btn {
+  appearance: none; display: inline-grid; place-items: center; width: 26px; height: 26px;
+  border: 0; border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer;
+}
+.icon-btn:hover { background: var(--surface-3); color: var(--text); }
+.lines-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex: none;
+  padding: 7px 12px; border-top: 1px solid var(--hairline); color: var(--muted); font-size: 12px;
+}
+.lines-label { color: var(--text); font-weight: 500; margin-right: 4px; }
+.line-chip {
+  display: inline-flex; align-items: center; gap: 2px; height: 26px; padding: 0 2px 0 4px;
+  border-radius: 999px; background: var(--surface-2); border: 1px solid var(--hairline);
+}
+.line-chip.selected { border-color: var(--text); }
+.line-chip.draft { padding: 0 10px; border-style: dashed; color: var(--muted); }
+.line-name {
+  appearance: none; border: 0; background: transparent; color: var(--text); cursor: pointer;
+  height: 22px; padding: 0 6px; border-radius: 999px; font: 500 12px var(--font);
+}
+.bev-wrap { position: relative; flex: 1; min-height: 0; background: var(--canvas); }
+.bev-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.bev-empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 18px; text-align: center; color: var(--faint); font-size: 12px; }
+
+/* ------------------------------------------------------------------ toast and dialog */
+.toast {
+  position: fixed; left: 50%; bottom: 18px; z-index: 30;
+  max-width: min(680px, calc(100vw - 32px)); padding: 9px 16px;
+  background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--hairline-2); border-radius: var(--radius);
+  box-shadow: 0 14px 34px -12px rgba(0, 0, 0, .8); font-size: 12.5px;
+  opacity: 0; transform: translate(-50%, 10px); pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.error { border-color: rgba(255, 123, 114, .55); }
+.toast.success { border-color: rgba(126, 226, 168, .5); }
+.overlay {
+  position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 16px;
+  background: rgba(5, 6, 8, .72); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+}
+.dialog {
+  width: min(800px, 100%); max-height: calc(100vh - 32px); overflow: auto;
+  padding: 20px 22px 18px; background: var(--surface);
+  border: 1px solid var(--hairline-2); border-radius: var(--radius);
+  box-shadow: 0 30px 60px -20px rgba(0, 0, 0, .8);
+}
+.dialog-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.dialog-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.keys { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 30px; }
+.keys h3 { margin: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.keys dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 7px 14px; align-items: baseline; }
+.keys dt { white-space: nowrap; color: var(--text); font-size: 12px; }
+.keys dd { margin: 0; color: var(--muted); font-size: 12.5px; }
+.help-foot { margin: 16px 0 0; padding-top: 12px; border-top: 1px solid var(--hairline); color: var(--muted); font-size: 12px; }
+
+/* ------------------------------------------------------------------ narrow screens */
+@media (max-width: 1180px) {
+  .brand-sep, .brand-title { display: none; }
+  .drawer { grid-template-columns: minmax(0, 1fr) 300px; }
+}
+@media (max-width: 900px) {
+  body { height: auto; min-height: 100vh; overflow: auto; grid-template-rows: auto auto auto; }
+  .topbar { flex-wrap: wrap; row-gap: 8px; }
+  .actions { margin-left: auto; }
+  .toolbar { order: 3; width: 100%; margin: 0; }
+  .save-target { display: none; }
+  .workspace { grid-template-columns: minmax(0, 1fr); }
+  .pane-body { flex: none; aspect-ratio: 4 / 3; min-height: 240px; max-height: 70vh; }
+  .drawer { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .table-card { height: 300px; }
+  .bev-card { height: 280px; }
+  .keys { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .toolbar { gap: 4px; }
+  .toolbar .sep { display: none; }
+  .toolbar .pill:not(.icon) { padding: 0 10px; }
+  .col-loo, .col-name { display: none; }
+  th, td { padding-left: 6px; padding-right: 6px; }
+  .card-head { flex-wrap: wrap; height: auto; min-height: 40px; padding: 8px 12px; row-gap: 2px; }
+  .fit-status { margin-left: 0; flex-basis: 100%; }
+  .pane-head { padding-left: 10px; }
+  .pane-head .meta { display: none; }
+  .gsd > span { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+      <rect x="0.5" y="0.5" width="21" height="21" rx="7" fill="#171a1f" stroke="rgba(255,255,255,0.12)"/>
+      <path d="M7.5 8.5 14.5 13.5" stroke="rgba(236,235,232,0.55)" stroke-width="1.2" stroke-dasharray="1.8 1.8"/>
+      <circle cx="7.5" cy="8.5" r="2.6" fill="#ffb547"/>
+      <circle cx="14.5" cy="13.5" r="2.6" fill="#6fe3ff"/>
+    </svg>
+    <span class="brand-name">tachymetry</span>
+    <span class="brand-sep" aria-hidden="true">/</span>
+    <span class="brand-title">Correspondence picker</span>
+  </div>
+  <div class="toolbar" role="toolbar" aria-label="Picker tools">
+    <div class="segmented" role="group" aria-label="Tool">
+      <button type="button" class="pill" id="tool-point" aria-pressed="true" title="Point tool (P)">Points</button>
+      <button type="button" class="pill" id="tool-line" aria-pressed="false" title="Line tool (L): trace an edge that is straight on the ground">Lines</button>
+    </div>
+    <button type="button" class="pill toggle" id="toggle-grid" aria-pressed="true" title="Project a metric ground grid and the horizon onto the camera frame (G)"><span class="led" aria-hidden="true"></span>Grid</button>
+    <button type="button" class="pill toggle" id="toggle-overlay" aria-pressed="false" title="Warp the camera frame onto the right pane (O)"><span class="led" aria-hidden="true"></span>Overlay</button>
+    <span class="sep" aria-hidden="true"></span>
+    <button type="button" class="pill icon" id="undo" aria-label="Undo" title="Undo (Ctrl+Z)">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 3.5 2.5 6.5l3 3"/><path d="M2.5 6.5h7a3.5 3.5 0 0 1 0 7H7"/></svg>
+    </button>
+    <button type="button" class="pill icon" id="redo" aria-label="Redo" title="Redo (Ctrl+Shift+Z)">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.5 3.5l3 3-3 3"/><path d="M13.5 6.5h-7a3.5 3.5 0 0 0 0 7H9"/></svg>
+    </button>
+    <button type="button" class="pill icon" id="help-btn" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" aria-haspopup="dialog">?</button>
+  </div>
+  <div class="actions">
+    <span class="save-target" id="save-target"></span>
+    <button type="button" class="pill" id="download" title="Download the correspondences as a YAML file">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10"/></svg>
+      Download YAML
+    </button>
+    <button type="button" class="pill primary" id="save" title="Write the file and end the session (Ctrl+S)" hidden>Save</button>
+  </div>
+</header>
+
+<main class="workspace">
+  <section class="pane" id="pane-camera" aria-labelledby="camera-title">
+    <div class="pane-head">
+      <span class="dot amber" aria-hidden="true"></span>
+      <h2 id="camera-title">Camera frame</h2>
+      <span class="meta" id="camera-meta"></span>
+      <div class="pane-tools">
+        <button type="button" class="pill small" id="camera-open" hidden>Open frame…</button>
+        <span class="zoom" id="camera-zoom"></span>
+        <button type="button" class="pill small icon" data-fit="camera" aria-label="Fit the camera frame to the pane" title="Fit (F)">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="pane-body">
+      <canvas id="camera-canvas" tabindex="0" aria-label="Camera frame" aria-describedby="camera-hint"></canvas>
+      <div class="pane-hint" id="camera-hint"></div>
+      <div class="empty" id="camera-empty" hidden>
+        <div class="empty-card">
+          <span class="dot amber" aria-hidden="true"></span>
+          <h3>Camera frame</h3>
+          <p>Open a still frame of the camera view (PNG or JPEG).</p>
+          <button type="button" class="pill primary" data-open="camera">Choose image…</button>
+          <span class="faint">or drop the file here</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="pane" id="pane-world" aria-labelledby="world-title">
+    <div class="pane-head">
+      <span class="dot cyan" aria-hidden="true"></span>
+      <h2 id="world-title">World plane</h2>
+      <span class="meta" id="world-meta"></span>
+      <div class="pane-tools">
+        <label class="gsd" id="gsd-field" hidden title="Ground sampling distance of the reference image">GSD
+          <input id="gsd" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="Ground sampling distance in metres per reference pixel"><span>m/px</span>
+        </label>
+        <button type="button" class="pill small" id="ref-open" hidden>Open reference…</button>
+        <button type="button" class="pill small" id="use-metric" hidden title="Type world coordinates in metres instead of using a reference image">Use metres</button>
+        <span class="zoom" id="world-zoom"></span>
+        <button type="button" class="pill small icon" data-fit="world" aria-label="Fit the right pane" title="Fit (F)">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="pane-body">
+      <canvas id="world-canvas" tabindex="0" aria-label="World plane" aria-describedby="world-hint"></canvas>
+      <div class="pane-hint" id="world-hint"></div>
+    </div>
+  </section>
+</main>
+
+<section class="drawer" aria-label="Correspondences and preview">
+  <div class="card table-card">
+    <div class="card-head">
+      <h2>Correspondences</h2>
+      <span class="meta" id="counts"></span>
+      <span class="fit-status" id="fit-status"></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">#</th>
+            <th scope="col" class="col-name">Name</th>
+            <th scope="col" class="num">Image u, v (px)</th>
+            <th scope="col" class="num" id="world-col">World x, y (m)</th>
+            <th scope="col" class="num" id="res-col" title="Ground distance between the picked world point and the image point mapped through the fitted homography">Residual</th>
+            <th scope="col" class="num col-loo" id="loo-col" title="Residual of the point when the homography is fitted without it">Leave-one-out</th>
+            <th scope="col" class="col-act"><span class="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="lines-row" id="lines-row"></div>
+  </div>
+  <div class="card bev-card">
+    <div class="card-head">
+      <h2>Bird's-eye preview</h2>
+      <span class="meta" id="bev-meta"></span>
+    </div>
+    <div class="bev-wrap">
+      <canvas id="bev" role="img" aria-label="Bird's-eye preview: the camera frame warped onto the ground plane"></canvas>
+      <div class="bev-empty" id="bev-empty">Four point pairs give a live ground-plane preview</div>
+    </div>
+  </div>
+</section>
+
+<form class="popover" id="pt-form" hidden novalidate aria-labelledby="pt-title">
+  <div class="popover-head"><span class="chip pair" id="pt-chip">1</span><span id="pt-title">World position</span></div>
+  <div class="fields" id="pt-xy">
+    <label class="field">x, east (m)<input id="pt-x" inputmode="decimal" autocomplete="off" spellcheck="false"></label>
+    <label class="field">y, north (m)<input id="pt-y" inputmode="decimal" autocomplete="off" spellcheck="false"></label>
+  </div>
+  <p class="form-note" id="pt-note"></p>
+  <label class="field">Name<input id="pt-name" autocomplete="off" spellcheck="false"></label>
+  <p class="form-error" id="pt-error" role="alert"></p>
+  <div class="popover-actions">
+    <button type="button" class="pill small" id="pt-cancel">Cancel</button>
+    <button type="submit" class="pill small primary" id="pt-ok">Add</button>
+  </div>
+</form>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<div class="overlay" id="help" hidden>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <div class="dialog-head">
+      <h2 id="help-title">Keyboard and mouse</h2>
+      <button type="button" class="pill small icon" id="help-close" aria-label="Close help">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4.5 4.5l7 7m0-7-7 7"/></svg>
+      </button>
+    </div>
+    <div class="keys">
+      <section>
+        <h3>Points</h3>
+        <dl>
+          <dt>Click</dt><dd>Place a point in the camera frame, then its match on the reference image (either order)</dd>
+          <dt>No reference</dt><dd>After each camera click, type the world x (east) and y (north) in metres</dd>
+          <dt>Drag</dt><dd>Move a point; a magnifier shows the pixels under it</dd>
+          <dt><kbd>←</kbd> <kbd>↑</kbd> <kbd>→</kbd> <kbd>↓</kbd></dt><dd>Nudge the selected point by one screen pixel, ten with <kbd>Shift</kbd></dd>
+          <dt><kbd>[</kbd> <kbd>]</kbd></dt><dd>Select the previous or next point</dd>
+          <dt>Double-click, <kbd>Enter</kbd></dt><dd>Edit the name or the world coordinates</dd>
+          <dt><kbd>Delete</kbd></dt><dd>Remove the selected point or line</dd>
+          <dt><kbd>Esc</kbd></dt><dd>Cancel a half-placed point or line, then clear the selection</dd>
+        </dl>
+      </section>
+      <section>
+        <h3>Lines</h3>
+        <dl>
+          <dt><kbd>L</kbd> / <kbd>P</kbd></dt><dd>Line tool / point tool</dd>
+          <dt>Click</dt><dd>Add a vertex along an edge that is straight on the ground, such as a lane line or kerb</dd>
+          <dt><kbd>Enter</kbd></dt><dd>Finish the line (three or more vertices)</dd>
+          <dt><kbd>Backspace</kbd></dt><dd>Remove the last vertex</dd>
+        </dl>
+      </section>
+      <section>
+        <h3>View</h3>
+        <dl>
+          <dt>Wheel</dt><dd>Zoom at the cursor</dd>
+          <dt>Drag empty space</dt><dd>Pan; the right or middle button, or <kbd>Space</kbd> + drag, also pan</dd>
+          <dt><kbd>F</kbd></dt><dd>Fit both panes</dd>
+          <dt><kbd>+</kbd> <kbd>−</kbd></dt><dd>Zoom the active pane</dd>
+          <dt><kbd>G</kbd></dt><dd>Ground grid and horizon on the camera frame</dd>
+          <dt><kbd>O</kbd></dt><dd>Camera frame warped onto the right pane</dd>
+        </dl>
+      </section>
+      <section>
+        <h3>History and files</h3>
+        <dl>
+          <dt><kbd class="mod">Ctrl</kbd> <kbd>Z</kbd></dt><dd>Undo</dd>
+          <dt><kbd class="mod">Ctrl</kbd> <kbd>Shift</kbd> <kbd>Z</kbd></dt><dd>Redo (also <kbd class="mod">Ctrl</kbd> <kbd>Y</kbd>)</dd>
+          <dt><kbd class="mod">Ctrl</kbd> <kbd>S</kbd></dt><dd>Save, or download when the page was opened as a file</dd>
+          <dt><kbd>?</kbd></dt><dd>Show this help</dd>
+        </dl>
+      </section>
+    </div>
+    <p class="help-foot">The residual of a point is the ground distance between its picked world position and its image point mapped through the homography fitted to all pairs. The leave-one-out residual refits without the point, which estimates its error honestly. Calibration needs at least four pairs; spread them over the area you will measure.</p>
+  </div>
+</div>
+
+<input type="file" id="file-camera" accept="image/*" hidden>
+<input type="file" id="file-ref" accept="image/*" hidden>
+
+<script>
+(() => {
+  "use strict";
+
+  /* ================================================================ constants */
+  const AMBER = "#ffb547";
+  const CYAN = "#6fe3ff";
+  const TEXT = "#ecebe8";
+  const INK = "#0a0b0d";
+  const FONT = '"Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+  const MONO = '"Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace';
+  const HIT_PX = 10;            // pointer hit radius (CSS pixels)
+  const DRAG_PX = 4;            // movement that turns a click into a drag or a pan (CSS pixels)
+  const UNDO_LIMIT = 300;
+  const MAX_SOURCE_PIXELS = 12e6;  // camera pixels kept in memory for warping
+  const IS_MAC = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || "");
+  const ICON_X = '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M4.5 4.5l7 7m0-7-7 7"/></svg>';
+  const ICON_EDIT = '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M10.6 2.9l2.5 2.5-7.6 7.6H3v-2.5z"/></svg>';
+
+  const $ = (id) => document.getElementById(id);
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  const allFinite = (arr) => !arr.some((v) => !Number.isFinite(v));
+
+  /* ================================================================ state */
+  const S = {
+    server: null,          // {token, out, outName} when served by launch_picker
+    ended: false,          // the server wrote the file and stopped
+    saving: false,
+    mode: "metric",        // "metric": world x, y typed in metres; "reference": picked on a reference image
+    cam: null,             // {img, w, h, name, px}
+    ref: null,             // {img, w, h, name}
+    gsd: null,             // metres per reference pixel
+    pairs: [],             // {id, name, img: [u, v] | null, world: [x, y] | null}
+    lines: [],             // {id, pts: [[u, v], ...]}
+    nextId: 1,
+    nextLineId: 1,
+    tool: "point",
+    draft: null,           // vertices of the line being traced
+    sel: null,             // {type: "pair" | "line", id}
+    fit: null,
+    showGrid: true,
+    showOverlay: false,
+    dirty: false,          // unsaved changes
+    undo: [],
+    redo: [],
+    minPairs: 4,
+    ready: false,
+  };
+
+  const isComplete = (p) => !!(p.img && p.world);
+  const pairById = (id) => S.pairs.find((p) => p.id === id) || null;
+  const lineById = (id) => S.lines.find((l) => l.id === id) || null;
+  const pendingPair = () => S.pairs.find((p) => !isComplete(p)) || null;
+  const selectedPair = () => (S.sel && S.sel.type === "pair" ? pairById(S.sel.id) : null);
+  const isSelected = (type, id) => !!(S.sel && S.sel.type === type && S.sel.id === id);
+  /** Metres per world unit: 1 in metric mode, the GSD for reference pixels, null while the GSD is unknown. */
+  const worldScale = () => (S.mode === "metric" ? 1 : S.gsd > 0 ? S.gsd : null);
+
+  /* ================================================================ formatting */
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+  function parseNum(text) {
+    let t = String(text).trim().replace(/−/g, "-");
+    if (t.includes(",") && !t.includes(".")) t = t.replace(",", ".");
+    if (!/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(t)) return NaN;
+    return Number(t);
+  }
+  function plural(n, word) { return `${n} ${word}${n === 1 ? "" : "s"}`; }
+  function fmtPair(p, d) { return `${p[0].toFixed(d)}, ${p[1].toFixed(d)}`; }
+  function fmtRes(v, unit) {
+    if (!Number.isFinite(v)) return "—";
+    if (unit === "px") return v.toFixed(v < 100 ? 1 : 0);
+    return v.toFixed(v < 10 ? 2 : 1);
+  }
+  function fmtLen(v) {
+    if (v >= 100) return v.toFixed(0);
+    if (v >= 10) return v.toFixed(1).replace(/\.0$/, "");
+    return v.toFixed(2).replace(/\.?0+$/, "");
+  }
+  /** A number as YAML 1.1 reads it back as a float or int (no exponent notation). */
+  function yamlNum(v) {
+    let s = String(v);
+    if (/e/i.test(s)) s = v.toFixed(12).replace(/\.?0+$/, "");
+    return s;
+  }
+  function niceStep(x) {
+    if (!(x > 0) || !Number.isFinite(x)) return 1;
+    const e = Math.pow(10, Math.floor(Math.log10(x)));
+    const m = x / e;
+    return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * e;
+  }
+  function hexA(hex, a) {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+  }
+
+  /* ================================================================ homography */
+  function mul3(a, b) {
+    const r = new Array(9);
+    for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < 3; j++) {
+        r[i * 3 + j] = a[i * 3] * b[j] + a[i * 3 + 1] * b[3 + j] + a[i * 3 + 2] * b[6 + j];
+      }
+    }
+    return r;
+  }
+  function inv3(m) {
+    const [a, b, c, d, e, f, g, h, i] = m;
+    const A = e * i - f * h, B = f * g - d * i, C = d * h - e * g;
+    const det = a * A + b * B + c * C;
+    if (!Number.isFinite(det) || Math.abs(det) < 1e-300) return null;
+    const k = 1 / det;
+    return [A * k, (c * h - b * i) * k, (b * f - c * e) * k,
+            B * k, (a * i - c * g) * k, (c * d - a * f) * k,
+            C * k, (b * g - a * h) * k, (a * e - b * d) * k];
+  }
+  function applyH(H, p) {
+    const w = H[6] * p[0] + H[7] * p[1] + H[8];
+    return [(H[0] * p[0] + H[1] * p[1] + H[2]) / w, (H[3] * p[0] + H[4] * p[1] + H[5]) / w];
+  }
+  /** Eigen-decomposition of a symmetric n x n matrix (row-major) by cyclic Jacobi rotations. */
+  function jacobiEigen(M, n) {
+    const A = Float64Array.from(M);
+    const V = new Float64Array(n * n);
+    for (let i = 0; i < n; i++) V[i * n + i] = 1;
+    for (let sweep = 0; sweep < 60; sweep++) {
+      let off = 0, diag = 0;
+      for (let p = 0; p < n; p++) {
+        diag += A[p * n + p] * A[p * n + p];
+        for (let q = p + 1; q < n; q++) off += A[p * n + q] * A[p * n + q];
+      }
+      if (off <= 1e-30 * diag || off === 0) break;
+      for (let p = 0; p < n - 1; p++) {
+        for (let q = p + 1; q < n; q++) {
+          const apq = A[p * n + q];
+          if (Math.abs(apq) < 1e-300) continue;
+          const theta = (A[q * n + q] - A[p * n + p]) / (2 * apq);
+          const t = (theta >= 0 ? 1 : -1) / (Math.abs(theta) + Math.sqrt(theta * theta + 1));
+          const c = 1 / Math.sqrt(t * t + 1), s = t * c;
+          for (let k = 0; k < n; k++) {      // A <- A J
+            const akp = A[k * n + p], akq = A[k * n + q];
+            A[k * n + p] = c * akp - s * akq;
+            A[k * n + q] = s * akp + c * akq;
+          }
+          for (let k = 0; k < n; k++) {      // A <- J^T A
+            const apk = A[p * n + k], aqk = A[q * n + k];
+            A[p * n + k] = c * apk - s * aqk;
+            A[q * n + k] = s * apk + c * aqk;
+          }
+          for (let k = 0; k < n; k++) {      // V <- V J
+            const vkp = V[k * n + p], vkq = V[k * n + q];
+            V[k * n + p] = c * vkp - s * vkq;
+            V[k * n + q] = s * vkp + c * vkq;
+          }
+        }
+      }
+    }
+    const values = new Float64Array(n);
+    for (let i = 0; i < n; i++) values[i] = A[i * n + i];
+    return { values, vectors: V };
+  }
+  /** Hartley normalisation: centroid to the origin, mean distance sqrt(2). */
+  function normaliser(pts) {
+    let cx = 0, cy = 0;
+    for (const p of pts) { cx += p[0]; cy += p[1]; }
+    cx /= pts.length; cy /= pts.length;
+    let d = 0;
+    for (const p of pts) d += Math.hypot(p[0] - cx, p[1] - cy);
+    d /= pts.length;
+    return d > 0 ? { cx, cy, s: Math.SQRT2 / d } : null;
+  }
+  /** Normalised DLT: H with dst ~ H src (row-major, H[8] = 1), or null for degenerate input. */
+  function dlt(src, dst) {
+    const n = src.length;
+    if (n < 4) return null;
+    const a = normaliser(src), b = normaliser(dst);
+    if (!a || !b) return null;
+    const M = new Float64Array(81);
+    const r = new Float64Array(9);
+    const accumulate = () => {
+      for (let i = 0; i < 9; i++) {
+        const ri = r[i];
+        if (ri === 0) continue;
+        for (let j = 0; j < 9; j++) M[i * 9 + j] += ri * r[j];
+      }
+    };
+    for (let k = 0; k < n; k++) {
+      const x = (src[k][0] - a.cx) * a.s, y = (src[k][1] - a.cy) * a.s;
+      const u = (dst[k][0] - b.cx) * b.s, v = (dst[k][1] - b.cy) * b.s;
+      r[0] = -x; r[1] = -y; r[2] = -1; r[3] = 0; r[4] = 0; r[5] = 0; r[6] = u * x; r[7] = u * y; r[8] = u;
+      accumulate();
+      r[0] = 0; r[1] = 0; r[2] = 0; r[3] = -x; r[4] = -y; r[5] = -1; r[6] = v * x; r[7] = v * y; r[8] = v;
+      accumulate();
+    }
+    const { values, vectors } = jacobiEigen(M, 9);
+    const order = Array.from(values.keys()).sort((i, j) => values[i] - values[j]);
+    const top = Math.max(Math.abs(values[order[8]]), 1e-300);
+    if (Math.abs(values[order[1]]) / top < 1e-10) return null;  // two-dimensional null space
+    const hn = [];
+    for (let i = 0; i < 9; i++) hn.push(vectors[i * 9 + order[0]]);
+    const Ta = [a.s, 0, -a.s * a.cx, 0, a.s, -a.s * a.cy, 0, 0, 1];
+    const TbInv = [1 / b.s, 0, b.cx, 0, 1 / b.s, b.cy, 0, 0, 1];
+    const H = mul3(mul3(TbInv, hn), Ta);
+    const norm = Math.hypot(...H);
+    const scale = Math.abs(H[8]) > 1e-12 * norm ? H[8] : norm;
+    const out = H.map((v) => v / scale);
+    return allFinite(out) ? out : null;
+  }
+  /** World position of an image point, or null beyond the horizon. */
+  function projectImage(F, p) {
+    const w = F.H[6] * p[0] + F.H[7] * p[1] + F.H[8];
+    return w * F.sw > 0 ? applyH(F.H, p) : null;
+  }
+  /** Image position of a world point, or null behind the camera. */
+  function projectWorld(F, p) {
+    const w = F.Hinv[6] * p[0] + F.Hinv[7] * p[1] + F.Hinv[8];
+    return w * F.sd > 0 ? applyH(F.Hinv, p) : null;
+  }
+
+  /* ================================================================ live fit */
+  function computeFit() {
+    const done = S.pairs.filter(isComplete);
+    const F = { n: done.length, H: null, Hinv: null, ok: false, warn: false, msg: "", res: new Map(), loo: new Map(),
+                rms: NaN, looRms: NaN, unit: worldScale() ? "m" : "px" };
+    if (F.n < 4) {
+      const k = 4 - F.n;
+      F.msg = F.n ? `${k} more pair${k === 1 ? "" : "s"} for a live fit` : "";
+      return F;
+    }
+    const src = done.map((p) => p.img), dst = done.map((p) => p.world);
+    const H = dlt(src, dst);
+    const Hinv = H && inv3(H);
+    if (!H || !Hinv) {
+      F.warn = true;
+      F.msg = "Degenerate points: spread them out, no three on one line";
+      return F;
+    }
+    F.H = H; F.Hinv = Hinv;
+    // Signs of the homogeneous coordinate on the camera side of the horizon. The world-to-image sign is
+    // proportional to the depth of the ground point, so it also tells points behind the camera apart.
+    const w = src.map((p) => H[6] * p[0] + H[7] * p[1] + H[8]);
+    const depth = dst.map((p) => Hinv[6] * p[0] + Hinv[7] * p[1] + Hinv[8]);
+    F.sw = Math.sign(w[0]) || 1;
+    F.sd = Math.sign(depth[0]) || 1;
+    const straddle = w.some((v) => v * F.sw <= 0) || depth.some((v) => v * F.sd <= 0);
+    F.minDepth = Math.min(...depth.map((v) => Math.abs(v)));
+    const unit = worldScale() || 1;
+    let ss = 0;
+    done.forEach((p) => {
+      const q = applyH(H, p.img);
+      const e = Math.hypot(q[0] - p.world[0], q[1] - p.world[1]) * unit;
+      F.res.set(p.id, e);
+      ss += e * e;
+    });
+    F.rms = Math.sqrt(ss / F.n);
+    if (F.n >= 5) {
+      let sl = 0, nl = 0;
+      for (let i = 0; i < F.n; i++) {
+        const Hi = dlt(src.filter((_, k) => k !== i), dst.filter((_, k) => k !== i));
+        if (!Hi) continue;
+        const q = applyH(Hi, src[i]);
+        const e = Math.hypot(q[0] - dst[i][0], q[1] - dst[i][1]) * unit;
+        if (Number.isFinite(e)) { F.loo.set(done[i].id, e); sl += e * e; nl++; }
+      }
+      if (nl) F.looRms = Math.sqrt(sl / nl);
+    }
+    // Orientation: image v points down, so a right-handed metric frame gives a negative Jacobian
+    // determinant and reference pixels (y down) a positive one.
+    let cx = 0, cy = 0;
+    for (const p of src) { cx += p[0] / F.n; cy += p[1] / F.n; }
+    const p0 = applyH(H, [cx, cy]), p1 = applyH(H, [cx + 1, cy]), p2 = applyH(H, [cx, cy + 1]);
+    const det = (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]);
+    F.mirrored = S.mode === "metric" ? det > 0 : det < 0;
+    if (straddle) {
+      F.warn = true;
+      F.msg = "Pairs fall on both sides of the horizon: check the pairing";
+    } else if (F.mirrored) {
+      F.warn = true;
+      F.msg = S.mode === "metric" ? "World axes look left-handed: y must point north (up on a map)"
+                                  : "The mapping is mirrored: check the pairing";
+    }
+    F.ok = !straddle;
+    // Ground area shown by the preview and the grid: the picked area plus a margin.
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const [x, y] of dst) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    const span = Math.max(x1 - x0, y1 - y0);
+    const pad = Math.max(0.45 * span, (worldScale() ? 6 / unit : 60));
+    F.extent = [x0 - pad, x1 + pad, y0 - pad, y1 + pad];
+    const spanUnits = Math.max(F.extent[1] - F.extent[0], F.extent[3] - F.extent[2]) * unit;
+    F.gridStepUnits = niceStep(spanUnits / 12);
+    F.gridStep = F.gridStepUnits / unit;
+    const values = Array.from(F.res.values()).sort((a, b) => a - b);
+    F.median = values[Math.floor(values.length / 2)];
+    return F;
+  }
+
+  /* ================================================================ panes */
+  class Pane {
+    constructor(key) {
+      this.key = key;
+      this.el = $(`pane-${key}`);
+      this.body = this.el.querySelector(".pane-body");
+      this.canvas = $(`${key}-canvas`);
+      this.ctx = this.canvas.getContext("2d");
+      this.hintEl = $(`${key}-hint`);
+      this.zoomEl = $(`${key}-zoom`);
+      this.w = 0; this.h = 0; this.dpr = 1;
+      this.s = 1; this.tx = 0; this.ty = 0;
+      this.fitted = false;
+      this.autoFit = true;   // refit on resize until the user zooms or pans
+      this.pointer = null;   // pointer position in CSS pixels while over the pane
+      this.g = null;         // active pointer gesture
+      this.overlay = null;   // cached warp of the camera frame
+      this.overlayCanvas = null;
+    }
+    /** True for the right pane in metric mode, whose content is metres with y pointing up. */
+    get metric() { return this.key === "world" && S.mode === "metric"; }
+    /** Pixel centres sit at integer coordinates, so pixel edges are offset by half a pixel. */
+    get off() { return this.metric ? 0 : 0.5; }
+    get image() { return this.key === "camera" ? S.cam : S.mode === "reference" ? S.ref : null; }
+    toScreen(p) {
+      return [(p[0] + this.off) * this.s + this.tx, (this.metric ? -p[1] : p[1] + this.off) * this.s + this.ty];
+    }
+    toContent(x, y) {
+      const a = (x - this.tx) / this.s, b = (y - this.ty) / this.s;
+      return [a - this.off, this.metric ? -b : b - this.off];
+    }
+    /** Content bounds in view units (before scaling): [x0, y0, x1, y1]. */
+    bounds() {
+      if (!this.metric) {
+        const im = this.image;
+        return im ? [0, 0, im.w, im.h] : null;
+      }
+      const pts = S.pairs.filter((p) => p.world).map((p) => p.world);
+      if (!pts.length) return [-25, -25, 25, 25];
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (const [x, y] of pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+      const pad = Math.max(5, 0.25 * Math.max(x1 - x0, y1 - y0));
+      return [x0 - pad, -(y1 + pad), x1 + pad, -(y0 - pad)];
+    }
+    fit() {
+      const b = this.bounds();
+      if (!b || this.w < 8 || this.h < 8) return;
+      const m = 14, bw = Math.max(b[2] - b[0], 1e-9), bh = Math.max(b[3] - b[1], 1e-9);
+      this.s = Math.max(1e-6, Math.min((this.w - 2 * m) / bw, (this.h - 2 * m) / bh));
+      this.tx = (this.w - this.s * bw) / 2 - this.s * b[0];
+      this.ty = (this.h - this.s * bh) / 2 - this.s * b[1];
+      this.fitted = true;
+      this.autoFit = true;
+      this.viewChanged();
+    }
+    zoomAt(x, y, factor) {
+      this.autoFit = false;
+      const b = this.bounds();
+      let lo = 1e-6;
+      if (b) lo = 0.1 * Math.min(this.w / Math.max(b[2] - b[0], 1e-9), this.h / Math.max(b[3] - b[1], 1e-9));
+      const hi = Math.max(this.metric ? 5000 : 64, lo);
+      const s = clamp(this.s * factor, lo, hi);
+      const k = s / this.s;
+      this.tx = x - (x - this.tx) * k;
+      this.ty = y - (y - this.ty) * k;
+      this.s = s;
+      this.viewChanged();
+    }
+    resize() {
+      const r = this.body.getBoundingClientRect();
+      const w = Math.max(1, r.width), h = Math.max(1, r.height);
+      if (this.fitted) { this.tx += (w - this.w) / 2; this.ty += (h - this.h) / 2; }
+      this.w = w; this.h = h;
+      this.dpr = window.devicePixelRatio || 1;
+      this.canvas.width = Math.max(1, Math.round(w * this.dpr));
+      this.canvas.height = Math.max(1, Math.round(h * this.dpr));
+      if (!this.fitted || this.autoFit) this.fit();
+      this.viewChanged();
+    }
+    viewChanged() {
+      this.overlay = null;
+      if (this.zoomEl) this.zoomEl.textContent = !this.metric && this.image ? `${Math.round(this.s * 100)}%` : "";
+      schedule();
+    }
+    visible(p) {
+      const [x, y] = this.toScreen(p);
+      return x >= 0 && y >= 0 && x <= this.w && y <= this.h;
+    }
+    centerOn(p) {
+      const [x, y] = this.toScreen(p);
+      this.tx += this.w / 2 - x;
+      this.ty += this.h / 2 - y;
+      this.autoFit = false;
+      this.viewChanged();
+    }
+  }
+
+  const panes = { camera: new Pane("camera"), world: new Pane("world") };
+  let activePane = panes.camera;
+
+  /* ================================================================ scheduling */
+  const need = { fit: true, table: true, chrome: true, bev: true };
+  let frameQueued = false;
+  let scrollToSelection = false;
+
+  function schedule() {
+    if (!frameQueued) { frameQueued = true; requestAnimationFrame(frame); }
+  }
+  /** Mark everything derived from the points as stale. `model` = false for view-only state. */
+  function changed(model = true) {
+    if (model) S.dirty = true;
+    need.fit = need.table = need.chrome = need.bev = true;
+    panes.world.overlay = null;
+    schedule();
+  }
+  function flushFit() {
+    if (need.fit) { need.fit = false; S.fit = computeFit(); }
+  }
+  function frame() {
+    frameQueued = false;
+    flushFit();
+    if (need.table) { need.table = false; renderTable(); renderLines(); }
+    if (need.chrome) { need.chrome = false; renderChrome(); }
+    drawCamera();
+    drawWorld();
+    if (need.bev) { need.bev = false; renderBev(); }
+    placeForm();
+  }
+
+  /* ================================================================ history */
+  let lastNudge = null;
+  function snapshot() {
+    return JSON.stringify({ pairs: S.pairs, lines: S.lines, nextId: S.nextId, nextLineId: S.nextLineId });
+  }
+  function restore(text) {
+    const o = JSON.parse(text);
+    S.pairs = o.pairs; S.lines = o.lines; S.nextId = o.nextId; S.nextLineId = o.nextLineId;
+  }
+  function pushUndo() {
+    lastNudge = null;
+    S.undo.push(snapshot());
+    if (S.undo.length > UNDO_LIMIT) S.undo.shift();
+    S.redo.length = 0;
+  }
+  function undo() {
+    if (S.draft) { popDraft(); return; }
+    if (!S.undo.length) { toast("Nothing to undo"); return; }
+    S.redo.push(snapshot());
+    restore(S.undo.pop());
+    afterRestore();
+  }
+  function redo() {
+    if (!S.redo.length) { toast("Nothing to redo"); return; }
+    S.undo.push(snapshot());
+    restore(S.redo.pop());
+    afterRestore();
+  }
+  function afterRestore() {
+    lastNudge = null;
+    closeForm();
+    if (S.sel && !(S.sel.type === "pair" ? pairById(S.sel.id) : lineById(S.sel.id))) S.sel = null;
+    changed();
+    const p = pendingPair();
+    if (S.mode === "metric" && p && p.img && !p.world) openForm(p, true);
+  }
+
+  /* ================================================================ editing */
+  function newPair() {
+    const p = { id: S.nextId++, name: "", img: null, world: null };
+    p.name = String(p.id);
+    S.pairs.push(p);
+    return p;
+  }
+  function select(sel, reveal = false) {
+    const same = (!S.sel && !sel) || (S.sel && sel && S.sel.type === sel.type && S.sel.id === sel.id);
+    S.sel = sel;
+    if (!same) {
+      scrollToSelection = true;
+      need.table = need.chrome = need.bev = true;
+      schedule();
+    }
+    if (reveal && sel && sel.type === "pair") revealPair(pairById(sel.id));
+  }
+  function revealPair(p) {
+    if (!p) return;
+    if (p.img && !panes.camera.visible(p.img)) panes.camera.centerOn(p.img);
+    if (p.world && !panes.world.visible(p.world)) panes.world.centerOn(p.world);
+  }
+  function inside(im, c) {
+    return c[0] >= -0.5 && c[1] >= -0.5 && c[0] <= im.w - 0.5 && c[1] <= im.h - 0.5;
+  }
+  function clampTo(im, c) {
+    return [clamp(c[0], -0.5, im.w - 0.5), clamp(c[1], -0.5, im.h - 0.5)];
+  }
+  function placeImagePoint(c) {
+    pushUndo();
+    let p = pendingPair();
+    if (!p) p = newPair();
+    p.img = c;   // completes a pair started on the reference, or moves the pending image point
+    select({ type: "pair", id: p.id });
+    changed();
+    if (S.mode === "metric" && !p.world) openForm(p, true);
+  }
+  function placeWorldPoint(c) {
+    pushUndo();
+    let p = pendingPair();
+    if (!p) p = newPair();
+    p.world = c;
+    select({ type: "pair", id: p.id });
+    changed();
+  }
+  function deletePair(id) {
+    if (!pairById(id)) return;
+    pushUndo();
+    S.pairs = S.pairs.filter((p) => p.id !== id);
+    if (form.id === id) closeForm();
+    if (isSelected("pair", id)) S.sel = null;
+    changed();
+  }
+  function deleteLine(id) {
+    if (!lineById(id)) return;
+    pushUndo();
+    S.lines = S.lines.filter((l) => l.id !== id);
+    if (isSelected("line", id)) S.sel = null;
+    changed();
+  }
+  function deleteSelection() {
+    if (!S.sel) return;
+    if (S.sel.type === "pair") deletePair(S.sel.id); else deleteLine(S.sel.id);
+  }
+  function addVertex(c) {
+    if (!S.draft) S.draft = [];
+    S.draft.push(c);
+    changed(false);
+  }
+  function popDraft() {
+    if (!S.draft) return;
+    S.draft.pop();
+    if (!S.draft.length) S.draft = null;
+    changed(false);
+  }
+  function finishLine() {
+    if (!S.draft) return;
+    if (S.draft.length < 3) { toast("A line needs at least three vertices along the edge", "error"); return; }
+    pushUndo();
+    const L = { id: S.nextLineId++, pts: S.draft };
+    S.lines.push(L);
+    S.draft = null;
+    select({ type: "line", id: L.id });
+    changed();
+    toast(`Line L${L.id} added with ${L.pts.length} vertices`);
+  }
+  function setTool(t) {
+    if (S.tool === t) return;
+    if (S.draft) {
+      if (S.draft.length >= 3) finishLine();
+      else { S.draft = null; toast("Unfinished line discarded"); }
+    }
+    S.tool = t;
+    changed(false);
+    updateCursors();
+  }
+  function onEscape() {
+    if (S.draft) { S.draft = null; changed(false); toast("Line cancelled"); return; }
+    const p = pendingPair();
+    if (p) {
+      discardPending(p);
+      closeForm();
+      return;
+    }
+    select(null);
+  }
+  /** Remove a half-placed pair; its number is reused when it was the newest. */
+  function discardPending(p) {
+    pushUndo();
+    S.pairs = S.pairs.filter((q) => q !== p);
+    if (p.id === S.nextId - 1) S.nextId -= 1;
+    if (isSelected("pair", p.id)) S.sel = null;
+    changed();
+  }
+  function onEnter() {
+    if (S.draft) { finishLine(); return; }
+    const p = selectedPair();
+    if (p) openForm(p, S.mode === "metric" && !p.world);
+  }
+  function nudge(key, big) {
+    const p = selectedPair();
+    const P = activePane;
+    if (!p || !P) return false;
+    const side = P.key === "camera" ? "img" : "world";
+    if (!p[side] || (side === "world" && S.mode === "metric")) return false;
+    const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[key];
+    const step = (big ? 10 : 1) / P.s;
+    const now = performance.now();
+    const coalesce = lastNudge && lastNudge.id === p.id && lastNudge.side === side && now - lastNudge.t < 1200;
+    if (!coalesce) pushUndo();
+    lastNudge = { id: p.id, side, t: now };
+    p[side] = clampTo(P.image, [p[side][0] + d[0] * step, p[side][1] + d[1] * step]);
+    changed();
+    return true;
+  }
+  function cycle(dir) {
+    const n = S.pairs.length;
+    if (!n) return;
+    const i = S.sel && S.sel.type === "pair" ? S.pairs.findIndex((p) => p.id === S.sel.id) : -1;
+    const j = i < 0 ? (dir > 0 ? 0 : n - 1) : (i + dir + n) % n;
+    select({ type: "pair", id: S.pairs[j].id }, true);
+  }
+  function fitAll() { panes.camera.fit(); panes.world.fit(); }
+  function zoomActive(f) { const P = activePane || panes.camera; P.zoomAt(P.w / 2, P.h / 2, f); }
+
+  /* ================================================================ pointer input */
+  function local(P, e) {
+    const r = P.canvas.getBoundingClientRect();
+    return [e.clientX - r.left, e.clientY - r.top];
+  }
+  function hitTest(P, x, y) {
+    let best = null, bd = HIT_PX;
+    const consider = (pt, h, radius) => {
+      const [sx, sy] = P.toScreen(pt);
+      const d = Math.hypot(sx - x, sy - y);
+      if (d <= Math.min(bd, radius)) { bd = d; best = h; }
+    };
+    const side = P.key === "camera" ? "img" : "world";
+    if (P.key === "world" && !(S.mode === "metric" || S.ref)) return null;
+    for (let k = S.pairs.length - 1; k >= 0; k--) {
+      const p = S.pairs[k];
+      if (p[side]) consider(p[side], { kind: "point", id: p.id, side }, HIT_PX);
+    }
+    if (best || P.key !== "camera") return best;
+    for (const L of S.lines) L.pts.forEach((q, index) => consider(q, { kind: "vertex", id: L.id, index }, HIT_PX - 2));
+    if (best) return best;
+    bd = 5;
+    for (const L of S.lines) {
+      for (let k = 1; k < L.pts.length; k++) {
+        const a = P.toScreen(L.pts[k - 1]), b = P.toScreen(L.pts[k]);
+        const dx = b[0] - a[0], dy = b[1] - a[1], len2 = dx * dx + dy * dy;
+        const t = len2 > 0 ? clamp(((x - a[0]) * dx + (y - a[1]) * dy) / len2, 0, 1) : 0;
+        const d = Math.hypot(a[0] + t * dx - x, a[1] + t * dy - y);
+        if (d <= bd) { bd = d; best = { kind: "segment", id: L.id }; }
+      }
+    }
+    return best;
+  }
+  function hitPosition(h) {
+    if (h.kind === "point") { const p = pairById(h.id); return p ? p[h.side] : null; }
+    if (h.kind === "vertex") { const L = lineById(h.id); return L ? L.pts[h.index] : null; }
+    return null;
+  }
+  function setHitPosition(h, c) {
+    if (h.kind === "point") { const p = pairById(h.id); if (p) p[h.side] = c; }
+    else if (h.kind === "vertex") { const L = lineById(h.id); if (L) L.pts[h.index] = c; }
+  }
+  let spaceHeld = false;
+  function baseCursor(P) {
+    if (spaceHeld) return "grab";
+    if (P.key === "camera") return S.cam ? "crosshair" : "default";
+    return S.mode === "reference" ? (S.ref ? "crosshair" : "default") : "grab";
+  }
+  function hoverCursor(P, x, y) {
+    if (spaceHeld) return "grab";
+    if (P.key === "camera" && S.tool === "line") return "crosshair";
+    const h = hitTest(P, x, y);
+    if (h) return h.kind === "segment" || (h.kind === "point" && P.metric) ? "pointer" : "grab";
+    return baseCursor(P);
+  }
+  function setCursor(P, c) { if (P.canvas.style.cursor !== c) P.canvas.style.cursor = c; }
+  function updateCursors() {
+    for (const P of Object.values(panes)) {
+      if (!P.g) setCursor(P, P.pointer ? hoverCursor(P, P.pointer[0], P.pointer[1]) : baseCursor(P));
+    }
+  }
+
+  function onPointerDown(P, e) {
+    if (e.button > 2) return;
+    activePane = P;
+    if (document.activeElement !== P.canvas) P.canvas.focus({ preventScroll: true });
+    const [x, y] = local(P, e);
+    P.pointer = [x, y];
+    try { P.canvas.setPointerCapture(e.pointerId); } catch (err) { /* the pointer is already gone */ }
+    const base = { x0: x, y0: y, tx0: P.tx, ty0: P.ty, button: e.button };
+    if (e.button !== 0 || spaceHeld) {
+      e.preventDefault();
+      P.g = Object.assign(base, { type: "pan" });
+      setCursor(P, "grabbing");
+      return;
+    }
+    const hit = P.key === "camera" && S.tool === "line" ? null : hitTest(P, x, y);
+    if (!hit) { P.g = Object.assign(base, { type: "click" }); return; }
+    select(hit.kind === "point" ? { type: "pair", id: hit.id } : { type: "line", id: hit.id });
+    const draggable = hit.kind === "vertex" || (hit.kind === "point" && !P.metric);
+    if (!draggable) { P.g = Object.assign(base, { type: "select" }); return; }
+    const [sx, sy] = P.toScreen(hitPosition(hit));
+    P.g = Object.assign(base, { type: "press", hit, dx: sx - x, dy: sy - y });
+  }
+  function onPointerMove(P, e) {
+    const [x, y] = local(P, e);
+    P.pointer = [x, y];
+    const g = P.g;
+    if (!g) {
+      setCursor(P, hoverCursor(P, x, y));
+      if (S.draft && P.key === "camera") schedule();
+      return;
+    }
+    const moved = Math.hypot(x - g.x0, y - g.y0) > DRAG_PX;
+    if ((g.type === "click" || g.type === "select") && moved) { g.type = "pan"; setCursor(P, "grabbing"); }
+    if (g.type === "press" && moved) { pushUndo(); g.type = "drag"; setCursor(P, "grabbing"); }
+    if (g.type === "pan") {
+      P.tx = g.tx0 + x - g.x0;
+      P.ty = g.ty0 + y - g.y0;
+      P.autoFit = false;
+      P.viewChanged();
+    } else if (g.type === "drag") {
+      const im = P.image;
+      const c = P.toContent(x + g.dx, y + g.dy);
+      setHitPosition(g.hit, im ? clampTo(im, c) : c);
+      changed();
+    }
+  }
+  function onPointerUp(P, e) {
+    const g = P.g;
+    P.g = null;
+    try { if (P.canvas.hasPointerCapture(e.pointerId)) P.canvas.releasePointerCapture(e.pointerId); } catch (err) { /* released */ }
+    if (!g) return;
+    const [x, y] = local(P, e);
+    if (g.type === "click" && g.button === 0) handleClick(P, P.toContent(x, y));
+    if (g.type === "drag") changed();
+    setCursor(P, hoverCursor(P, x, y));
+    schedule();
+  }
+  function handleClick(P, c) {
+    if (P.key === "camera") {
+      if (!S.cam) return;
+      if (!inside(S.cam, c)) { toast("Click inside the camera frame"); return; }
+      if (S.tool === "line") { addVertex(c); return; }
+      placeImagePoint(c);
+      return;
+    }
+    if (S.mode !== "reference") { if (form.el.hidden) select(null); return; }
+    if (!S.ref) return;
+    if (!inside(S.ref, c)) { toast("Click inside the reference image"); return; }
+    placeWorldPoint(c);
+  }
+  function onWheel(P, e) {
+    e.preventDefault();
+    const [x, y] = local(P, e);
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? P.h : 1;
+    P.zoomAt(x, y, Math.exp(-clamp(e.deltaY * unit, -300, 300) * 0.0018));
+  }
+  function onDoubleClick(P, e) {
+    const [x, y] = local(P, e);
+    const h = hitTest(P, x, y);
+    if (h && h.kind === "point") {
+      const p = pairById(h.id);
+      if (p) openForm(p, S.mode === "metric" && !p.world);
+    }
+  }
+  function bindPane(P) {
+    const c = P.canvas;
+    c.addEventListener("pointerdown", (e) => onPointerDown(P, e));
+    c.addEventListener("pointermove", (e) => onPointerMove(P, e));
+    c.addEventListener("pointerup", (e) => onPointerUp(P, e));
+    c.addEventListener("pointercancel", () => { P.g = null; schedule(); });
+    c.addEventListener("pointerleave", () => { if (!P.g) { P.pointer = null; if (S.draft) schedule(); } });
+    c.addEventListener("wheel", (e) => onWheel(P, e), { passive: false });
+    c.addEventListener("dblclick", (e) => onDoubleClick(P, e));
+    c.addEventListener("contextmenu", (e) => e.preventDefault());
+    c.addEventListener("mousedown", (e) => { if (e.button === 1) e.preventDefault(); });
+    c.addEventListener("focus", () => { activePane = P; });
+  }
+
+  /* ================================================================ drawing */
+  function roundRectPath(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    if (ctx.roundRect) { ctx.roundRect(x, y, w, h, r); return; }
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  /** A numbered label chip whose bottom-left corner is at (x, y). */
+  function chip(ctx, text, x, y, bg) {
+    ctx.font = `600 10.5px ${FONT}`;
+    const h = 16, w = Math.max(h, Math.ceil(ctx.measureText(text).width) + 10);
+    roundRectPath(ctx, x, y - h, w, h, h / 2);
+    ctx.fillStyle = bg;
+    ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(10, 11, 13, 0.55)";
+    ctx.stroke();
+    ctx.fillStyle = INK;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, x + w / 2, y - h / 2 + 0.5);
+  }
+  /** A ring with crosshair ticks; the centre stays open so the picked pixel remains visible. */
+  function marker(ctx, x, y, color, label, st) {
+    const r = st.sel ? 7 : 5.5;
+    ctx.save();
+    if (st.sel) {
+      ctx.beginPath();
+      ctx.arc(x, y, r + 7, 0, Math.PI * 2);
+      ctx.fillStyle = hexA(color, 0.18);
+      ctx.fill();
+    }
+    const shape = () => {
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      const a = r + 2.5, b = r + 6;
+      ctx.moveTo(x - b, y); ctx.lineTo(x - a, y);
+      ctx.moveTo(x + a, y); ctx.lineTo(x + b, y);
+      ctx.moveTo(x, y - b); ctx.lineTo(x, y - a);
+      ctx.moveTo(x, y + a); ctx.lineTo(x, y + b);
+    };
+    ctx.lineCap = "round";
+    shape();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = st.ghost ? "rgba(10, 11, 13, 0.4)" : "rgba(10, 11, 13, 0.72)";
+    ctx.stroke();
+    if (st.pending || st.ghost) ctx.setLineDash([3, 2.5]);
+    shape();
+    ctx.lineWidth = st.sel ? 2.2 : 1.6;
+    ctx.strokeStyle = st.ghost ? hexA(color, 0.7) : color;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if (label != null) chip(ctx, String(label), x + r + 3, y - r - 2, st.ghost ? hexA(color, 0.65) : color);
+    ctx.restore();
+  }
+  function whisker(P, a, b, color) {
+    const p = P.toScreen(a), q = P.toScreen(b);
+    if (!allFinite([p[0], p[1], q[0], q[1]])) return;
+    const ctx = P.ctx;
+    ctx.save();
+    ctx.lineWidth = 1.25;
+    ctx.strokeStyle = hexA(color, 0.85);
+    ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+    ctx.beginPath(); ctx.arc(q[0], q[1], 2, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
+    ctx.restore();
+  }
+  function polyline(P, pts, opts) {
+    if (!pts.length) return;
+    const ctx = P.ctx;
+    const sp = pts.map((q) => P.toScreen(q));
+    const path = sp.slice();
+    if (opts.rubber) path.push(opts.rubber);
+    ctx.save();
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    const trace = () => { ctx.beginPath(); path.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); };
+    trace();
+    ctx.lineWidth = opts.sel ? 5.5 : 4;
+    ctx.strokeStyle = "rgba(10, 11, 13, 0.65)";
+    ctx.stroke();
+    if (opts.draft) ctx.setLineDash([6, 4]);
+    trace();
+    ctx.lineWidth = opts.sel ? 2.4 : 1.6;
+    ctx.strokeStyle = opts.sel ? "#ffffff" : "rgba(236, 235, 232, 0.88)";
+    ctx.stroke();
+    ctx.setLineDash([]);
+    for (const [x, y] of sp) {
+      ctx.beginPath();
+      ctx.rect(x - 3, y - 3, 6, 6);
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = INK;
+      ctx.fillStyle = TEXT;
+      ctx.stroke();
+      ctx.fill();
+    }
+    if (opts.label) chip(ctx, opts.label, sp[0][0] + 7, sp[0][1] - 7, TEXT);
+    ctx.restore();
+  }
+  /** Draw the visible part of an image (pixel edges at integer view coordinates). */
+  function drawRaster(P, im) {
+    const ctx = P.ctx;
+    const sx0 = Math.max(0, Math.floor(-P.tx / P.s)), sy0 = Math.max(0, Math.floor(-P.ty / P.s));
+    const sx1 = Math.min(im.w, Math.ceil((P.w - P.tx) / P.s)), sy1 = Math.min(im.h, Math.ceil((P.h - P.ty) / P.s));
+    if (sx1 > sx0 && sy1 > sy0) {
+      ctx.save();
+      ctx.imageSmoothingEnabled = P.s * P.dpr < 3;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(im.img, sx0, sy0, sx1 - sx0, sy1 - sy0,
+                    P.tx + sx0 * P.s, P.ty + sy0 * P.s, (sx1 - sx0) * P.s, (sy1 - sy0) * P.s);
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+    ctx.strokeRect(Math.round(P.tx) - 0.5, Math.round(P.ty) - 0.5, Math.round(im.w * P.s) + 1, Math.round(im.h * P.s) + 1);
+    ctx.restore();
+  }
+  /** Magnified view of the pixels around a dragged point, in the corner away from the pointer. */
+  function loupe(P, im, c, color) {
+    if (!c) return;
+    const ctx = P.ctx, R = 62;
+    const mag = clamp(P.s * 4, 6, 48);
+    const [px] = P.toScreen(c);
+    const cx = px < P.w / 2 ? P.w - R - 14 : R + 14, cy = R + 14;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.fillStyle = "#0d0f12";
+    ctx.fill();
+    ctx.save();
+    ctx.clip();
+    ctx.imageSmoothingEnabled = false;
+    const ex = c[0] + 0.5, ey = c[1] + 0.5, half = R / mag + 1;
+    const sx0 = Math.max(0, Math.floor(ex - half)), sy0 = Math.max(0, Math.floor(ey - half));
+    const sx1 = Math.min(im.w, Math.ceil(ex + half)), sy1 = Math.min(im.h, Math.ceil(ey + half));
+    if (sx1 > sx0 && sy1 > sy0) {
+      ctx.drawImage(im.img, sx0, sy0, sx1 - sx0, sy1 - sy0,
+                    cx + (sx0 - ex) * mag, cy + (sy0 - ey) * mag, (sx1 - sx0) * mag, (sy1 - sy0) * mag);
+    }
+    ctx.restore();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(cx - R, cy); ctx.lineTo(cx - 5, cy);
+    ctx.moveTo(cx + 5, cy); ctx.lineTo(cx + R, cy);
+    ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy - 5);
+    ctx.moveTo(cx, cy + 5); ctx.lineTo(cx, cy + R);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.18)";
+    ctx.stroke();
+    const label = `${c[0].toFixed(1)}, ${c[1].toFixed(1)}`;
+    ctx.font = `500 10.5px ${MONO}`;
+    const tw = ctx.measureText(label).width + 14;
+    roundRectPath(ctx, cx - tw / 2, cy + R + 6, tw, 18, 9);
+    ctx.fillStyle = "rgba(10, 11, 13, 0.85)";
+    ctx.fill();
+    ctx.fillStyle = TEXT;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, cx, cy + R + 15.5);
+    ctx.restore();
+  }
+  /** Map a world segment into the image, clipped to the part in front of the camera. */
+  function clipProject(F, a, b) {
+    const H = F.Hinv, sd = F.sd, dmin = 0.2 * F.minDepth;
+    const qa = [H[0] * a[0] + H[1] * a[1] + H[2], H[3] * a[0] + H[4] * a[1] + H[5], H[6] * a[0] + H[7] * a[1] + H[8]];
+    const qb = [H[0] * b[0] + H[1] * b[1] + H[2], H[3] * b[0] + H[4] * b[1] + H[5], H[6] * b[0] + H[7] * b[1] + H[8]];
+    const da = qa[2] * sd, db = qb[2] * sd;
+    if (da < dmin && db < dmin) return null;
+    let t0 = 0, t1 = 1;
+    if (da < dmin) t0 = (dmin - da) / (db - da);
+    else if (db < dmin) t1 = (dmin - da) / (db - da);
+    const at = (t) => {
+      const w = qa[2] + t * (qb[2] - qa[2]);
+      return [(qa[0] + t * (qb[0] - qa[0])) / w, (qa[1] + t * (qb[1] - qa[1])) / w];
+    };
+    return [at(t0), at(t1)];
+  }
+  function groundGrid(P, F) {
+    const ctx = P.ctx, [x0, x1, y0, y1] = F.extent, st = F.gridStep;
+    ctx.save();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(111, 227, 255, 0.34)";
+    ctx.beginPath();
+    const seg = (a, b) => {
+      const s = clipProject(F, a, b);
+      if (!s) return;
+      const p = P.toScreen(s[0]), q = P.toScreen(s[1]);
+      if (!allFinite([p[0], p[1], q[0], q[1]])) return;
+      ctx.moveTo(p[0], p[1]);
+      ctx.lineTo(q[0], q[1]);
+    };
+    for (let k = Math.ceil(x0 / st); k * st <= x1; k++) seg([k * st, y0], [k * st, y1]);
+    for (let k = Math.ceil(y0 / st); k * st <= y1; k++) seg([x0, k * st], [x1, k * st]);
+    ctx.stroke();
+    ctx.restore();
+  }
+  function horizon(P, F) {
+    const a = F.H[6], b = F.H[7], c = F.H[8], W = S.cam.w, Hh = S.cam.h;
+    let p, q;
+    if (Math.abs(b) >= Math.abs(a)) {
+      if (b === 0) return;
+      p = [-1, (a - c) / b];
+      q = [W, -(a * W + c) / b];
+    } else {
+      p = [(b - c) / a, -1];
+      q = [-(b * Hh + c) / a, Hh];
+    }
+    if (!allFinite([...p, ...q])) return;
+    const s0 = P.toScreen(p), s1 = P.toScreen(q);
+    const ctx = P.ctx;
+    ctx.save();
+    ctx.setLineDash([7, 6]);
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = "rgba(236, 235, 232, 0.5)";
+    ctx.beginPath(); ctx.moveTo(s0[0], s0[1]); ctx.lineTo(s1[0], s1[1]); ctx.stroke();
+    ctx.setLineDash([]);
+    if (Math.abs(b) >= Math.abs(a) && p[1] > 0 && p[1] < Hh) {
+      ctx.font = `500 10.5px ${FONT}`;
+      ctx.fillStyle = "rgba(236, 235, 232, 0.75)";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "bottom";
+      const sx = Math.max(s0[0], 0) + 8, sy = s0[1] + (s1[1] - s0[1]) * ((sx - s0[0]) / (s1[0] - s0[0] || 1)) - 4;
+      ctx.fillText("horizon", sx, sy);
+    }
+    ctx.restore();
+  }
+  function drawCamera() {
+    const P = panes.camera, ctx = P.ctx;
+    ctx.setTransform(P.dpr, 0, 0, P.dpr, 0, 0);
+    ctx.clearRect(0, 0, P.w, P.h);
+    if (!S.cam) return;
+    drawRaster(P, S.cam);
+    const F = S.fit && S.fit.H && S.fit.ok ? S.fit : null;
+    if (F) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(P.tx, P.ty, S.cam.w * P.s, S.cam.h * P.s);
+      ctx.clip();
+      if (S.showGrid) { groundGrid(P, F); horizon(P, F); }
+      ctx.restore();
+      for (const p of S.pairs) {
+        if (!isComplete(p)) continue;
+        const q = projectWorld(F, p.world);
+        if (q) whisker(P, p.img, q, CYAN);
+      }
+    }
+    for (const L of S.lines) polyline(P, L.pts, { sel: isSelected("line", L.id), label: `L${L.id}` });
+    if (S.draft) {
+      const rubber = S.tool === "line" && P.pointer && !P.g ? P.pointer : null;
+      polyline(P, S.draft, { draft: true, rubber });
+    }
+    const pend = pendingPair();
+    if (F && pend && pend.world && !pend.img) {
+      const q = projectWorld(F, pend.world);
+      if (q) { const [x, y] = P.toScreen(q); marker(ctx, x, y, AMBER, pend.id, { ghost: true }); }
+    }
+    for (const p of S.pairs) {
+      if (!p.img) continue;
+      const [x, y] = P.toScreen(p.img);
+      marker(ctx, x, y, AMBER, p.id, { sel: isSelected("pair", p.id), pending: !isComplete(p) });
+    }
+    if (P.g && P.g.type === "drag") loupe(P, S.cam, hitPosition(P.g.hit), AMBER);
+  }
+  function metricGrid(P) {
+    const ctx = P.ctx;
+    const step = niceStep(44 / P.s);
+    const [x0, y0] = P.toContent(0, P.h), [x1, y1] = P.toContent(P.w, 0);
+    const digits = step >= 1 ? 0 : Math.ceil(-Math.log10(step));
+    ctx.save();
+    ctx.lineWidth = 1;
+    const style = (k) => (k === 0 ? "rgba(255, 255, 255, 0.26)" : k % 5 === 0 ? "rgba(255, 255, 255, 0.1)" : "rgba(255, 255, 255, 0.045)");
+    for (let k = Math.ceil(x0 / step); k * step <= x1; k++) {
+      const sx = Math.round(P.toScreen([k * step, 0])[0]) + 0.5;
+      ctx.strokeStyle = style(k);
+      ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, P.h); ctx.stroke();
+    }
+    for (let k = Math.ceil(y0 / step); k * step <= y1; k++) {
+      const sy = Math.round(P.toScreen([0, k * step])[1]) + 0.5;
+      ctx.strokeStyle = style(k);
+      ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(P.w, sy); ctx.stroke();
+    }
+    ctx.font = `500 10px ${MONO}`;
+    ctx.fillStyle = "rgba(155, 156, 163, 0.75)";
+    ctx.textBaseline = "top";
+    ctx.textAlign = "left";
+    for (let k = Math.ceil(x0 / step); k * step <= x1; k++) {
+      if (k % 5 !== 0) continue;
+      const sx = P.toScreen([k * step, 0])[0];
+      ctx.fillText(`${(k * step).toFixed(digits)}`, sx + 4, 6);
+    }
+    ctx.textBaseline = "bottom";
+    for (let k = Math.ceil(y0 / step); k * step <= y1; k++) {
+      if (k % 5 !== 0) continue;
+      const sy = P.toScreen([0, k * step])[1];
+      ctx.fillText(`${(k * step).toFixed(digits)}`, 6, sy - 3);
+    }
+    const o = P.toScreen([0, 0]);
+    ctx.fillStyle = "rgba(236, 235, 232, 0.6)";
+    ctx.font = `600 10.5px ${FONT}`;
+    if (o[1] > 12 && o[1] < P.h - 12) { ctx.textAlign = "right"; ctx.textBaseline = "bottom"; ctx.fillText("x →", P.w - 8, o[1] - 4); }
+    if (o[0] > 12 && o[0] < P.w - 40) { ctx.textAlign = "left"; ctx.textBaseline = "top"; ctx.fillText("y ↑", o[0] + 6, 22); }
+    ctx.restore();
+    if (P.zoomEl) P.zoomEl.textContent = `${fmtLen(step)} m`;
+  }
+  function drawWorld() {
+    const P = panes.world, ctx = P.ctx;
+    ctx.setTransform(P.dpr, 0, 0, P.dpr, 0, 0);
+    ctx.clearRect(0, 0, P.w, P.h);
+    const F = S.fit && S.fit.H && S.fit.ok ? S.fit : null;
+    if (S.mode === "reference") {
+      if (!S.ref) return;
+      drawRaster(P, S.ref);
+    } else {
+      metricGrid(P);
+    }
+    if (F && S.showOverlay && S.cam) drawOverlay(P, F);
+    if (F) {
+      for (const p of S.pairs) {
+        if (!isComplete(p)) continue;
+        const q = projectImage(F, p.img);
+        if (q) whisker(P, p.world, q, AMBER);
+      }
+      const pend = pendingPair();
+      if (S.mode === "reference" && pend && pend.img && !pend.world) {
+        const q = projectImage(F, pend.img);
+        if (q) { const [x, y] = P.toScreen(q); marker(ctx, x, y, CYAN, pend.id, { ghost: true }); }
+      }
+    }
+    for (const p of S.pairs) {
+      if (!p.world) continue;
+      const [x, y] = P.toScreen(p.world);
+      marker(ctx, x, y, CYAN, p.id, { sel: isSelected("pair", p.id), pending: !isComplete(p) });
+    }
+    if (P.g && P.g.type === "drag" && S.mode === "reference") loupe(P, S.ref, hitPosition(P.g.hit), CYAN);
+  }
+
+  /* ================================================================ warping */
+  /** Camera pixels for warping, downsampled when the frame is very large. */
+  function cameraPixels() {
+    const cam = S.cam;
+    if (!cam) return null;
+    if (cam.px !== undefined) return cam.px;
+    const k = Math.min(1, Math.sqrt(MAX_SOURCE_PIXELS / (cam.w * cam.h)));
+    const w = Math.max(1, Math.round(cam.w * k)), h = Math.max(1, Math.round(cam.h * k));
+    try {
+      const c = document.createElement("canvas");
+      c.width = w;
+      c.height = h;
+      const cx = c.getContext("2d", { willReadFrequently: true });
+      cx.drawImage(cam.img, 0, 0, w, h);
+      cam.px = { data: cx.getImageData(0, 0, w, h).data, w, h, kx: w / cam.w, ky: h / cam.h };
+    } catch (err) {
+      cam.px = null;
+      toast("The browser does not allow reading the frame pixels, so the previews are off", "error", 6000);
+    }
+    return cam.px;
+  }
+  /**
+   * Inverse mapping: M maps output pixel indices (i, j, 1) to homogeneous camera pixels.
+   * Output pixels behind the camera or outside the frame stay transparent.
+   */
+  function warp(M, ow, oh, F, src) {
+    const out = new ImageData(ow, oh), o = out.data;
+    const d = src.data, sw = src.w, sh = src.h, kx = src.kx, ky = src.ky, sd = F.sd;
+    for (let j = 0; j < oh; j++) {
+      let X = M[1] * j + M[2], Y = M[4] * j + M[5], W = M[7] * j + M[8];
+      let idx = j * ow * 4;
+      for (let i = 0; i < ow; i++, X += M[0], Y += M[3], W += M[6], idx += 4) {
+        if (W * sd <= 0) continue;
+        const u = (X / W + 0.5) * kx - 0.5, v = (Y / W + 0.5) * ky - 0.5;
+        if (!(u >= -0.5 && v >= -0.5 && u <= sw - 0.5 && v <= sh - 0.5)) continue;
+        let x0 = Math.floor(u), y0 = Math.floor(v);
+        const fx = u - x0, fy = v - y0;
+        let x1 = x0 + 1, y1 = y0 + 1;
+        if (x0 < 0) x0 = 0;
+        if (y0 < 0) y0 = 0;
+        if (x1 >= sw) x1 = sw - 1;
+        if (y1 >= sh) y1 = sh - 1;
+        const a = (y0 * sw + x0) * 4, b = (y0 * sw + x1) * 4, c = (y1 * sw + x0) * 4, e = (y1 * sw + x1) * 4;
+        const w00 = (1 - fx) * (1 - fy), w10 = fx * (1 - fy), w01 = (1 - fx) * fy, w11 = fx * fy;
+        o[idx] = d[a] * w00 + d[b] * w10 + d[c] * w01 + d[e] * w11;
+        o[idx + 1] = d[a + 1] * w00 + d[b + 1] * w10 + d[c + 1] * w01 + d[e + 1] * w11;
+        o[idx + 2] = d[a + 2] * w00 + d[b + 2] * w10 + d[c + 2] * w01 + d[e + 2] * w11;
+        o[idx + 3] = 255;
+      }
+    }
+    return out;
+  }
+  function drawOverlay(P, F) {
+    if (!P.overlay) P.overlay = buildOverlay(P, F);
+    if (!P.overlay) return;
+    const ctx = P.ctx;
+    ctx.save();
+    ctx.globalAlpha = S.mode === "metric" ? 0.9 : 0.62;
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(P.overlay, 0, 0, P.w, P.h);
+    ctx.restore();
+  }
+  function buildOverlay(P, F) {
+    const src = cameraPixels();
+    if (!src) return null;
+    const q = Math.min(1, Math.sqrt(360000 / Math.max(1, P.w * P.h)));
+    const ow = Math.max(1, Math.round(P.w * q)), oh = Math.max(1, Math.round(P.h * q));
+    const qx = ow / P.w, qy = oh / P.h;
+    // output pixel (i, j) -> pane position ((i + 0.5) / qx, (j + 0.5) / qy) -> pane content
+    const ax = 1 / (qx * P.s), cx = (0.5 / qx - P.tx) / P.s - P.off;
+    const by = (P.metric ? -1 : 1) / (qy * P.s);
+    const cy = P.metric ? -(0.5 / qy - P.ty) / P.s : (0.5 / qy - P.ty) / P.s - P.off;
+    const M = mul3(F.Hinv, [ax, 0, cx, 0, by, cy, 0, 0, 1]);
+    if (!P.overlayCanvas) P.overlayCanvas = document.createElement("canvas");
+    const c = P.overlayCanvas;
+    c.width = ow;
+    c.height = oh;
+    c.getContext("2d").putImageData(warp(M, ow, oh, F, src), 0, 0);
+    return c;
+  }
+  function renderBev() {
+    const c = $("bev"), wrap = c.parentElement, empty = $("bev-empty"), meta = $("bev-meta");
+    const F = S.fit && S.fit.H && S.fit.ok ? S.fit : null;
+    const src = F && S.cam ? cameraPixels() : null;
+    const r = wrap.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    let W = Math.max(1, Math.round(r.width * dpr)), Hh = Math.max(1, Math.round(r.height * dpr));
+    const cap = Math.min(1, Math.sqrt(300000 / (W * Hh)));
+    W = Math.max(1, Math.round(W * cap));
+    Hh = Math.max(1, Math.round(Hh * cap));
+    if (c.width !== W || c.height !== Hh) { c.width = W; c.height = Hh; }
+    const ctx = c.getContext("2d");
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, W, Hh);
+    empty.hidden = !!src;
+    if (!src) {
+      meta.textContent = "";
+      empty.textContent = S.fit && S.fit.warn ? S.fit.msg : "Four point pairs give a live ground-plane preview";
+      return;
+    }
+    const [x0, x1, y0, y1] = F.extent;
+    const res = Math.max((x1 - x0) / W, (y1 - y0) / Hh);
+    const mx = (x0 + x1) / 2, my = (y0 + y1) / 2, flip = S.mode === "metric";
+    const A = [res, 0, mx + (0.5 - W / 2) * res,
+               0, flip ? -res : res, flip ? my - (0.5 - Hh / 2) * res : my + (0.5 - Hh / 2) * res,
+               0, 0, 1];
+    ctx.putImageData(warp(mul3(F.Hinv, A), W, Hh, F, src), 0, 0);
+    const toBev = (p) => [(p[0] - mx) / res + W / 2, (flip ? my - p[1] : p[1] - my) / res + Hh / 2];
+    const k = W / Math.max(1, r.width);
+    for (const p of S.pairs) {
+      if (!p.world) continue;
+      const [x, y] = toBev(p.world);
+      const sel = isSelected("pair", p.id);
+      ctx.beginPath();
+      ctx.arc(x, y, (sel ? 4.5 : 3) * k, 0, Math.PI * 2);
+      ctx.fillStyle = CYAN;
+      ctx.fill();
+      ctx.lineWidth = 1.5 * k;
+      ctx.strokeStyle = sel ? "#ffffff" : INK;
+      ctx.stroke();
+    }
+    const unit = worldScale();
+    const perPx = res * (unit || 1);
+    const len = niceStep((W * perPx) / 5);
+    const lenPx = len / perPx;
+    const bx = 12 * k, byy = Hh - 12 * k;
+    ctx.save();
+    ctx.lineWidth = 3 * k;
+    ctx.strokeStyle = "rgba(10, 11, 13, 0.75)";
+    ctx.beginPath(); ctx.moveTo(bx, byy); ctx.lineTo(bx + lenPx, byy); ctx.stroke();
+    ctx.lineWidth = 1.5 * k;
+    ctx.strokeStyle = TEXT;
+    ctx.beginPath();
+    ctx.moveTo(bx, byy - 4 * k); ctx.lineTo(bx, byy); ctx.lineTo(bx + lenPx, byy); ctx.lineTo(bx + lenPx, byy - 4 * k);
+    ctx.stroke();
+    ctx.font = `600 ${10.5 * k}px ${FONT}`;
+    ctx.fillStyle = TEXT;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "bottom";
+    ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+    ctx.shadowBlur = 3 * k;
+    ctx.fillText(`${fmtLen(len)} ${unit ? "m" : "px"}`, bx, byy - 6 * k);
+    ctx.restore();
+    const u = unit ? "m" : "px";
+    meta.textContent = `${fmtLen(W * perPx)} × ${fmtLen(Hh * perPx)} ${u}`;
+  }
+
+  /* ================================================================ table and chrome */
+  function renderTable() {
+    const tb = $("rows");
+    const F = S.fit;
+    const unit = worldScale() ? "m" : "px";
+    const ref = S.mode === "reference";
+    if (!S.pairs.length) {
+      const how = !S.cam ? "Open a camera frame to start." : ref ? "Click a point in the camera frame, then the same point on the reference image."
+        : "Click a point in the camera frame and type its world position in metres.";
+      tb.innerHTML = `<tr class="empty-row"><td colspan="7">No points yet. ${how}</td></tr>`;
+      return;
+    }
+    const floor = unit === "m" ? 0.1 : 2;
+    const rows = S.pairs.map((p) => {
+      const complete = isComplete(p);
+      const r = F && F.res.has(p.id) ? F.res.get(p.id) : NaN;
+      const l = F && F.loo.has(p.id) ? F.loo.get(p.id) : NaN;
+      const flag = (v) => F && F.n >= 5 && Number.isFinite(v) && v > Math.max(3 * F.median, floor);
+      const cls = [isSelected("pair", p.id) ? "selected" : "", complete ? "" : "pending"].join(" ").trim();
+      const chipCls = complete ? "pair" : p.img ? "amber" : "cyan";
+      const wait = '<span class="wait">waiting</span>';
+      return `<tr data-id="${p.id}"${cls ? ` class="${cls}"` : ""}>` +
+        `<td><span class="chip ${chipCls}">${p.id}</span></td>` +
+        `<td class="name col-name" title="${esc(p.name)}">${esc(p.name)}</td>` +
+        `<td class="num">${p.img ? fmtPair(p.img, 1) : wait}</td>` +
+        `<td class="num">${p.world ? fmtPair(p.world, ref ? 1 : 2) : wait}</td>` +
+        `<td class="num res${flag(r) ? " warn" : ""}">${fmtRes(r, unit)}</td>` +
+        `<td class="num res col-loo${flag(l) ? " warn" : ""}">${fmtRes(l, unit)}</td>` +
+        `<td class="col-act"><button type="button" class="icon-btn" data-act="edit" aria-label="Edit point ${p.id}" title="Edit">${ICON_EDIT}</button>` +
+        `<button type="button" class="icon-btn" data-act="del" aria-label="Delete point ${p.id}" title="Delete">${ICON_X}</button></td></tr>`;
+    });
+    tb.innerHTML = rows.join("");
+    if (scrollToSelection) {
+      scrollToSelection = false;
+      const row = tb.querySelector("tr.selected");
+      if (row) row.scrollIntoView({ block: "nearest" });
+    }
+  }
+  function renderLines() {
+    const parts = ['<span class="lines-label">Straight lines</span>'];
+    if (!S.lines.length && !S.draft) {
+      parts.push('<span class="faint">None yet. Press <kbd>L</kbd> and trace a lane line or kerb in the camera frame.</span>');
+    }
+    for (const L of S.lines) {
+      parts.push(`<span class="line-chip${isSelected("line", L.id) ? " selected" : ""}">` +
+        `<button type="button" class="line-name" data-line="${L.id}">L${L.id} <span class="faint">${L.pts.length} pts</span></button>` +
+        `<button type="button" class="icon-btn" data-del-line="${L.id}" aria-label="Delete line L${L.id}" title="Delete">${ICON_X}</button></span>`);
+    }
+    if (S.draft) parts.push(`<span class="line-chip draft">tracing · ${S.draft.length} pts</span>`);
+    $("lines-row").innerHTML = parts.join("");
+  }
+  function setPressed(el, on) { el.setAttribute("aria-pressed", on ? "true" : "false"); }
+  function renderChrome() {
+    const F = S.fit, ref = S.mode === "reference";
+    const done = S.pairs.filter(isComplete).length, pend = pendingPair();
+    const unit = worldScale() ? "m" : "px";
+
+    setPressed($("tool-point"), S.tool === "point");
+    setPressed($("tool-line"), S.tool === "line");
+    setPressed($("toggle-grid"), S.showGrid);
+    setPressed($("toggle-overlay"), S.showOverlay);
+    $("undo").disabled = !S.undo.length && !S.draft;
+    $("redo").disabled = !S.redo.length;
+
+    $("world-title").textContent = ref ? "Reference image" : "World plane";
+    $("camera-meta").textContent = S.cam ? `${S.cam.w} × ${S.cam.h}${S.cam.name ? ` · ${S.cam.name}` : ""}` : "";
+    $("world-meta").textContent = ref ? (S.ref ? `${S.ref.w} × ${S.ref.h}${S.ref.name ? ` · ${S.ref.name}` : ""}` : "")
+                                      : "metres · x east, y north";
+    $("gsd-field").hidden = !ref;
+    $("camera-open").hidden = !!S.server;
+    $("ref-open").hidden = !!S.server;
+    $("use-metric").hidden = !!S.server || !ref;
+    $("camera-empty").hidden = !!S.cam;
+    panes.world.canvas.setAttribute("aria-label", ref ? "Reference image" : "World plane in metres");
+
+    $("world-col").textContent = ref ? "Reference x, y (px)" : "World x, y (m)";
+    $("res-col").textContent = `Residual (${unit})`;
+    $("loo-col").textContent = `Leave-one-out (${unit})`;
+
+    const bits = [plural(done, "pair")];
+    if (pend) bits.push("1 pending");
+    bits.push(plural(S.lines.length, "line"));
+    $("counts").textContent = bits.join(" · ");
+
+    const st = $("fit-status");
+    st.classList.toggle("warn", !!(F && F.warn));
+    st.classList.toggle("good", !!(F && F.H && !F.warn));
+    if (!F || !F.H || F.warn) st.textContent = F ? F.msg : "";
+    else st.textContent = `RMS ${fmtRes(F.rms, unit)} ${unit}` + (Number.isFinite(F.looRms) ? ` · LOO ${fmtRes(F.looRms, unit)} ${unit}` : "");
+
+    let camHint = "", worldHint = "", camExpect = false, worldExpect = false;
+    if (S.cam) {
+      if (S.tool === "line") {
+        const n = S.draft ? S.draft.length : 0;
+        camHint = n ? `Line: ${n} ${n === 1 ? "vertex" : "vertices"} · Enter finishes${n < 3 ? " (needs 3)" : ""} · Backspace removes the last`
+                    : "Line: click along an edge that is straight on the ground";
+      } else if (pend && !pend.img) {
+        camHint = `Click point ${pend.id} in the camera frame`;
+        camExpect = true;
+      } else if (pend && !ref) {
+        camHint = `Type the world position of point ${pend.id}`;
+      } else if (pend) {
+        camHint = `Point ${pend.id} placed · now click it on the reference image`;
+      } else {
+        camHint = `Click to place point ${S.nextId}`;
+      }
+    }
+    if (ref) {
+      if (S.ref) {
+        if (pend && !pend.world) { worldHint = `Click point ${pend.id} on the reference image`; worldExpect = true; }
+        else if (pend) worldHint = `Point ${pend.id} placed · now click it in the camera frame`;
+        else worldHint = "Pairs start in the camera frame or here";
+        if (!(S.gsd > 0)) worldHint += " · enter the GSD to save";
+      }
+    } else {
+      worldHint = S.pairs.some((p) => p.world) ? "Double-click a point to edit its coordinates"
+                                               : "World positions are typed in metres after each camera click";
+    }
+    panes.camera.hintEl.textContent = camHint;
+    panes.world.hintEl.textContent = worldHint;
+    panes.camera.el.classList.toggle("expect-amber", camExpect);
+    panes.world.el.classList.toggle("expect-cyan", worldExpect);
+
+    const save = $("save"), dl = $("download"), target = $("save-target");
+    save.hidden = !S.server;
+    dl.classList.toggle("primary", !S.server);
+    save.disabled = S.ended || S.saving || !S.cam;
+    save.textContent = S.ended ? "Saved" : S.saving ? "Saving…" : "Save";
+    target.textContent = S.server ? (S.ended ? `saved · ${S.server.outName}` : `→ ${S.server.outName}`) : "";
+    target.title = S.server ? S.server.out : "";
+    target.classList.toggle("done", S.ended);
+  }
+
+  /* ================================================================ point form */
+  const form = { el: $("pt-form"), id: null, isNew: false, pane: null };
+  function openForm(pair, isNew) {
+    if (!pair) return;
+    const metric = S.mode === "metric";
+    if (!form.el.hidden && form.id === pair.id && form.isNew === isNew) { placeForm(); return; }
+    form.id = pair.id;
+    form.isNew = isNew;
+    form.pane = metric || pair.img ? panes.camera : panes.world;
+    form.pane.body.appendChild(form.el);
+    $("pt-chip").textContent = String(pair.id);
+    $("pt-chip").className = `chip ${isComplete(pair) ? "pair" : pair.img ? "amber" : "cyan"}`;
+    $("pt-title").textContent = isNew ? `World position of point ${pair.id}` : metric ? `Point ${pair.id}` : `Rename point ${pair.id}`;
+    $("pt-xy").hidden = !metric;
+    $("pt-x").value = metric && pair.world ? String(pair.world[0]) : "";
+    $("pt-y").value = metric && pair.world ? String(pair.world[1]) : "";
+    $("pt-x").removeAttribute("aria-invalid");
+    $("pt-y").removeAttribute("aria-invalid");
+    const F = S.fit && S.fit.H && S.fit.ok && !S.fit.warn ? S.fit : null;
+    const guess = metric && F && pair.img ? projectImage(F, pair.img) : null;
+    $("pt-note").textContent = guess ? `Current fit predicts ${guess[0].toFixed(2)}, ${guess[1].toFixed(2)}` : "";
+    $("pt-note").hidden = !guess;
+    $("pt-name").value = pair.name && pair.name !== String(pair.id) ? pair.name : "";
+    $("pt-name").placeholder = String(pair.id);
+    $("pt-ok").textContent = isNew ? "Add" : "Update";
+    $("pt-error").textContent = "";
+    form.el.hidden = false;
+    select({ type: "pair", id: pair.id });
+    placeForm();
+    (metric ? $("pt-x") : $("pt-name")).focus({ preventScroll: true });
+  }
+  function closeForm() {
+    if (form.el.hidden) return;
+    const hadFocus = form.el.contains(document.activeElement);
+    form.el.hidden = true;
+    form.id = null;
+    if (hadFocus && form.pane) form.pane.canvas.focus({ preventScroll: true });
+  }
+  function placeForm() {
+    if (form.el.hidden || form.id == null) return;
+    const p = pairById(form.id), P = form.pane;
+    if (!p || !P) { closeForm(); return; }
+    const anchor = P === panes.camera ? p.img : p.world;
+    if (!anchor) return;
+    const [sx, sy] = P.toScreen(anchor);
+    const w = form.el.offsetWidth, h = form.el.offsetHeight;
+    let left = sx + 18, top = sy + 16;
+    if (left + w > P.w - 8) left = sx - w - 18;
+    if (top + h > P.h - 8) top = sy - h - 16;
+    form.el.style.left = `${clamp(left, 8, Math.max(8, P.w - w - 8))}px`;
+    form.el.style.top = `${clamp(top, 8, Math.max(8, P.h - h - 8))}px`;
+  }
+  function submitForm(e) {
+    e.preventDefault();
+    const p = pairById(form.id);
+    if (!p) { closeForm(); return; }
+    const name = $("pt-name").value.trim();
+    if (S.mode === "metric") {
+      const fx = $("pt-x"), fy = $("pt-y");
+      const x = parseNum(fx.value), y = parseNum(fy.value);
+      fx.setAttribute("aria-invalid", String(!Number.isFinite(x)));
+      fy.setAttribute("aria-invalid", String(!Number.isFinite(y)));
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        $("pt-error").textContent = "Enter both coordinates in metres, for example 12.5 and -3.2";
+        (Number.isFinite(x) ? fy : fx).focus();
+        return;
+      }
+      pushUndo();
+      p.world = [x, y];
+    } else {
+      pushUndo();
+    }
+    p.name = name || String(p.id);
+    const P = form.pane;
+    closeForm();
+    changed();
+    if (S.mode === "metric" && p.world && !panes.world.visible(p.world)) panes.world.fit();
+    if (P) P.canvas.focus({ preventScroll: true });
+  }
+  function cancelForm() {
+    const p = pairById(form.id);
+    if (p && form.isNew && !p.world) discardPending(p);
+    closeForm();
+  }
+
+  /* ================================================================ output */
+  function buildDoc(minPairs, quiet) {
+    const fail = (msg) => { if (!quiet) toast(msg, "error", 5200); return null; };
+    if (!S.cam) return fail("Open a camera frame first");
+    const done = S.pairs.filter(isComplete);
+    if (done.length < minPairs) {
+      return fail(minPairs > 1 ? `Calibration needs at least ${minPairs} complete pairs; there are ${done.length}`
+                               : "There are no complete pairs yet");
+    }
+    const ref = S.mode === "reference";
+    if (ref && !(S.gsd > 0)) {
+      if (!quiet) $("gsd").focus();
+      return fail("Enter the ground sampling distance of the reference image (metres per pixel)");
+    }
+    const r3 = (v) => Math.round(v * 1000) / 1000;
+    const r4 = (v) => Math.round(v * 10000) / 10000;
+    const doc = { image_size: [S.cam.w, S.cam.h], world_units: ref ? "reference_px" : "metres" };
+    if (ref) doc.gsd = S.gsd;
+    doc.points = done.map((p) => ({ name: p.name || String(p.id), image: p.img.map(r3), world: p.world.map(ref ? r3 : r4) }));
+    doc.lines = S.lines.filter((l) => l.pts.length >= 3).map((l) => l.pts.map((q) => q.map(r3)));
+    return doc;
+  }
+  /** Escape characters outside printable ASCII the way YAML double-quoted scalars read them. */
+  function asciiEscape(text) {
+    let out = "";
+    for (const ch of text) {
+      const cp = ch.codePointAt(0);
+      if (cp >= 0x20 && cp <= 0x7e) out += ch;
+      else if (cp > 0xffff) out += `\\U${cp.toString(16).padStart(8, "0")}`;
+      else out += `\\u${cp.toString(16).padStart(4, "0")}`;
+    }
+    return out;
+  }
+  /**
+   * The file is kept ASCII because Correspondences.load reads it in the locale encoding,
+   * which is not UTF-8 on many Windows systems.
+   */
+  function toYaml(doc) {
+    const name = (s) => asciiEscape(JSON.stringify(String(s)));
+    const comment = (s) => asciiEscape(String(s).replace(/[\r\n]+/g, " "));
+    const out = ["# Image-to-world correspondences from the tachymetry correspondence picker"];
+    if (S.cam) out.push(comment(`# camera frame: ${S.cam.name || "unnamed"} (${S.cam.w}x${S.cam.h})`));
+    if (S.mode === "reference" && S.ref) {
+      out.push(comment(`# reference image: ${S.ref.name || "unnamed"} (${S.ref.w}x${S.ref.h})`));
+    }
+    out.push(`image_size: [${doc.image_size.join(", ")}]`);
+    out.push(`world_units: ${doc.world_units}`);
+    if (doc.gsd != null) out.push(`gsd: ${yamlNum(doc.gsd)}`);
+    const pt = (q) => `[${yamlNum(q[0])}, ${yamlNum(q[1])}]`;
+    if (doc.points.length) {
+      out.push("points:");
+      for (const p of doc.points) out.push(`- {name: ${name(p.name)}, image: ${pt(p.image)}, world: ${pt(p.world)}}`);
+    } else {
+      out.push("points: []");
+    }
+    if (doc.lines.length) {
+      out.push("lines:");
+      for (const l of doc.lines) out.push(`- [${l.map(pt).join(", ")}]`);
+    } else {
+      out.push("lines: []");
+    }
+    return `${out.join("\n")}\n`;
+  }
+  function excludedNote() {
+    const n = S.pairs.filter((p) => !isComplete(p)).length;
+    const short = S.lines.filter((l) => l.pts.length < 3).length;
+    const bits = [];
+    if (n) bits.push(`${n} incomplete pair${n === 1 ? "" : "s"}`);
+    if (short) bits.push(`${short} line${short === 1 ? "" : "s"} with fewer than three vertices`);
+    return bits.length ? ` (${bits.join(" and ")} left out)` : "";
+  }
+  function download() {
+    const doc = buildDoc(1, false);
+    if (!doc) return;
+    const blob = new Blob([toYaml(doc)], { type: "application/x-yaml" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = S.server ? S.server.outName.replace(/\.json$/i, ".yaml") : "points.yaml";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    if (!S.server || S.ended) S.dirty = false;
+    toast(`Downloaded ${plural(doc.points.length, "pair")} and ${plural(doc.lines.length, "line")}${excludedNote()}`,
+          "success");
+  }
+  async function save() {
+    if (!S.server) { download(); return; }
+    if (S.ended) { toast(`The session already saved to ${S.server.out}; use Download YAML for another copy`); return; }
+    if (S.saving) return;
+    const doc = buildDoc(S.minPairs, false);
+    if (!doc) return;
+    S.saving = true;
+    changed(false);
+    try {
+      const resp = await fetch("save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Picker-Token": S.server.token },
+        body: JSON.stringify(doc),
+      });
+      let body = {};
+      try { body = await resp.json(); } catch (err) { body = {}; }
+      if (!resp.ok || !body.ok) throw new Error(body.error || `HTTP ${resp.status}`);
+      S.ended = true;
+      S.dirty = false;
+      toast(`Saved ${plural(doc.points.length, "pair")} and ${plural(doc.lines.length, "line")} to ` +
+            `${body.path}${excludedNote()}. ` +
+            "The session has ended; you can close this tab.", "success", 9000);
+    } catch (err) {
+      toast(`Save failed: ${err.message}. Download YAML still works.`, "error", 9000);
+    } finally {
+      S.saving = false;
+      changed(false);
+    }
+  }
+
+  /* ================================================================ messages and help */
+  let toastTimer = 0;
+  function toast(msg, tone = "info", ms = 3400) {
+    const el = $("toast");
+    el.textContent = msg;
+    el.className = `toast show ${tone}`;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove("show"), ms);
+  }
+  let helpReturn = null;
+  function openHelp() {
+    helpReturn = document.activeElement;
+    $("help").hidden = false;
+    $("help-close").focus();
+  }
+  function closeHelp() {
+    $("help").hidden = true;
+    if (helpReturn && helpReturn.focus) helpReturn.focus({ preventScroll: true });
+  }
+
+  /* ================================================================ images */
+  function loadImage(url) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.decoding = "async";
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error(`could not load ${url}`));
+      img.src = url;
+    });
+  }
+  function setCamera(img, name) {
+    const prev = S.cam;
+    S.cam = { img, w: img.naturalWidth, h: img.naturalHeight, name, px: undefined };
+    if (prev && (prev.w !== S.cam.w || prev.h !== S.cam.h) && S.pairs.some((p) => p.img)) {
+      toast("The new frame has a different size; the image points were kept as they are", "error", 6000);
+    }
+    panes.camera.fitted = false;
+    panes.camera.fit();
+    changed(false);
+    updateCursors();
+  }
+  function setReference(img, name) {
+    if (S.mode === "metric" && S.pairs.some((p) => p.world)) {
+      toast("Delete the metric world points before switching to a reference image", "error", 6000);
+      return;
+    }
+    S.ref = { img, w: img.naturalWidth, h: img.naturalHeight, name };
+    if (S.mode !== "reference") { S.mode = "reference"; S.showOverlay = false; closeForm(); }
+    panes.world.fitted = false;
+    panes.world.fit();
+    changed(false);
+    updateCursors();
+  }
+  function useMetric() {
+    if (S.mode === "metric") return;
+    if (S.pairs.some((p) => p.world)) {
+      toast("Delete the reference points before switching to metric input", "error", 6000);
+      return;
+    }
+    S.mode = "metric";
+    S.ref = null;
+    S.showOverlay = true;
+    panes.world.fitted = false;
+    panes.world.fit();
+    changed(false);
+    updateCursors();
+  }
+  async function openFile(file, target) {
+    if (!file) return;
+    if (!/^image\//.test(file.type) && !/\.(png|jpe?g|webp|bmp|gif|avif)$/i.test(file.name)) {
+      toast(`${file.name} is not an image the browser can open`, "error");
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await loadImage(url);
+      if (target === "camera") setCamera(img, file.name); else setReference(img, file.name);
+    } catch (err) {
+      URL.revokeObjectURL(url);
+      toast(`Could not open ${file.name}`, "error");
+    }
+  }
+  function importDoc(doc) {
+    const num2 = (q) => [Number(q[0]), Number(q[1])];
+    S.pairs = (doc.points || []).map((p, i) => ({ id: i + 1, name: String(p.name != null && p.name !== "" ? p.name : i + 1),
+                                                  img: num2(p.image), world: num2(p.world) }));
+    S.nextId = S.pairs.length + 1;
+    S.lines = (doc.lines || []).map((l, i) => ({ id: i + 1, pts: l.map(num2) }));
+    S.nextLineId = S.lines.length + 1;
+  }
+  function loadBundledFonts() {
+    if (typeof FontFace === "undefined" || !document.fonts) return;
+    const faces = [["Geist", "Geist-Regular.ttf", "400"], ["Geist", "Geist-Medium.ttf", "500"],
+                   ["Geist", "Geist-SemiBold.ttf", "600"], ["Geist Mono", "GeistMono-Regular.ttf", "400"]];
+    for (const [family, file, weight] of faces) {
+      new FontFace(family, `url(${file})`, { weight, style: "normal", display: "swap" }).load()
+        .then((face) => { document.fonts.add(face); need.table = true; schedule(); })
+        .catch(() => { /* the system font stack applies */ });
+    }
+  }
+
+  /* ================================================================ wiring */
+  function bindUi() {
+    bindPane(panes.camera);
+    bindPane(panes.world);
+    $("tool-point").addEventListener("click", () => setTool("point"));
+    $("tool-line").addEventListener("click", () => setTool("line"));
+    $("toggle-grid").addEventListener("click", () => { S.showGrid = !S.showGrid; changed(false); });
+    $("toggle-overlay").addEventListener("click", () => { S.showOverlay = !S.showOverlay; changed(false); });
+    $("undo").addEventListener("click", undo);
+    $("redo").addEventListener("click", redo);
+    $("help-btn").addEventListener("click", openHelp);
+    $("help-close").addEventListener("click", closeHelp);
+    $("help").addEventListener("click", (e) => { if (e.target === $("help")) closeHelp(); });
+    $("download").addEventListener("click", download);
+    $("save").addEventListener("click", save);
+    document.querySelectorAll("[data-fit]").forEach((b) => b.addEventListener("click", () => panes[b.dataset.fit].fit()));
+    $("camera-open").addEventListener("click", () => $("file-camera").click());
+    document.querySelectorAll('[data-open="camera"]').forEach((b) => b.addEventListener("click", () => $("file-camera").click()));
+    $("ref-open").addEventListener("click", () => $("file-ref").click());
+    $("use-metric").addEventListener("click", useMetric);
+    $("file-camera").addEventListener("change", (e) => { openFile(e.target.files[0], "camera"); e.target.value = ""; });
+    $("file-ref").addEventListener("change", (e) => { openFile(e.target.files[0], "reference"); e.target.value = ""; });
+
+    const gsd = $("gsd");
+    gsd.addEventListener("input", () => {
+      const v = parseNum(gsd.value);
+      S.gsd = v > 0 ? v : null;
+      gsd.setAttribute("aria-invalid", String(gsd.value.trim() !== "" && !(v > 0)));
+      changed();
+    });
+
+    form.el.addEventListener("submit", submitForm);
+    $("pt-cancel").addEventListener("click", cancelForm);
+    form.el.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancelForm(); }
+    });
+    form.el.addEventListener("pointerdown", (e) => e.stopPropagation());
+
+    $("rows").addEventListener("click", (e) => {
+      const tr = e.target.closest("tr[data-id]");
+      if (!tr) return;
+      const id = Number(tr.dataset.id);
+      const btn = e.target.closest("button[data-act]");
+      if (btn && btn.dataset.act === "del") { deletePair(id); return; }
+      const p = pairById(id);
+      if (btn && btn.dataset.act === "edit") { if (p) openForm(p, S.mode === "metric" && !p.world); return; }
+      select({ type: "pair", id }, true);
+    });
+    $("rows").addEventListener("dblclick", (e) => {
+      const tr = e.target.closest("tr[data-id]");
+      if (!tr || e.target.closest("button")) return;
+      const p = pairById(Number(tr.dataset.id));
+      if (p) openForm(p, S.mode === "metric" && !p.world);
+    });
+    $("lines-row").addEventListener("click", (e) => {
+      const del = e.target.closest("[data-del-line]");
+      if (del) { deleteLine(Number(del.dataset.delLine)); return; }
+      const b = e.target.closest("[data-line]");
+      if (b) select({ type: "line", id: Number(b.dataset.line) });
+    });
+
+    // Dropping a file outside a pane must not navigate away from the page.
+    window.addEventListener("dragover", (e) => e.preventDefault());
+    window.addEventListener("drop", (e) => e.preventDefault());
+    for (const P of Object.values(panes)) {
+      P.body.addEventListener("dragover", (e) => { if (!S.server) { e.preventDefault(); P.body.classList.add("drop"); } });
+      P.body.addEventListener("dragleave", () => P.body.classList.remove("drop"));
+      P.body.addEventListener("drop", (e) => {
+        e.preventDefault();
+        P.body.classList.remove("drop");
+        if (S.server) return;
+        const file = e.dataTransfer && e.dataTransfer.files[0];
+        openFile(file, P.key === "camera" ? "camera" : "reference");
+      });
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", (e) => { if (e.key === " " && spaceHeld) { spaceHeld = false; updateCursors(); } });
+    window.addEventListener("blur", () => { if (spaceHeld) { spaceHeld = false; updateCursors(); } });
+    window.addEventListener("beforeunload", (e) => {
+      if (S.dirty && !S.ended && S.pairs.length) { e.preventDefault(); e.returnValue = ""; }
+    });
+
+    const ro = new ResizeObserver((entries) => {
+      for (const en of entries) {
+        for (const P of Object.values(panes)) if (en.target === P.body) P.resize();
+      }
+      need.bev = true;
+      schedule();
+    });
+    ro.observe(panes.camera.body);
+    ro.observe(panes.world.body);
+    ro.observe($("bev").parentElement);
+
+    if (IS_MAC) {
+      document.querySelectorAll("kbd.mod").forEach((k) => { k.textContent = "⌘"; });
+      for (const id of ["undo", "redo"]) $(id).title = $(id).title.replace("Ctrl+", "⌘");
+      $("save").title = $("save").title.replace("Ctrl+", "⌘");
+    }
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { need.table = true; schedule(); });
+  }
+  function onKeyDown(e) {
+    if (!$("help").hidden) {
+      if (e.key === "Escape" || e.key === "?") { e.preventDefault(); closeHelp(); }
+      else if (e.key === "Tab") { e.preventDefault(); $("help-close").focus(); }
+      return;
+    }
+    const mod = e.ctrlKey || e.metaKey;
+    const key = e.key;
+    if (mod && !e.altKey && key.toLowerCase() === "s") { e.preventDefault(); save(); return; }
+    const t = e.target;
+    if (t instanceof Element && t.closest("input, textarea, select, [contenteditable='true']")) return;
+    if (mod && !e.altKey) {
+      const k = key.toLowerCase();
+      if (k === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
+      else if ((k === "z" && e.shiftKey) || k === "y") { e.preventDefault(); redo(); }
+      return;
+    }
+    if (e.altKey) return;
+    const onButton = t instanceof HTMLButtonElement;
+    switch (key) {
+      case "?": e.preventDefault(); openHelp(); break;
+      case "p": case "P": setTool("point"); break;
+      case "l": case "L": setTool("line"); break;
+      case "g": case "G": S.showGrid = !S.showGrid; changed(false); break;
+      case "o": case "O": S.showOverlay = !S.showOverlay; changed(false); break;
+      case "f": case "F": case "0": fitAll(); break;
+      case "+": case "=": zoomActive(1.25); break;
+      case "-": case "_": zoomActive(0.8); break;
+      case "[": cycle(-1); break;
+      case "]": cycle(1); break;
+      case "Enter": if (!onButton) { e.preventDefault(); onEnter(); } break;
+      case "Escape": onEscape(); break;
+      case "Delete": case "Backspace":
+        e.preventDefault();
+        if (S.draft && key === "Backspace") popDraft(); else deleteSelection();
+        break;
+      case "ArrowLeft": case "ArrowRight": case "ArrowUp": case "ArrowDown":
+        if (nudge(key, e.shiftKey)) e.preventDefault();
+        break;
+      case " ":
+        if (!onButton) { e.preventDefault(); if (!spaceHeld) { spaceHeld = true; updateCursors(); } }
+        break;
+      default: break;
+    }
+  }
+
+  /* ================================================================ start-up */
+  async function startServerSession(session) {
+    S.server = { token: session.token, out: session.out, outName: session.out_name || "points.yaml" };
+    S.minPairs = session.min_points || 4;
+    loadBundledFonts();
+    S.mode = session.reference ? "reference" : "metric";
+    S.gsd = session.gsd > 0 ? Number(session.gsd) : null;
+    if (S.gsd) $("gsd").value = String(S.gsd);
+    S.showOverlay = S.mode === "metric";
+    const [cam, ref] = await Promise.all([
+      loadImage(session.image.url),
+      session.reference ? loadImage(session.reference.url) : Promise.resolve(null),
+    ]);
+    setCamera(cam, session.image.name);
+    const expected = session.image;
+    if (S.cam.w !== expected.width || S.cam.h !== expected.height) {
+      toast(`The browser decoded the frame as ${S.cam.w}x${S.cam.h}, but the server reports ` +
+            `${expected.width}x${expected.height}; check the image orientation`, "error", 9000);
+    }
+    if (ref) setReference(ref, session.reference.name);
+    if (session.existing) {
+      importDoc(session.existing);
+      panes.world.fitted = false;
+      panes.world.fit();
+      changed(false);
+      toast(`Loaded ${plural(S.pairs.length, "pair")} and ${plural(S.lines.length, "line")}`);
+    }
+  }
+  function startStandalone() {
+    S.mode = "metric";
+    S.showOverlay = true;
+    changed(false);
+  }
+  async function boot() {
+    bindUi();
+    for (const P of Object.values(panes)) P.resize();
+    let session = null;
+    if (/^https?:$/.test(location.protocol)) {
+      try {
+        const resp = await fetch("api/session", { cache: "no-store" });
+        if (resp.ok) session = await resp.json();
+      } catch (err) {
+        session = null;
+      }
+    }
+    try {
+      if (session && session.app === "tachymetry-picker") await startServerSession(session);
+      else startStandalone();
+    } catch (err) {
+      toast(`Could not start the picker: ${err.message}`, "error", 12000);
+    }
+    S.dirty = false;
+    S.ready = true;
+    changed(false);
+    updateCursors();
+  }
+
+  /* Automation hooks for scripting and tests. */
+  window.tachymetryPicker = Object.freeze({
+    state() {
+      flushFit();
+      const F = S.fit;
+      return JSON.parse(JSON.stringify({
+        ready: S.ready, mode: S.mode, gsd: S.gsd, tool: S.tool, ended: S.ended, server: !!S.server,
+        pairs: S.pairs, lines: S.lines, draft: S.draft, selection: S.sel,
+        fit: F && F.H ? { ok: F.ok, warn: F.warn, msg: F.msg, H: F.H, rms: F.rms, looRms: F.looRms, unit: F.unit,
+                          residuals: Object.fromEntries(F.res), loo: Object.fromEntries(F.loo) } : null,
+      }));
+    },
+    clientPoint(pane, x, y) {
+      const P = panes[pane];
+      const r = P.canvas.getBoundingClientRect();
+      const [sx, sy] = P.toScreen([x, y]);
+      return { x: r.left + sx, y: r.top + sy };
+    },
+    view(pane) { const P = panes[pane]; return { s: P.s, tx: P.tx, ty: P.ty, w: P.w, h: P.h }; },
+    document() { return buildDoc(1, true); },
+    yaml() { const d = buildDoc(1, true); return d ? toYaml(d) : null; },
+  });
+
+  boot();
+})();
+</script>
+</body>
+</html>
