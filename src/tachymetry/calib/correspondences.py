@@ -108,7 +108,7 @@ class Correspondences:
         suffix = path.suffix.lower()
         if suffix == ".csv":
             return cls._from_csv(path)
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
         if suffix in (".yaml", ".yml"):
             import yaml
 
@@ -138,7 +138,7 @@ class Correspondences:
 
     @classmethod
     def _from_csv(cls, path: Path) -> Correspondences:
-        with path.open(newline="") as fh:
+        with path.open(newline="", encoding="utf-8") as fh:
             rows = list(csv.DictReader(fh))
         if not rows:
             raise ValueError(f"{path} has no rows")
@@ -170,9 +170,9 @@ class Correspondences:
         if path.suffix.lower() in (".yaml", ".yml"):
             import yaml
 
-            path.write_text(yaml.safe_dump(self.to_dict(), sort_keys=False))
+            path.write_text(yaml.safe_dump(self.to_dict(), sort_keys=False), encoding="utf-8")
         else:
-            path.write_text(json.dumps(self.to_dict(), indent=2))
+            path.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
         return path
 
     def subset(self, idx: Sequence[int] | np.ndarray) -> Correspondences:

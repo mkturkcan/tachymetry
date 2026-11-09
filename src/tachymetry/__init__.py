@@ -129,5 +129,5 @@ def load_run(out_dir: str | Path):
     cfg = PipelineConfig.load(out_dir / "config.yaml")
     import json
 
-    src = json.loads((out_dir / "summary.json").read_text())["video"]["source"]
+    src = json.loads((out_dir / "summary.json").read_text(encoding="utf-8"))["video"]["source"]
     return Pipeline(cfg, camera=Camera.load(out_dir / "camera.json")).run(src, out_dir)

@@ -71,7 +71,7 @@ def resolve_camera(spec: Any, video: Path | None = None) -> Camera | str | None:
     if not p.exists():
         raise FileNotFoundError(f"camera file not found: {p}")
     if p.suffix.lower() == ".json":
-        data = json.loads(p.read_text())
+        data = json.loads(p.read_text(encoding="utf-8"))
         if "K" in data and "R" in data:
             return Camera.from_dict(data)
     corr = Correspondences.load(p)
@@ -134,7 +134,7 @@ class Pipeline:
         key = _detector_key(cfg)
         if cache is not None and cache.exists():
             meta_p = cache.with_suffix(".json")
-            if meta_p.exists() and json.loads(meta_p.read_text()).get("key") == key:
+            if meta_p.exists() and json.loads(meta_p.read_text(encoding="utf-8")).get("key") == key:
                 return DetectionSet.load(cache)
         from .detect.run import detect_video
 
@@ -143,7 +143,7 @@ class Pipeline:
         if cache is not None and cfg.keep_detections:
             dets.save(cache)
             cache.with_suffix(".json").write_text(
-                json.dumps({"key": key, **dets.meta}, indent=2, default=_json_default)
+                json.dumps({"key": key, **dets.meta}, indent=2, default=_json_default), encoding="utf-8"
             )
         return dets
 
@@ -251,7 +251,9 @@ class Pipeline:
                     "report": report,
                     "timings": timings,
                 }
-                (out / "summary.json").write_text(json.dumps(summary, indent=2, default=_json_default))
+                (out / "summary.json").write_text(
+                    json.dumps(summary, indent=2, default=_json_default), encoding="utf-8"
+                )
             if render:
                 t = time.time()
                 path = Path(render) if isinstance(render, (str, Path)) and not isinstance(render, bool) else None
@@ -260,7 +262,7 @@ class Pipeline:
         timings["total_s"] = round(time.time() - t0, 2)
         result.report["timings"] = timings
         if out is not None and (out / "summary.json").exists():
-            s = json.loads((out / "summary.json").read_text())
+            s = json.loads((out / "summary.json").read_text(encoding="utf-8"))
             s["timings"] = timings
-            (out / "summary.json").write_text(json.dumps(s, indent=2, default=_json_default))
+            (out / "summary.json").write_text(json.dumps(s, indent=2, default=_json_default), encoding="utf-8")
         return result

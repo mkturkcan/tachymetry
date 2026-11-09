@@ -67,11 +67,12 @@ class BatchReport:
         p.write_text(
             json.dumps(
                 {"workers": self.workers, "seconds": round(self.seconds, 2), "jobs": self.jobs}, indent=2, default=str
-            )
+            ),
+            encoding="utf-8",
         )
         import csv
 
-        with (self.out_dir / "batch_summary.csv").open("w", newline="") as fh:
+        with (self.out_dir / "batch_summary.csv").open("w", newline="", encoding="utf-8") as fh:
             w = csv.writer(fh)
             w.writerow(
                 [
@@ -210,7 +211,9 @@ def run_batch(
     for j in jobs:
         if j["status"] == "cached":
             try:
-                j["summary"] = json.loads((Path(j["out_dir"]) / "summary.json").read_text()).get("summary")
+                j["summary"] = json.loads((Path(j["out_dir"]) / "summary.json").read_text(encoding="utf-8")).get(
+                    "summary"
+                )
             except Exception:
                 j["summary"] = None
     if pending:

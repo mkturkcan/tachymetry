@@ -139,5 +139,5 @@ if __name__ == "__main__":
     res = run(tuple(range(a.seeds)), a.duration)
     md = summarise(res)
     print(md)
-    Path(a.out).write_text(json.dumps(res, indent=1))
-    Path(a.out).with_suffix(".md").write_text(md + "\n")
+    Path(a.out).write_text(json.dumps(res, indent=1), encoding="utf-8")
+    Path(a.out).with_suffix(".md").write_text(md + "\n", encoding="utf-8")

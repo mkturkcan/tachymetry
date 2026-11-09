@@ -157,7 +157,7 @@ class TrackSet:
         """One row per track sample (metres, m/s, km/h, degrees)."""
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("w", newline="") as fh:
+        with path.open("w", newline="", encoding="utf-8") as fh:
             w = csv.writer(fh)
             w.writerow(SAMPLE_FIELDS)
             w.writerows(self._rows(include_rejected))
@@ -166,7 +166,7 @@ class TrackSet:
     def summary_csv(self, path: str | Path, include_rejected: bool = True) -> Path:
         """One row per track."""
         path = Path(path)
-        with path.open("w", newline="") as fh:
+        with path.open("w", newline="", encoding="utf-8") as fh:
             w = csv.DictWriter(fh, fieldnames=SUMMARY_FIELDS, extrasaction="ignore")
             w.writeheader()
             for tr in self.tracks if include_rejected else self.ok:
@@ -213,7 +213,7 @@ class TrackSet:
                     "bbox": np.round(tr.bbox, 1).tolist(),
                 }
             )
-        Path(path).write_text(json.dumps(doc, default=_json_default))
+        Path(path).write_text(json.dumps(doc, default=_json_default), encoding="utf-8")
         return Path(path)
 
     def to_geojson(self, path: str | Path) -> Path:
@@ -240,12 +240,12 @@ class TrackSet:
         doc = {"type": "FeatureCollection", "features": feats}
         if origin is None:
             doc["crs_note"] = "local metric frame of the calibrated camera (x east/right, y north/up)"
-        Path(path).write_text(json.dumps(doc, default=_json_default))
+        Path(path).write_text(json.dumps(doc, default=_json_default), encoding="utf-8")
         return Path(path)
 
     def to_mot(self, path: str | Path) -> Path:
         """MOTChallenge text format (image boxes of ``ok`` tracks, 1-based frames)."""
-        with Path(path).open("w") as fh:
+        with Path(path).open("w", encoding="utf-8") as fh:
             for tr in self.ok:
                 for k in range(len(tr)):
                     if not tr.flags[k] & Flags.OBSERVED:

@@ -73,7 +73,7 @@ class CalibrationResult:
         )
         self.camera.save(path)
         report = path.with_name(path.stem + ".report.json")
-        report.write_text(json.dumps(self.to_dict(), indent=2, default=_json_default))
+        report.write_text(json.dumps(self.to_dict(), indent=2, default=_json_default), encoding="utf-8")
         return path
 
     def __repr__(self) -> str:  # pragma: no cover - cosmetic

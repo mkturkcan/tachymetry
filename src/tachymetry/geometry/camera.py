@@ -360,12 +360,12 @@ class Camera:
     def save(self, path: str | Path) -> Path:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(self.to_dict(), indent=2, default=_json_default))
+        path.write_text(json.dumps(self.to_dict(), indent=2, default=_json_default), encoding="utf-8")
         return path
 
     @classmethod
     def load(cls, path: str | Path) -> Camera:
-        return cls.from_dict(json.loads(Path(path).read_text()))
+        return cls.from_dict(json.loads(Path(path).read_text(encoding="utf-8")))
 
     def describe(self) -> str:
         yaw, pitch, roll = self.angles
