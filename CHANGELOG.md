@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Detection: RF-DETR back-ends with Apache-2.0 weights, `rfdetr-seg-{n,s,m,l}` (boxes and instance masks) and `rfdetr-{n,s,m,l}` (boxes); `rfdetr-seg-l` is the new default. RF-DETR runs on a square input of twice its training resolution, at most 1008 pixels, in batches through its export graph with FP16 weights on CUDA.
+- Detection: a SAM 3 back-end (`sam3`) through Hugging Face `transformers`, prompted with one text prompt per road class; a missing access approval for the gated `facebook/sam3` checkpoint raises a `PermissionError` that explains how to request access and log in.
+- Detection: segmenting detectors store one instance mask per detection (`DetectionSet.masks`); masks are sampled from the low-resolution mask maps inside each box only (`detect.masks.mask_crops`).
+- Detection: duplicates whose instance masks overlap (IoU above 0.5) are suppressed within each super-class; for RF-DETR and SAM 3, nested-vehicle suppression requires the enclosing box to score at least as high and, with masks, the nested detection to lie on the enclosing mask.
+- Detection: `DetectorConfig.imgsz` and `DetectorConfig.conf` default to `None`, the back-end's own values (RF-DETR 1008 and 0.15 for `rfdetr-seg-l`, SAM 3 1008 and 0.30, UrbanOmniDetect-2 960 and 0.10). Detectors may return a fifth element per image, the mask crops.
+- UrbanOmniDetect-2 (`uod2-*`) needs the optional `uod2` extra (`pip install "tachymetry[uod2]"`), which installs Ultralytics; `UltralyticsDetector` is now `UOD2Detector`. The `yolo:<weights>` back-end is removed. `transformers` and `rfdetr` are core dependencies.
+- `tachymetry download --detector <name>` fetches RF-DETR, SAM 3 and UrbanOmniDetect-2 weights; the default is `rfdetr-seg-l`.
+
 ## 0.1.0 (2026-11-09)
 
 First public release.

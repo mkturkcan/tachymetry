@@ -64,13 +64,13 @@ tachymetry run clip.mp4 --camera camera.json
 Any configuration key can be overridden on the command line or as a keyword argument, with `__` in place of the dot:
 
 ```bash
-tachymetry run clip.mp4 --detector uod2-l --rate 10 --set detector.imgsz=1280 --set hygiene.max_gsd_m=0.25
+tachymetry run clip.mp4 --detector rfdetr-seg-m --rate 10 --set detector.imgsz=1008 --set hygiene.max_gsd_m=0.25
 tachymetry config --dump defaults.yaml       # every key with its default
 tachymetry run clip.mp4 --config my.yaml     # partial files override the defaults
 ```
 
 ```python
-run = tm.track("clip.mp4", detector__name="uod2-l", hygiene__max_gsd_m=0.25)
+run = tm.track("clip.mp4", detector__name="rfdetr-seg-m", hygiene__max_gsd_m=0.25)
 ```
 
 The keys are listed in the [configuration reference](guide/configuration.md).

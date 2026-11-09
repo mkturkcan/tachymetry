@@ -76,7 +76,7 @@
 
 | Stage | Implementation | Result | Cache file |
 |---|---|---|---|
-| Detection | `detect.backends.build_detector`, `detect.run.detect_video` | `DetectionSet`: boxes, scores, classes, cuboid corners | `detections.npz`, `detections.json` |
+| Detection | `detect.backends.build_detector`, `detect.run.detect_video` | `DetectionSet`: boxes, scores, classes, instance masks or cuboid corners | `detections.npz`, `detections.json` |
 | Background | `calib.lines.background_image` (temporal median of `calibration.background_frames = 41` frames spread evenly over the video) | traffic-free image | `background.jpg` |
 | Calibration | `pipeline.resolve_camera`, `calib.auto.calibrate_auto` | `Camera` (intrinsics, pose, lens) | `camera.json`, `camera.report.json`, `calibration_preview.jpg` |
 | Ground measurement | `tracking.measure.measure_ground` | contact point, footprint, ground sampling distance per detection | none |

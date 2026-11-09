@@ -11,7 +11,7 @@ Tachymetry converts video from a fixed traffic camera into road-user trajectorie
 
 | Stage | What it does | Page |
 |---|---|---|
-| Detection | UrbanOmniDetect-2 (YOLO26 detection with the eight projected corners of a 3D cuboid per road user) or any Ultralytics checkpoint, at a configurable analysis rate (15 Hz by default) | [Detection](guide/detection.md) |
+| Detection | RF-DETR-Seg (boxes and instance masks; default), SAM 3 (text-prompted boxes and masks) or UrbanOmniDetect-2 (boxes and the eight projected corners of a 3D cuboid per road user), at a configurable analysis rate (15 Hz by default) | [Detection](guide/detection.md) |
 | Calibration | Fused maximum-likelihood estimate from vehicle footprints and vanishing points, road markings, learned cuboids, optional depth and segmentation or GeoCalib, or manual correspondences; lens distortion included | [Calibration](guide/calibration.md) |
 | Association | Two-stage BYTE association with a continuous-time Kalman filter, DIoU cost, shape and super-class gates and a metric speed gate | [Tracking](guide/tracking.md) |
 | Track hygiene | Footprint centres, splits at gaps and identity switches, end trimming, Hampel repair, gap-aware zero-phase smoothing, hold-still and parked freezing, validity referees | [Tracking](guide/tracking.md) |

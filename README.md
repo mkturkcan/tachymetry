@@ -17,7 +17,7 @@
 <p align="center">
   <a href="https://mkturkcan.github.io/tachymetry/"><img src="https://img.shields.io/badge/Project-Page-ffb547?style=flat-square" alt="Project page"></a>
   <a href="https://mkturkcan.github.io/tachymetry/docs/"><img src="https://img.shields.io/badge/Docs-Read-6fe3ff?style=flat-square" alt="Documentation"></a>
-  <a href="https://huggingface.co/mehmetkeremturkcan/UrbanOmniDetect-2"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Detector-UrbanOmniDetect--2-blue?style=flat-square" alt="UrbanOmniDetect-2"></a>
+  <a href="https://github.com/roboflow/rf-detr"><img src="https://img.shields.io/badge/Detector-RF--DETR-blue?style=flat-square" alt="RF-DETR"></a>
   <a href="https://github.com/mkturkcan/tachymetry/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/mkturkcan/tachymetry/ci.yml?branch=main&style=flat-square&label=tests" alt="Tests"></a>
   <img src="https://img.shields.io/badge/Python-3.10%E2%80%933.13-3776ab?style=flat-square" alt="Python 3.10 to 3.13">
   <img src="https://img.shields.io/badge/OS-Linux%20%7C%20Windows%20%7C%20macOS-555?style=flat-square" alt="Linux, Windows, macOS">
@@ -64,6 +64,8 @@ tachymetry devices                       # show GPUs and the worker plan
 report = tm.track_many(["site_a/", "site_b/*.mp4"], out="runs", devices="cuda:0,cuda:1")
 ```
 
+**Detection.** RF-DETR-Seg L is the default detector (boxes and instance masks, Apache-2.0 weights). SAM 3 (`--detector sam3`, text prompts per road class; the `facebook/sam3` checkpoint is gated on Hugging Face) and UrbanOmniDetect-2 (`--detector uod2-x`, 3D cuboid corners; `pip install "tachymetry[uod2]"`) are the alternatives.
+
 **Calibration.** Automatic calibration combines learned vehicle cuboids, road-marking and vertical vanishing points, and vehicle-size statistics; it is the default (`camera="auto"`). Manual calibration uses clicked correspondences against an orthophoto, a site plan or GPS coordinates.
 
 ```bash
@@ -84,11 +86,11 @@ run = tm.track("clip.mp4", camera="camera.json")
 **Configuration.** Thresholds are specified in seconds and metres, so a configuration does not depend on frame rate or resolution. Settings can be overridden from the command line or from Python:
 
 ```bash
-tachymetry run clip.mp4 --detector uod2-l --rate 10 --set detector.imgsz=1280 --set render.units=mph
+tachymetry run clip.mp4 --detector rfdetr-seg-m --rate 10 --set detector.imgsz=1008 --set render.units=mph
 ```
 
 ```python
-run = tm.track("clip.mp4", detector__name="yolo:yolo11x.pt", hygiene__max_gsd_m=0.25)
+run = tm.track("clip.mp4", detector__name="sam3", hygiene__max_gsd_m=0.25)
 ```
 
 ## Track filtering

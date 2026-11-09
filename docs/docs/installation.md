@@ -6,7 +6,7 @@ Tachymetry requires Python 3.10 to 3.13 and installs from GitHub:
 pip install git+https://github.com/mkturkcan/tachymetry
 ```
 
-The runtime dependencies (`pyproject.toml`) are NumPy, SciPy, OpenCV, Pillow, PyYAML, Rich, `huggingface_hub`, `imageio-ffmpeg` (a bundled FFmpeg for H.264 output), pandas, PyTorch 2.1 or newer and Ultralytics 8.4.61 or newer. Detector weights and the sample clips are downloaded into the Hugging Face cache on first use.
+The runtime dependencies (`pyproject.toml`) are NumPy, SciPy, OpenCV, Pillow, PyYAML, Rich, `huggingface_hub`, `imageio-ffmpeg` (a bundled FFmpeg for H.264 output), pandas, PyTorch 2.2 or newer, `rfdetr` 1.12 or newer (the default detector) and `transformers` 5.1 or newer (SAM 3). RF-DETR weights are downloaded to `~/.roboflow/models` (or `$RF_HOME`), other detector weights and the sample clips into the Hugging Face cache, on first use. UrbanOmniDetect-2 needs the optional `uod2` extra (below).
 
 Check the installation and the compute devices:
 
@@ -55,17 +55,18 @@ pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install git+https://github.com/mkturkcan/tachymetry
 ```
 
-Detection dominates the run time on a CPU. A smaller detector (`--detector uod2-s`), a lower analysis rate (`--rate 5`) and a smaller input size (`--imgsz 640`) reduce it; see the [configuration reference](guide/configuration.md).
+Detection dominates the run time on a CPU. A smaller detector (`--detector rfdetr-seg-s`), a lower analysis rate (`--rate 5`) and a smaller input size (`--imgsz 504`) reduce it; see the [configuration reference](guide/configuration.md).
 
 ## Optional extras
 
 | Extra | Installs | Enables |
 |---|---|---|
-| `depth` | `transformers>=4.48`, `accelerate>=0.26` | Calibration from monocular metric depth and road segmentation (`tachymetry calibrate depth`, `method="depth"`) with Depth Pro, Depth Anything V2 and SegFormer |
+| `uod2` | `ultralytics>=8.4.61` | The UrbanOmniDetect-2 detector (`--detector uod2-x`), which also predicts 3D cuboid corners |
+| `depth` | `accelerate>=0.26` | Calibration from monocular metric depth and road segmentation (`tachymetry calibrate depth`, `method="depth"`) with Depth Pro, Depth Anything V2 and SegFormer |
 | `parquet` | `pyarrow>=12` | Parquet export (`--formats parquet`) |
 | `docs` | `mkdocs-material`, `mkdocstrings[python]` | Building this documentation |
 | `dev` | `pytest`, `ruff`, `pyarrow`, `pandas` | Tests and linting |
-| `all` | `depth` and `parquet` | Both optional run-time features |
+| `all` | `depth` and `parquet` | Both optional run-time features (`uod2` is installed only on request) |
 
 ```bash
 pip install "tachymetry[depth] @ git+https://github.com/mkturkcan/tachymetry"
@@ -86,7 +87,8 @@ mkdocs serve
 Detector weights can be fetched ahead of time, for example on a machine that will later run without network access:
 
 ```bash
-tachymetry download --detector uod2-x
+tachymetry download                          # the default detector, rfdetr-seg-l
+tachymetry download --detector sam3          # needs approved access to facebook/sam3 and `hf auth login`
 ```
 
-The command prints the path of the checkpoint in the Hugging Face cache.
+The command prints the location of the checkpoint.

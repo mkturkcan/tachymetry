@@ -11,7 +11,7 @@ If you use Tachymetry in your research, please cite it:
 }
 ```
 
-Results obtained with the default detector should also credit [UrbanOmniDetect-2](https://huggingface.co/mehmetkeremturkcan/UrbanOmniDetect-2); see its model card for the reference.
+Results should also credit the detector that produced them: [RF-DETR](https://github.com/roboflow/rf-detr) for the default `rfdetr-seg-*` and `rfdetr-*` detectors, [SAM 3](https://github.com/facebookresearch/sam3) for `sam3`, or [UrbanOmniDetect-2](https://huggingface.co/mehmetkeremturkcan/UrbanOmniDetect-2) for `uod2-*`; their repositories and model cards give the references.
 
 ## Sample footage
 

@@ -1,13 +1,10 @@
 # Custom detectors
 
-The pipeline accepts any object detector that maps frames to boxes in the road-user taxonomy. There are two routes:
-
-* **Ultralytics checkpoints** need no code: `--detector yolo:yolo11x.pt` on the command line, `detector__name="yolo:yolo11x.pt"` in Python, or a local `.pt`/`.engine`/`.onnx` path ([Detection](../guide/detection.md#detectors)).
-* **Other frameworks** are wrapped in a subclass of `tachymetry.detect.Detector` and passed to `Pipeline(detector=...)`.
+The pipeline accepts object detectors that map frames to boxes in the road-user taxonomy. The built-in back-ends (RF-DETR, SAM 3, UrbanOmniDetect-2) are selected by name ([Detection](../guide/detection.md#detectors)); other models are wrapped in a subclass of `tachymetry.detect.Detector` and passed to `Pipeline(detector=...)`.
 
 ## The detector contract
 
-A `Detector` is called with a list of BGR `uint8` images (`H × W × 3`, as decoded by OpenCV) and returns one tuple per image:
+A `Detector` is called with a list of BGR `uint8` images (`H × W × 3`, as decoded by OpenCV) and returns one tuple per image, with four elements, or five when it segments:
 
 | Element | Shape and type | Meaning |
 |---|---|---|
@@ -15,10 +12,11 @@ A `Detector` is called with a list of BGR `uint8` images (`H × W × 3`, as deco
 | `score` | `(N,)` `float32` | confidence in `[0, 1]` |
 | `cls` | `(N,)` `int16` | index into `class_names` |
 | `cuboid` | `(N, 8, 3)` `float32` or `None` | projected cuboid corners `x, y, confidence`: corners 0 to 3 on the ground with 0 and 3 forming the front face and 0-1 a long side, corners 4 to 7 above them; NaN for untrusted cuboids |
+| `masks` (optional) | list of `N` entries, or `None` | one instance mask per detection as `(x0, y0, mask)` with a boolean `mask` cropped to the box (`tachymetry.detections.crop_mask` crops a full-frame mask), or `None` for a detection without one |
 
-Set the class attributes `class_names` (use `tachymetry.config.ROAD_CLASSES` so that class priors, super-classes, colours and calibration apply), `provides_cuboids` and `name`. Boxes with scores down to `TrackerConfig.low_conf = 0.10` are useful: they extend existing tracks in the second association stage but never start one ([Association](../guide/tracking.md#online-association)).
+Set the class attributes `class_names` (use `tachymetry.config.ROAD_CLASSES` so that class priors, super-classes, colours and calibration apply), `provides_cuboids`, `provides_masks` and `name`. Boxes with scores down to `TrackerConfig.low_conf = 0.10` are useful: they extend existing tracks in the second association stage but never start one ([Association](../guide/tracking.md#online-association)).
 
-The built-in post-processing of `UltralyticsDetector` (class floors, near-duplicate suppression, cuboid trust, nested-vehicle suppression) is not applied to custom detectors. The helpers are public in `tachymetry.detect.postprocess` (`nms_by_group`, `cuboid_trust`, `suppress_nested`) and can be called inside `__call__`.
+The built-in post-processing of the back-ends (class floors, near-duplicate and mask-duplicate suppression, cuboid trust, nested-vehicle suppression) is not applied to custom detectors. The helpers are public in `tachymetry.detect.postprocess` (`prefilter` and `refine`, which run these steps with a `DetectorConfig`, or `nms_by_group`, `suppress_mask_duplicates`, `cuboid_trust` and `suppress_nested` individually) and can be called inside `__call__`.
 
 ## Example: torchvision Faster R-CNN
 
@@ -79,7 +77,7 @@ print(run.report["timings"])
 
 Three details of this example matter in general:
 
-* **Camera.** A box-only detector provides no cuboid footprints, so automatic calibration would lose its cuboid, fused and vehicle-size evidence ([Box-only detectors](../guide/detection.md#box-only-detectors)). The example reuses the camera that the cuboid detector calibrated in the [end-to-end example](intersection.md); `calibrate_s` is then only the background estimation. Alternatively give a metric cue, e.g. `cfg.calibration.scale = "height=28.4"`, or calibrate manually.
+* **Camera.** A box-only detector provides no cuboid footprints, so automatic calibration would lose its cuboid, fused and vehicle-size evidence ([Detectors without cuboids](../guide/detection.md#detectors-without-cuboids)). The example reuses the camera that the cuboid detector calibrated in the [end-to-end example](intersection.md); `calibrate_s` is then only the background estimation. Alternatively give a metric cue, e.g. `cfg.calibration.scale = "height=28.4"`, or calibrate manually.
 * **Cache key.** The detection cache key is computed from `cfg.detector` and `rate_hz`, not from the detector object. A distinct `detector.name`, or a fresh output directory, prevents the pipeline from reusing detections of another detector cached in the same directory.
 * **Duplicates.** torchvision applies non-maximum suppression per label, so one vehicle often yields overlapping `car` and `truck` boxes. The tracker gates by super-class, so both boxes enter one association problem, and the duplicate verdict removed 21 tracks in this run ([Verdicts](../guide/verdicts.md#duplicates)). Cross-label suppression inside the detector (for example `nms_by_group`) removes them earlier.
 
