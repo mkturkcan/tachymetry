@@ -103,3 +103,23 @@ def test_tan_lens_is_recovered_from_straight_lines():
     assert res.camera.lens.kind == "equidistant"
     assert abs(res.camera.lens.s - 700) / 700 < 0.05
     assert abs(res.camera.pitch - cam.pitch) < 1.0
+
+
+def test_dash_regularity_checks_the_horizon():
+    """Dash chains are recognised by their cross-ratio, and are regular only under a correct horizon."""
+    from tachymetry.calib.from_markings import DashedLine, _regular_runs, marking_regularity
+
+    cam = Camera.from_pose((1280, 720), focal=1100.0, height=9.0, pitch=12.0, yaw=90.0)
+    # cross-ratio filter: perspective images of equally spaced points pass, a missing dash breaks the run
+    t = cam.ground_to_image(np.column_stack([np.zeros(8), 20.0 + 9.0 * np.arange(8)]))[:, 1]
+    assert _regular_runs(t, 0.08) == [(0, 8)]
+    assert all(e - s < 8 for s, e in _regular_runs(np.delete(t, 4), 0.08))
+    lines = []
+    for x in (-1.75, 1.75, 5.25):  # three lane lines, 3 m dashes every 9 m
+        y0 = 22.0 + 9.0 * np.arange(8)
+        a = cam.ground_to_image(np.column_stack([np.full(8, x), y0]))
+        b = cam.ground_to_image(np.column_stack([np.full(8, x), y0 + 3.0]))
+        lines.append(DashedLine(a, b, np.linalg.norm(b - a, axis=1)))
+    assert marking_regularity(cam, lines) < 1e-6
+    wrong = Camera.from_pose((1280, 720), focal=1100.0, height=9.0, pitch=15.0, yaw=90.0)
+    assert marking_regularity(wrong, lines) > 0.05

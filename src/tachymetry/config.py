@@ -170,6 +170,7 @@ class CalibrationConfig:
     car_length_m: float = 4.6
     car_width_m: float = 1.85
     vp_sigma_deg: float = 0.5  #: angular uncertainty of vanishing points in the fused estimate
+    hfov_deg: float | None = None  #: known horizontal field of view of the lens (degrees), when available
 
 
 @dataclass

@@ -177,12 +177,27 @@ def consistency(
 
 
 def _metric_scale(
-    cam: Camera, quads: np.ndarray, wts: np.ndarray, cfg: CalibrationConfig, cue: ScaleCue | None
+    cam: Camera,
+    quads: np.ndarray,
+    wts: np.ndarray,
+    cfg: CalibrationConfig,
+    cue: ScaleCue | None,
+    dets: DetectionSet | None = None,
 ) -> tuple[Camera, dict[str, Any]]:
     if cue is not None and not cue.vehicles:
         return apply_scale_cue(cam, cue)
+    if dets is not None and dets.masks is not None:
+        from .from_silhouettes import silhouette_scale
+
+        s, info = silhouette_scale(cam, dets, car_width_m=cfg.car_width_m)
+        out = cam.scaled(s)
+        out.meta["metric"] = True
+        return out, info
     if len(quads) < 10:
-        raise CalibrationError("vehicle-size scale needs cuboid footprints; pass scale='height=<m>' instead")
+        raise CalibrationError(
+            "a vehicle-size scale needs instance masks (rfdetr-seg-*, sam3) or cuboid footprints (uod2-*); "
+            "pass scale='height=<m>' or scale='lane_width=<m>' instead"
+        )
     s, info = footprint_scale(cam, quads, wts, cfg.car_length_m, cfg.car_width_m)
     out = cam.scaled(s)
     out.meta["metric"] = True
@@ -286,6 +301,14 @@ def calibrate_auto(
         except CalibrationError as exc:
             errors["cuboids"] = str(exc)
 
+    if cfg.hfov_deg and horiz:
+        # known lens: the best-supported ground vanishing direction fixes pitch and yaw, roll comes from a second
+        # horizontal vanishing point or the vertical one when present, else 0
+        try:
+            candidates.append(_from_fov_and_vp(size, cfg.hfov_deg, horiz, vertical, lens_obj))
+        except CalibrationError as exc:
+            errors["fov+vp"] = str(exc)
+
     if "depth" in cfg.methods:
         try:
             from .depth import calibrate_from_depth
@@ -326,23 +349,42 @@ def calibrate_auto(
     if not candidates:
         raise CalibrationError("automatic calibration failed: " + "; ".join(f"{k}: {v}" for k, v in errors.items()))
 
+    from .from_markings import dashed_lines, marking_regularity
+
+    try:
+        dashes = dashed_lines(background, lens=lens_obj)
+    except Exception:  # pragma: no cover - the check is optional
+        dashes = []
     ranked = []
     for c in candidates:
         cam = c.camera
         cons = consistency(cam, quads, wts, horiz, vertical)  # raw quads: the camera carries the lens
+        if len(dashes) >= 2:
+            # scale-free check: dash lengths and periods must not change along the road
+            reg = marking_regularity(Camera(cam.image_size, cam.K, cam.R, cam.t), dashes)
+            cons["dash_regularity"] = reg
+            cons["score"] *= float(np.exp(-reg / 0.1)) if np.isfinite(reg) else 0.5
         c.score = cons["score"]
         c.details["consistency"] = cons
         ranked.append(c)
     ranked.sort(key=lambda c: -(c.score or 0))
     best = ranked[0]
     try:
-        cam, sinfo = _metric_scale(best.camera, quads, wts, cfg, cue)
+        cam, sinfo = _metric_scale(best.camera, quads, wts, cfg, cue, detections)
     except CalibrationError as exc:
         cam, sinfo = best.camera, {"scale": "relative"}
         cam.meta["metric"] = False
         warnings.warn(f"{exc}; the camera has relative scale (height 1)", stacklevel=2)
     cam = _align_world(cam, quads, wts, horiz)
     cam.meta.update({"calibration_method": f"auto:{best.method}"})
+    reg = best.details.get("consistency", {}).get("dash_regularity")
+    if reg is not None and reg > 0.12:
+        warnings.warn(
+            f"dashed lane markings change length along the road under this camera (spread {reg:.2f} in log units): "
+            "its pitch or focal length is likely wrong; give the lens field of view (calibration.hfov_deg), "
+            "install GeoCalib, or calibrate manually",
+            stacklevel=2,
+        )
     details = {
         "selected": best.method,
         "scale": sinfo,
@@ -363,3 +405,37 @@ def calibrate_auto(
     out = CalibrationResult(cam, f"auto:{best.method}", score=best.score, details=details)
     out.details["candidate_cameras"] = {c.method: c.camera for c in ranked}
     return out
+
+
+def _from_fov_and_vp(
+    size: tuple[int, int],
+    hfov_deg: float,
+    horiz: Sequence[VanishingPoint],
+    vertical: VanishingPoint | None,
+    lens: Lens,
+) -> CalibrationResult:
+    """Scale-free camera from a known field of view and the main ground vanishing point."""
+    w, h = size
+    f = (w / 2) / math.tan(math.radians(hfov_deg / 2))
+    cx, cy = (w - 1) / 2.0, (h - 1) / 2.0
+    vps = sorted((v for v in horiz if v.finite), key=lambda v: -v.support)
+    if not vps:
+        raise CalibrationError("no finite ground vanishing point")
+    roll = 0.0
+    if len(vps) >= 2:
+        a, b = vps[0].xy, vps[1].xy
+        roll = math.degrees(math.atan2(b[1] - a[1], b[0] - a[0]))
+        roll = (roll + 90.0) % 180.0 - 90.0
+    elif vertical is not None and vertical.finite:
+        v = vertical.xy
+        roll = -math.degrees(math.atan2(v[0] - cx, v[1] - cy))
+    # rotate the main vanishing point by -roll about the principal point; its height then gives the pitch
+    p = vps[0].xy - np.array([cx, cy])
+    cr, sr = math.cos(math.radians(-roll)), math.sin(math.radians(-roll))
+    q = np.array([cr * p[0] - sr * p[1], sr * p[0] + cr * p[1]])
+    pitch = math.degrees(math.atan2(-q[1], f))
+    if not 0.5 < pitch < 89.5:
+        raise CalibrationError(f"the vanishing point implies a pitch of {pitch:.1f} deg")
+    cam = Camera.from_pose(size, focal=f, height=1.0, pitch=pitch, yaw=90.0, roll=roll, lens=lens)
+    cam.meta.update({"calibration_method": "fov+vp", "metric": False})
+    return CalibrationResult(cam, "fov+vp", details={"hfov_deg": hfov_deg, "roll_deg": roll})
