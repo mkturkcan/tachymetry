@@ -175,6 +175,7 @@ class RenderConfig:
     units: str = "km/h"  #: ``km/h``, ``mph`` or ``m/s``
     show_parked: bool = True  #: parked vehicles in a muted style, without speed
     show_ids: bool = False
+    show_detections: bool = True  #: thin outlines (no speed) for detections without a metric track, e.g. far traffic
     trail_s: float = 3.0
     max_width: int = 1920
     fps: float | None = None  #: output frame rate (source rate by default)

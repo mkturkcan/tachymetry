@@ -60,6 +60,18 @@ class Renderer:
         w, h = self.camera.image_size
         self.src_size = (w, h)
         self.index = StateIndex(list(result.tracks.tracks), trail_s=self.cfg.trail_s)
+        # Detections outside the metric range, or on tracks whose kinematics failed validation, are drawn as
+        # thin outlines without speed. Rows of ghost, duplicate, shadow, passenger and rider tracks stay hidden.
+        dets = result.detections
+        used = np.zeros(len(dets), bool)
+        for tr in result.tracks.tracks:
+            if tr.verdict != "invalid":
+                used[tr.rows[(tr.rows >= 0) & (tr.rows < len(dets))]] = True
+        keep = (~used) & (dets.score >= 0.4)
+        self._det_frames = np.array(sorted(set(dets.frame[keep].tolist())), dtype=np.int64)
+        self._det_rows = {int(f): np.flatnonzero(keep & (dets.frame == f)) for f in self._det_frames}
+        self._fps = float(dets.fps or 30.0)
+        self._stride = int(dets.meta.get("stride", 1)) if isinstance(dets.meta, dict) else 1
         self.title = self.cfg.title or Path(result.source).stem
         self.draw = self.cfg.draw
         if self.draw == "auto":
@@ -203,6 +215,30 @@ class Renderer:
         return strip
 
     # ----------------------------------------------------------------- frames
+    def _draw_outlines(self, img: np.ndarray, t: float) -> None:
+        """Thin, dimmed boxes for detections that have no metric track at this instant."""
+        import cv2
+
+        if not len(self._det_frames):
+            return
+        f = int(round(t * self._fps))
+        k = int(np.searchsorted(self._det_frames, f))
+        best = None
+        for j in (k - 1, k):
+            if 0 <= j < len(self._det_frames) and abs(self._det_frames[j] - f) <= max(self._stride, 1):
+                if best is None or abs(self._det_frames[j] - f) < abs(best - f):
+                    best = int(self._det_frames[j])
+        if best is None:
+            return
+        dets = self.result.detections
+        over = img.copy()
+        lw = max(1, int(round(img.shape[0] / 1080)))
+        for r in self._det_rows[best]:
+            x1, y1, x2, y2 = (int(round(v)) for v in dets.xyxy[r])
+            col = CLASS_COLORS.get(dets.class_names[int(dets.cls[r])], (200, 200, 200))
+            cv2.rectangle(over, (x1, y1), (x2, y2), col, lw, cv2.LINE_AA)
+        cv2.addWeighted(over, 0.55, img, 0.45, 0, dst=img)
+
     def frame(self, image: np.ndarray, t: float) -> np.ndarray:
         import cv2
 
@@ -210,8 +246,11 @@ class Renderer:
         cfg = self.cfg
         parts = []
         if self.layout != "bev":
+            base = image.copy()
+            if cfg.show_detections:
+                self._draw_outlines(base, t)
             cam_img = draw_camera_overlay(
-                image.copy(), self.camera, states, self.draw, cfg.units, cfg.show_parked, cfg.show_ids
+                base, self.camera, states, self.draw, cfg.units, cfg.show_parked, cfg.show_ids
             )
             cam_img = cv2.resize(cam_img, self.cam_disp, interpolation=cv2.INTER_AREA)
             parts.append(cam_img)
