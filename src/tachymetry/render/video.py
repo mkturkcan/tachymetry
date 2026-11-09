@@ -216,7 +216,7 @@ class Renderer:
 
     # ----------------------------------------------------------------- frames
     def _draw_outlines(self, img: np.ndarray, t: float) -> None:
-        """Thin, dimmed boxes for detections that have no metric track at this instant."""
+        """Corner brackets, without speed, for detections that have no metric track at this instant."""
         import cv2
 
         if not len(self._det_frames):
@@ -232,12 +232,17 @@ class Renderer:
             return
         dets = self.result.detections
         over = img.copy()
-        lw = max(1, int(round(img.shape[0] / 1080)))
+        # two pixels at 720p and 1080p, so that the brackets survive video compression
+        lw = max(2, int(round(img.shape[0] / 540)))
         for r in self._det_rows[best]:
             x1, y1, x2, y2 = (int(round(v)) for v in dets.xyxy[r])
-            col = CLASS_COLORS.get(dets.class_names[int(dets.cls[r])], (200, 200, 200))
-            cv2.rectangle(over, (x1, y1), (x2, y2), col, lw, cv2.LINE_AA)
-        cv2.addWeighted(over, 0.55, img, 0.45, 0, dst=img)
+            base = np.asarray(CLASS_COLORS.get(dets.class_names[int(dets.cls[r])], (200, 200, 200)), np.float64)
+            col = tuple(int(c) for c in 0.55 * base + 0.45 * 255)  # lightened, for contrast on asphalt
+            dx, dy = max(3, (x2 - x1) // 4), max(3, (y2 - y1) // 4)
+            for cx, cy, sx, sy in ((x1, y1, 1, 1), (x2, y1, -1, 1), (x1, y2, 1, -1), (x2, y2, -1, -1)):
+                cv2.line(over, (cx, cy), (cx + sx * dx, cy), col, lw, cv2.LINE_AA)
+                cv2.line(over, (cx, cy), (cx, cy + sy * dy), col, lw, cv2.LINE_AA)
+        cv2.addWeighted(over, 0.8, img, 0.2, 0, dst=img)
 
     def frame(self, image: np.ndarray, t: float) -> np.ndarray:
         import cv2
