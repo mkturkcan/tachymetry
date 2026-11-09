@@ -3,21 +3,21 @@
   "hero_time_s": 27.466666666666665,
   "viewer_time_s": 13.466666666666667,
   "summary": {
-   "tracks": 45,
+   "tracks": 44,
    "by_class": {
     "person": 9,
     "bus": 2,
-    "car": 32,
+    "car": 31,
     "bicycle": 2
    },
    "moving_by_class": {
     "person": 8,
     "bus": 2,
-    "car": 20,
+    "car": 18,
     "bicycle": 2
    },
    "parked_by_class": {
-    "car": 12
+    "car": 13
    },
    "rejected": {
     "rider": 2,
@@ -25,8 +25,8 @@
     "duplicate": 2
    },
    "vehicle_speed_kmh": {
-    "median": 24.79,
-    "p85": 35.66,
+    "median": 25.01,
+    "p85": 35.98,
     "max": 55.4
    }
   },
@@ -36,7 +36,7 @@
   "frame": 404,
   "raw_boxes_in_frame": 54,
   "raw_associations": 80,
-  "tachymetry_tracks": 45
+  "tachymetry_tracks": 44
  },
  "calibration_clip": {
   "fused": {
@@ -512,16 +512,16 @@
     1920,
     1080
    ],
-   "tracks": 45,
+   "tracks": 44,
    "by_class": {
     "person": 9,
     "bus": 2,
-    "car": 32,
+    "car": 31,
     "bicycle": 2
    },
    "vehicle_speed_kmh": {
-    "median": 24.79,
-    "p85": 35.66,
+    "median": 25.01,
+    "p85": 35.98,
     "max": 55.4
    },
    "attribution": "svbrd-llm-roadside-video-av by Ryan-xiangyu-ut (Hugging Face), CC BY 4.0, https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av"
@@ -540,7 +540,7 @@
     "bus": 3
    },
    "vehicle_speed_kmh": {
-    "median": 32.58,
+    "median": 32.62,
     "p85": 45.21,
     "max": 60.26
    },
@@ -554,17 +554,17 @@
     1920,
     1080
    ],
-   "tracks": 92,
+   "tracks": 91,
    "by_class": {
-    "car": 61,
+    "car": 60,
     "person": 25,
     "bus": 1,
     "bicycle": 4,
     "truck": 1
    },
    "vehicle_speed_kmh": {
-    "median": 25.83,
-    "p85": 43.47,
+    "median": 25.9,
+    "p85": 43.51,
     "max": 76.1
    },
    "attribution": "svbrd-llm-roadside-video-av by Ryan-xiangyu-ut (Hugging Face), CC BY 4.0, https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av"
@@ -584,8 +584,8 @@
     "person": 1
    },
    "vehicle_speed_kmh": {
-    "median": 21.14,
-    "p85": 28.49,
+    "median": 21.16,
+    "p85": 28.42,
     "max": 44.76
    },
    "attribution": "svbrd-llm-roadside-video-av by Ryan-xiangyu-ut (Hugging Face), CC BY 4.0, https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av"
@@ -598,13 +598,13 @@
     1920,
     1080
    ],
-   "tracks": 8,
+   "tracks": 7,
    "by_class": {
-    "car": 8
+    "car": 7
    },
    "vehicle_speed_kmh": {
-    "median": 47.63,
-    "p85": 62.13,
+    "median": 47.8,
+    "p85": 62.14,
     "max": 67.4
    },
    "attribution": "svbrd-llm-roadside-video-av by Ryan-xiangyu-ut (Hugging Face), CC BY 4.0, https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av"
@@ -622,8 +622,8 @@
     "car": 18
    },
    "vehicle_speed_kmh": {
-    "median": 36.81,
-    "p85": 51.71,
+    "median": 36.73,
+    "p85": 51.74,
     "max": 82.15
    },
    "attribution": "Roundabout 14 61 by Wikideas1 (Wikimedia Commons), CC0 1.0, https://commons.wikimedia.org/wiki/File:Roundabout_14_61.webm"
@@ -666,7 +666,7 @@
    },
    "vehicle_speed_kmh": {
     "median": 11.76,
-    "p85": 15.91,
+    "p85": 15.92,
     "max": 33.2
    },
    "attribution": "DRINF: Dhaka Road Intersection Nadir Footage by Hamim Mahmud (Hugging Face, doi:10.57967/hf/10301); 30 s excerpt from 2:20, CC BY 4.0, https://huggingface.co/datasets/hamimmahmud0/DRINF"
