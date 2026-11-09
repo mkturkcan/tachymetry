@@ -144,6 +144,7 @@ class Pipeline:
         progress: ProgressFn | None = None,
         max_frames: int | None = None,
         use_cache: bool = True,
+        write: bool = True,
     ) -> DetectionSet:
         cfg = self.config
         if cfg.detector.name.startswith("precomputed:"):
@@ -158,14 +159,16 @@ class Pipeline:
 
         cb = (lambda done, total: progress("detect", done, total)) if progress else None
         dets = detect_video(src, self.detector, cfg.rate_hz, cfg.detector.batch, cb, max_frames=max_frames)
-        if cache is not None and cfg.keep_detections:
+        if write and cache is not None and cfg.keep_detections:
             dets.save(cache)
             cache.with_suffix(".json").write_text(
                 json.dumps({"key": key, **dets.meta}, indent=2, default=_json_default), encoding="utf-8"
             )
         return dets
 
-    def background(self, src: VideoSource, out_dir: Path | None = None, use_cache: bool = True) -> np.ndarray:
+    def background(
+        self, src: VideoSource, out_dir: Path | None = None, use_cache: bool = True, write: bool = True
+    ) -> np.ndarray:
         import cv2
 
         from .calib.lines import background_image
@@ -176,17 +179,23 @@ class Pipeline:
             if img is not None and (img.shape[1], img.shape[0]) == src.size:
                 return img
         bg = background_image(src.sample_frames(self.config.calibration.background_frames))
-        if cache is not None:
+        if write and cache is not None:
             cv2.imwrite(str(cache), bg, [cv2.IMWRITE_JPEG_QUALITY, 95])
         return bg
 
     def calibrate(
-        self, src: VideoSource, dets: DetectionSet, bg: np.ndarray, out_dir: Path | None, use_cache: bool = True
+        self,
+        src: VideoSource,
+        dets: DetectionSet,
+        bg: np.ndarray,
+        out_dir: Path | None,
+        use_cache: bool = True,
+        write: bool = True,
     ) -> Camera:
         spec = resolve_camera(self.camera_spec, src.path)
         if isinstance(spec, Camera):
             cam = spec if spec.image_size == src.size else spec.resized(src.size)
-            if out_dir is not None:
+            if write and out_dir is not None:
                 cam.save(out_dir / "camera.json")
             return cam
         if use_cache and out_dir is not None and (out_dir / "camera.json").exists():
@@ -211,7 +220,7 @@ class Pipeline:
             )
             warnings.warn(note, stacklevel=2)
             res.camera.meta.setdefault("warnings", []).append(note)
-        if out_dir is not None:
+        if write and out_dir is not None:
             import cv2
 
             from .calib.preview import preview
@@ -234,27 +243,29 @@ class Pipeline:
         progress: ProgressFn | None = None,
         max_frames: int | None = None,
         use_cache: bool = True,
+        write: bool = True,
     ) -> RunResult:
         """Process one video. Returns a :class:`~tachymetry.results.RunResult`.
 
         With ``use_cache=False`` cached detections, background and camera in
-        ``out_dir`` are recomputed.
+        ``out_dir`` are recomputed. With ``write=False`` caches in ``out_dir``
+        are read but nothing is written there.
         """
         from .tracking.builder import build_tracks
 
         t0 = time.time()
         timings: dict[str, float] = {}
         out = Path(out_dir) if out_dir is not None else None
-        if out is not None:
+        if out is not None and write:
             out.mkdir(parents=True, exist_ok=True)
             self.config.save(out / "config.yaml")
         with VideoSource(source, fps=self.config.fps) as src:
             t = time.time()
-            dets = self.detect(src, out, progress, max_frames=max_frames, use_cache=use_cache)
+            dets = self.detect(src, out, progress, max_frames=max_frames, use_cache=use_cache, write=write)
             timings["detect_s"] = round(time.time() - t, 2)
             t = time.time()
-            bg = self.background(src, out, use_cache=use_cache)
-            camera = self.calibrate(src, dets, bg, out, use_cache=use_cache)
+            bg = self.background(src, out, use_cache=use_cache, write=write)
+            camera = self.calibrate(src, dets, bg, out, use_cache=use_cache, write=write)
             timings["calibrate_s"] = round(time.time() - t, 2)
             t = time.time()
             if progress:
@@ -270,7 +281,7 @@ class Pipeline:
             }
             ts = TrackSet(tracks, camera, src.fps, meta)
             result = RunResult(Path(source), ts, camera, dets, out, report, bg)
-            if out is not None:
+            if out is not None and write:
                 ts.export(out, self.config.exports)
                 summary = {
                     "tachymetry": __version__,
@@ -294,7 +305,7 @@ class Pipeline:
                 timings["render_s"] = round(time.time() - t, 2)
         timings["total_s"] = round(time.time() - t0, 2)
         result.report["timings"] = timings
-        if out is not None and (out / "summary.json").exists():
+        if out is not None and write and (out / "summary.json").exists():
             s = json.loads((out / "summary.json").read_text(encoding="utf-8"))
             s["timings"] = timings
             (out / "summary.json").write_text(json.dumps(s, indent=2, default=_json_default), encoding="utf-8")

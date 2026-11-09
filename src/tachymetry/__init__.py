@@ -122,7 +122,7 @@ def calibrate(source: str | Path, method: str = "auto", points: str | Path | Non
 
 
 def load_run(out_dir: str | Path):
-    """Reload a finished run directory (tracks are re-built from cached detections)."""
+    """Reload a finished run directory. Tracks are rebuilt from the cached detections; nothing is written."""
     from .pipeline import Pipeline
 
     out_dir = Path(out_dir)
@@ -130,4 +130,4 @@ def load_run(out_dir: str | Path):
     import json
 
     src = json.loads((out_dir / "summary.json").read_text(encoding="utf-8"))["video"]["source"]
-    return Pipeline(cfg, camera=Camera.load(out_dir / "camera.json")).run(src, out_dir)
+    return Pipeline(cfg, camera=Camera.load(out_dir / "camera.json")).run(src, out_dir, write=False)
