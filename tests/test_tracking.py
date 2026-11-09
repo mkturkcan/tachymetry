@@ -45,3 +45,21 @@ def test_exports(tmp_path, pole_camera):
         assert p.exists() and p.stat().st_size > 0
     header = (tmp_path / "tracks.csv").read_text().splitlines()[0]
     assert header.startswith("track_id,class,state,verdict,frame,time_s,x_m,y_m")
+
+
+def test_low_confidence_track_ends_are_trimmed():
+    """A track that drifts onto a neighbouring or phantom detection ends in low-score samples; they are trimmed."""
+    from types import SimpleNamespace
+
+    from tachymetry.config import HygieneConfig
+    from tachymetry.tracking.hygiene import HygieneStats, _trim_ends
+
+    n = 40
+    score = np.full(n, 0.65)
+    score[:2] = 0.2
+    score[-8:] = 0.15
+    dets = SimpleNamespace(score=score, time=np.arange(n) / 15.0, xyxy=np.tile([100.0, 100.0, 200.0, 150.0], (n, 1)))
+    obs = SimpleNamespace(truncated=np.zeros(n, bool), big=np.zeros(n, bool))
+    stats = HygieneStats()
+    kept = _trim_ends(np.arange(n), SimpleNamespace(dets=dets, obs=obs, cfg=HygieneConfig()), stats)
+    assert kept[0] == 2 and kept[-1] == n - 9 and stats.trimmed_samples == 10

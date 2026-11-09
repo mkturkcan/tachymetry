@@ -104,6 +104,8 @@ class HygieneConfig:
     edge_margin_frac: float = 0.004  #: boxes this close to the border are truncated
     big_box_frac: float = 0.45  #: boxes larger than this fraction of the frame are degenerate
     far_shrink: float = 0.5  #: far-field collapse: box height below this fraction of its running median
+    end_score_ratio: float = 0.5  #: confidence collapse: trim end samples scored below this fraction of the
+    end_score_max: float = 0.35  #: ... track's median score and below this absolute score
     fold_deg: float = 45.0  #: end hooks: a turn this sharp ...
     fold_dist_m: float = 2.0  #: ... within this distance at either end
     hampel_window_s: float = 1.0

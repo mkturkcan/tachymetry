@@ -164,6 +164,18 @@ def _trim_ends(rows: np.ndarray, ctx: TrackContext, stats: HygieneStats) -> np.n
         while b2 > a2 + 3 and collapsed(b2 - 1, -1):
             b2 -= 1
         rows2 = rows2[a2:b2]
+    # confidence collapse at either end: when the object it followed is occluded or leaves, a track can
+    # continue on a neighbouring or phantom detection (for example from one parked car to the next) at a
+    # small fraction of its usual score
+    if len(rows2) >= 6:
+        s = d.score[rows2]
+        thr = min(cfg.end_score_max, cfg.end_score_ratio * float(np.median(s)))
+        a3, b3 = 0, len(rows2)
+        while a3 < b3 - 3 and s[a3] < thr:
+            a3 += 1
+        while b3 > a3 + 3 and s[b3 - 1] < thr:
+            b3 -= 1
+        rows2 = rows2[a3:b3]
     stats.trimmed_samples += n - len(rows2)
     return rows2
 
