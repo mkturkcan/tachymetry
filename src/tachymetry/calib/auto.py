@@ -346,6 +346,17 @@ def calibrate_auto(
             except Exception as exc:
                 errors["fused"] = str(exc)
 
+    if cfg.hfov_deg and candidates:
+        # a known field of view is authoritative: drop candidates whose focal length disagrees with it
+        f_hint = (size[0] / 2) / math.tan(math.radians(cfg.hfov_deg / 2))
+        kept = [c for c in candidates if abs(c.camera.focal / f_hint - 1.0) <= 0.10]
+        kept_ids = {id(c) for c in kept}
+        for c in candidates:
+            if id(c) not in kept_ids:
+                errors[c.method] = (
+                    f"focal length {c.camera.focal:.0f} px disagrees with the {cfg.hfov_deg:g} deg field of view"
+                )
+        candidates = kept
     if not candidates:
         raise CalibrationError("automatic calibration failed: " + "; ".join(f"{k}: {v}" for k, v in errors.items()))
 
