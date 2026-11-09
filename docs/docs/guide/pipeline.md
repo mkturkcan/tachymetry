@@ -166,7 +166,7 @@ All thresholds are in seconds, metres, metres per second or fractions of the ima
 
 ## Reloading a run
 
-`tm.load_run(run_dir)` rebuilds a `RunResult` from `config.yaml`, `summary.json` and `camera.json`. The tracks are recomputed from the cached detections, so this takes seconds and needs no GPU:
+`tm.load_run(run_dir)` rebuilds a `RunResult` from `config.yaml`, `summary.json` and `camera.json`. The tracks are recomputed from the cached detections, so this takes seconds and needs no GPU; nothing in the run directory is modified:
 
 ```python
 import tachymetry as tm

@@ -86,7 +86,7 @@ Within gaps of at most 1 s (*fixed*), a cut requires two independent signals:
 
 ### End trimming
 
-`trim = True`. Leading and trailing samples whose boxes are truncated or big are removed. Then, at either end, samples whose box height is below `far_shrink = 0.5` of the median box height of the samples 0.1 to 1.0 s further inside the track are removed (far-field collapse: boxes of objects leaving into the distance shrink faster than the object does). Truncated and big samples inside a track keep their time stamps but contribute no measurement. Segments shorter than 3 samples are dropped.
+`trim = True`. Leading and trailing samples whose boxes are truncated or big are removed. Then, at either end, samples whose box height is below `far_shrink = 0.5` of the median box height of the samples 0.1 to 1.0 s further inside the track are removed (far-field collapse: boxes of objects leaving into the distance shrink faster than the object does). Finally, leading and trailing samples whose detection score is below $\min(\texttt{end\_score\_max}, \texttt{end\_score\_ratio}\times s_{\text{med}})$ = min(0.35, 0.5 $s_{\text{med}}$), with $s_{\text{med}}$ the track's median score, are removed (confidence collapse: when the object a track follows is occluded or leaves, association can carry the track onto a neighbouring or phantom detection, for example from one parked car to the next, at a small fraction of its usual score). Truncated and big samples inside a track keep their time stamps but contribute no measurement. Segments shorter than 3 samples are dropped.
 
 ### Track building
 
