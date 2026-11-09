@@ -30,10 +30,20 @@ import os
 import shutil
 import subprocess
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
-__all__ = ["Sample", "SAMPLES", "sample_video", "attribution", "SAMPLE_ATTRIBUTION", "cache_dir"]
+__all__ = [
+    "Sample",
+    "SAMPLES",
+    "sample_video",
+    "sample_camera",
+    "sample_overrides",
+    "attribution",
+    "SAMPLE_ATTRIBUTION",
+    "cache_dir",
+]
 
 
 @dataclass(frozen=True)
@@ -46,6 +56,8 @@ class Sample:
     page: str
     start_s: float = 0.0  # excerpt start (hf-excerpt only)
     duration_s: float = 0.0  # excerpt length (hf-excerpt only)
+    camera: dict[str, Any] | None = field(default=None, hash=False)  # known camera (Camera.from_pose arguments)
+    overrides: dict[str, Any] | None = field(default=None, hash=False)  # configuration the clip needs
 
 
 _SVBRD = "Ryan-xiangyu-ut/svbrd-llm-roadside-video-av::svbrd-llm-roadside-video-av"
@@ -122,6 +134,9 @@ SAMPLES: dict[str, Sample] = {
         f"https://huggingface.co/datasets/{_DRINF}",
         start_s=140.0,
         duration_s=30.0,
+        # straight down from 111.7 m (flight-log altitude); DJI Mini 2 4K horizontal field of view 68.4 deg
+        camera={"image_size": (3840, 2160), "focal": 2825.2, "height": 111.7, "pitch": 90.0, "yaw": 90.0},
+        overrides={"detector.imgsz": 2560},
     ),
 }
 
@@ -138,6 +153,27 @@ def attribution(name: str) -> str:
     """Attribution line for a sample, as its licence requires."""
     s = SAMPLES[name]
     return f"{s.credit}, {s.license}, {s.page}"
+
+
+def sample_camera(name: str):
+    """The known camera of a sample, or ``None`` when the sample is calibrated automatically.
+
+    Straight-down drone clips carry one: automatic calibration is designed for
+    oblique views (see the drone-footage example in the documentation).
+    """
+    s = SAMPLES[name]
+    if s.camera is None:
+        return None
+    from .geometry.camera import Camera
+
+    kw = dict(s.camera)
+    size = tuple(kw.pop("image_size"))
+    return Camera.from_pose(size, meta={"calibration_method": "known", "source": f"sample {name}"}, **kw)
+
+
+def sample_overrides(name: str) -> dict[str, Any]:
+    """Configuration overrides a sample needs (dotted keys), e.g. a larger detector input for 4K aerial video."""
+    return dict(SAMPLES[name].overrides or {})
 
 
 def sample_video(name: str = "intersection-day") -> Path:

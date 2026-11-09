@@ -210,11 +210,15 @@ def cmd_devices(args: argparse.Namespace) -> int:
 
 def cmd_demo(args: argparse.Namespace) -> int:
     from . import track
-    from .data import SAMPLE_ATTRIBUTION, sample_video
+    from .data import attribution, sample_camera, sample_overrides, sample_video
 
     path = sample_video(args.sample)
-    _print(f"Sample clip: {path}\n{SAMPLE_ATTRIBUTION}")
-    run = track(path, out=args.out, render=True, device=args.device)
+    camera = sample_camera(args.sample)
+    _print(f"Sample clip: {path}\nFootage: {attribution(args.sample)}")
+    if camera is not None:
+        _print(f"Known camera: {camera.describe()}")
+    overrides = {k.replace(".", "__"): v for k, v in sample_overrides(args.sample).items()}
+    run = track(path, out=args.out, camera=camera or "auto", render=True, device=args.device, **overrides)
     s = run.summary()
     _print(f"[bold]{s['tracks']} tracks[/bold] {s['by_class']}; outputs in {Path(args.out).resolve()}")
     return 0
@@ -304,7 +308,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     m = sub.add_parser("demo", help="run the pipeline on a public sample clip")
     m.add_argument("-o", "--out", default="demo_run")
-    m.add_argument("--sample", default="intersection-day")
+    m.add_argument(
+        "--sample",
+        default="intersection-day",
+        help="intersection-day(-2,-3), intersection-turn, intersection-night, "
+        "roundabout-aerial, motorway-overpass or dhaka-roundabout",
+    )
     m.add_argument("--device", default=None)
     m.set_defaults(func=cmd_demo)
 
