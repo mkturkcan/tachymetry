@@ -14,6 +14,13 @@ detectors injected:
 * persistent low-confidence false positives at a fixed location,
 * frame-to-frame jitter on parked vehicles (the source of phantom speeds).
 
+With ``TrafficSpec(masks=True)`` the detections are those of a segmenting
+detector instead: every detection carries the visible part of the agent's
+silhouette as an instance mask (nearer agents, image-space ``occluders`` and
+the frame border hide parts of it, see :mod:`tachymetry.synthetic.masks`), and
+its box is the bounding box of that mask. :func:`render_detections` renders
+detections for a given list of agents, for hand-built scenarios.
+
 :func:`evaluate` matches tracks to ground truth and reports position and speed
 errors, identity consistency, parked-vehicle handling and false tracks.
 """
@@ -27,11 +34,12 @@ from typing import Any
 import numpy as np
 
 from ..config import ROAD_CLASSES
-from ..detections import DetectionSet, FrameDetections
+from ..detections import DetectionSet, FrameDetections, crop_mask
 from ..geometry.camera import Camera
+from .masks import Occluder, agent_parts, render_label_image
 from .scene import Box3D, RoadLayout
 
-__all__ = ["TrafficSpec", "Agent", "simulate", "evaluate", "naive_speeds"]
+__all__ = ["TrafficSpec", "Agent", "simulate", "render_detections", "evaluate", "naive_speeds"]
 
 
 @dataclass
@@ -50,6 +58,10 @@ class TrafficSpec:
     static_ghosts: int = 2
     parked_jitter: float = 0.035
     seed: int = 0
+    masks: bool = False  #: segmenting detector: instance masks, boxes from the visible mask
+    occluders: tuple[Occluder, ...] = ()  #: image-space occluders in front of all agents (masks only)
+    mask_noise: float = 0.5  #: probability of a one-pixel erosion or dilation of each mask
+    min_visible: float = 0.2  #: masks keeping less than this share of the silhouette are not detected
 
 
 @dataclass
@@ -207,6 +219,8 @@ def simulate(
         agents.append(Agent(aid, "person", 0.5, 0.5, 1.7, t, xy, hd, np.full(n, v)))
         aid += 1
 
+    if spec.masks:
+        return render_detections(camera, agents, spec, rng), agents
     # render detections frame by frame
     w, h = camera.image_size
     n_frames = int(spec.duration_s * spec.rate_hz)
@@ -310,6 +324,104 @@ def simulate(
     return ds, agents
 
 
+def render_detections(
+    camera: Camera, agents: list[Agent], spec: TrafficSpec, rng: np.random.Generator | None = None
+) -> DetectionSet:
+    """Detections with instance masks of a segmenting detector for ``agents`` (see the module docstring).
+
+    Misses, car/truck label flicker, scores and road-surface false positives
+    follow ``spec`` as in :func:`simulate`; boxes are the bounding boxes of the
+    visible masks.
+    """
+    import cv2
+
+    rng = rng if rng is not None else np.random.default_rng(spec.seed)
+    w, h = camera.image_size
+    n_frames = int(spec.duration_s * spec.rate_hz)
+    k3 = np.ones((3, 3), np.uint8)
+    frames = []
+    for f in range(n_frames):
+        t = f / spec.rate_hz
+        live = []
+        for ag in agents:
+            k = int(round((t - ag.t[0]) * spec.rate_hz))
+            if k < 0 or k >= len(ag.t):
+                continue
+            parts = agent_parts(ag.cls, ag.xy[k, 0], ag.xy[k, 1], ag.heading[k], ag.L, ag.W, ag.H)
+            uv = np.vstack([camera.project(b.corners()) for b in parts])
+            if not np.all(np.isfinite(uv)):
+                continue
+            x1, y1 = uv.min(axis=0)
+            x2, y2 = uv.max(axis=0)
+            if x2 < 0 or y2 < 0 or x1 >= w or y1 >= h:
+                continue
+            depth = float(np.linalg.norm(np.append(ag.xy[k], 0.0) - camera.center))
+            live.append((ag, parts, depth, (int(max(x1 - 2, 0)), int(max(y1 - 2, 0)), int(x2 + 3), int(y2 + 3))))
+        boxes, scores, clss, crops = [], [], [], []
+        if live:
+            label = render_label_image(camera, [(i, p, d) for i, (_, p, d, _) in enumerate(live)], spec.occluders)
+            for i, (ag, parts, _, (bx0, by0, bx1, by1)) in enumerate(live):
+                own = render_label_image(camera, [(0, parts, 0.0)])
+                full_px = int((own[by0:by1, bx0:bx1] == 0).sum())
+                vis = label[by0:by1, bx0:bx1] == i
+                if full_px == 0 or vis.sum() < 30 or vis.sum() < spec.min_visible * full_px:
+                    continue
+                size = max(bx1 - bx0, by1 - by0)
+                if rng.random() < spec.miss_prob + (0.25 if size < 18 else 0.0):
+                    continue
+                if rng.random() < spec.mask_noise:
+                    op = cv2.erode if rng.random() < 0.5 else cv2.dilate
+                    vis = op(vis.astype(np.uint8), k3).astype(bool)
+                    if vis.sum() < 30:
+                        continue
+                full = np.zeros((h, w), bool)
+                full[by0:by1, bx0:bx1] = vis[: h - by0, : w - bx0]
+                ys, xs = np.nonzero(full[by0:by1, bx0:bx1])
+                box = np.array([xs.min() + bx0 - 0.5, ys.min() + by0 - 0.5, xs.max() + bx0 + 0.5, ys.max() + by0 + 0.5])
+                cls = ag.cls
+                if cls in ("car", "truck") and rng.random() < spec.flicker_prob:
+                    cls = "truck" if cls == "car" else "car"
+                boxes.append(box)
+                scores.append(float(np.clip(0.55 + 0.4 * min(size / 120, 1) + rng.normal(0, 0.05), 0.15, 0.99)))
+                clss.append(ROAD_CLASSES.index(cls))
+                crops.append(crop_mask(full, box))
+        for _ in range(rng.poisson(spec.ghost_rate)):  # flickering false positives on the road
+            cx, cy = rng.uniform(0.1 * w, 0.9 * w), rng.uniform(0.45 * h, 0.95 * h)
+            sz = rng.uniform(20, 70)
+            box = np.array([cx - sz, cy - 0.6 * sz, cx + sz, cy + 0.6 * sz])
+            full = np.zeros((h, w), np.uint8)
+            cv2.ellipse(full, (int(cx), int(cy)), (int(sz), int(0.6 * sz)), 0, 0, 360, 1, -1)
+            boxes.append(box)
+            scores.append(float(rng.uniform(0.3, 0.75)))
+            clss.append(ROAD_CLASSES.index("car"))
+            crops.append(crop_mask(full.astype(bool), box))
+        if boxes:
+            frames.append(
+                FrameDetections(
+                    f,
+                    t,
+                    np.array(boxes, np.float32),
+                    np.array(scores, np.float32),
+                    np.array(clss, np.int16),
+                    None,
+                    crops,
+                )
+            )
+        else:
+            frames.append(
+                FrameDetections(
+                    f, t, np.zeros((0, 4), np.float32), np.zeros(0, np.float32), np.zeros(0, np.int16), None, []
+                )
+            )
+    return DetectionSet.from_frames(
+        frames,
+        ROAD_CLASSES,
+        camera.image_size,
+        spec.rate_hz,
+        {"detector": {"name": "synthetic-masks"}, "rate_hz": spec.rate_hz},
+    )
+
+
 def naive_speeds(
     ds: DetectionSet, camera: Camera, ids: np.ndarray
 ) -> dict[int, tuple[np.ndarray, np.ndarray, np.ndarray]]:
@@ -333,6 +445,8 @@ def naive_speeds(
 class EvalReport:
     position_error_m: dict[str, float] = field(default_factory=dict)
     speed_error_kmh: dict[str, float] = field(default_factory=dict)
+    heading_error_deg: dict[str, float] = field(default_factory=dict)
+    dims_error_m: dict[str, float] = field(default_factory=dict)
     identity: dict[str, float] = field(default_factory=dict)
     parked: dict[str, float] = field(default_factory=dict)
     false_tracks: int = 0
@@ -344,6 +458,10 @@ class EvalReport:
             "pos_p95_m": self.position_error_m.get("p95"),
             "speed_mae_kmh": self.speed_error_kmh.get("mae"),
             "speed_p95_kmh": self.speed_error_kmh.get("p95"),
+            "heading_med_deg": self.heading_error_deg.get("median"),
+            "heading_p95_deg": self.heading_error_deg.get("p95"),
+            "length_mae_m": self.dims_error_m.get("length_mae"),
+            "width_mae_m": self.dims_error_m.get("width_mae"),
             "id_switches": self.identity.get("switches"),
             "coverage": self.identity.get("coverage"),
             "fragments_per_object": self.identity.get("fragments"),
@@ -375,7 +493,8 @@ def evaluate(tracks: list[Any], agents: list[Agent], rate_hz: float, gate_m: flo
         f0 = int(round(ag.t[0] * rate_hz))
         for j in range(len(ag.t)):
             agent_at.setdefault(f0 + j, []).append((ag, j))
-    pos_err, sp_err = [], []
+    pos_err, sp_err, hd_err = [], [], []
+    pairs: dict[int, list[Any]] = {}
     timeline: dict[int, list[tuple[int, int]]] = {}
     matched_samples: dict[int, int] = {}
     for f, items in by_frame.items():
@@ -397,6 +516,11 @@ def evaluate(tracks: list[Any], agents: list[Agent], rate_hz: float, gate_m: flo
             pos_err.append(C[a, b])
             if ag.cls != "person":
                 sp_err.append(abs(float(tr.speed[k]) - float(ag.speed[j])) * 3.6)
+                if getattr(tr, "super_cls", "vehicle") == "vehicle" and hasattr(tr, "heading"):
+                    # axial difference: a box drawn at heading + pi is the same box
+                    d = (float(tr.heading[k]) - float(ag.heading[j]) + np.pi / 2) % np.pi - np.pi / 2
+                    hd_err.append(abs(np.degrees(d)))
+                    pairs.setdefault(tr.id, []).append(ag)
             timeline.setdefault(ag.aid, []).append((f, tr.id))
             matched_samples[tr.id] = matched_samples.get(tr.id, 0) + 1
     rep.false_tracks = sum(1 for tr in ok if matched_samples.get(tr.id, 0) < 0.3 * len(tr.t))
@@ -408,6 +532,22 @@ def evaluate(tracks: list[Any], agents: list[Agent], rate_hz: float, gate_m: flo
     rep.speed_error_kmh = {
         "mae": float(np.mean(se)) if len(se) else float("nan"),
         "p95": float(np.percentile(se, 95)) if len(se) else float("nan"),
+    }
+    he = np.asarray(hd_err)
+    rep.heading_error_deg = {
+        "median": float(np.median(he)) if len(he) else float("nan"),
+        "p95": float(np.percentile(he, 95)) if len(he) else float("nan"),
+    }
+    dl, dw = [], []
+    for tid, ags in pairs.items():
+        ids = [a.aid for a in ags]
+        ag = ags[ids.index(max(set(ids), key=ids.count))]
+        tr = next(x for x in ok if x.id == tid)
+        dl.append(abs(tr.length - ag.L))
+        dw.append(abs(tr.width - ag.W))
+    rep.dims_error_m = {
+        "length_mae": float(np.mean(dl)) if dl else float("nan"),
+        "width_mae": float(np.mean(dw)) if dw else float("nan"),
     }
     switches, frags, covered = 0, [], []
     for ag in agents:
