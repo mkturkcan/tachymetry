@@ -34,7 +34,7 @@ UOD2_CONF = 0.10
 
 _MISSING = (
     "UrbanOmniDetect-2 runs on Ultralytics, which is not installed. Install the optional extra with "
-    'pip install "tachymetry[uod2]", or use the default detector (rfdetr-seg-l).'
+    'pip install "tachymetry[uod2]", or use the default detector (sam3) or rfdetr-seg-l.'
 )
 
 

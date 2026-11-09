@@ -48,3 +48,15 @@ def test_cli_help_and_config(capsys):
         main(["--help"])
     assert main(["config"]) == 0
     assert "detector" in capsys.readouterr().out
+
+
+def test_detector_score_profiles():
+    """RF-DETR reports lower confidences: its profile lowers the tracking thresholds left at their defaults."""
+    cfg = PipelineConfig()
+    cfg.detector.name = "rfdetr-seg-l"
+    cfg.filters.ghost_min_score = 0.33  # set by the user: kept
+    cfg.with_detector_profile()
+    assert (
+        cfg.tracker.high_conf == 0.30 and cfg.filters.ghost_parked_score == 0.20 and cfg.filters.ghost_min_score == 0.33
+    )
+    assert PipelineConfig().with_detector_profile().tracker.high_conf == 0.50  # SAM 3 keeps the defaults

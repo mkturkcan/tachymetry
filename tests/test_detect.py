@@ -165,42 +165,48 @@ class _Sam3Stub:
         )
 
 
-def _sam3_stub(found, classes=ROAD_CLASSES):
-    from tachymetry.detect.sam3 import SAM3_PROMPTS, Sam3Detector
+def _sam3_stub(found):
+    from tachymetry.detect.sam3 import SAM3_EVIDENCE, SAM3_PROMPTS, Sam3Detector
 
     det = Sam3Detector.__new__(Sam3Detector)
     det.cfg = DetectorConfig(name="sam3", class_conf={})
-    det.conf, det.half, det.dtype, det.device = 0.3, False, None, torch.device("cpu")
+    det.conf, det.half, det.dtype, det.device = 0.4, False, None, torch.device("cpu")
     det.imgsz = (32, 32)
     det._mean = torch.full((1, 3, 1, 1), 0.5)
     det._std = torch.full((1, 3, 1, 1), 0.5)
-    det.classes = [c for c in ROAD_CLASSES if c in classes]
-    det.prompts = [SAM3_PROMPTS[c] for c in det.classes]
-    det._cls = np.array([ROAD_CLASSES.index(c) for c in det.classes], np.int16)
+    det.prompts = list(SAM3_PROMPTS) + list(SAM3_EVIDENCE)
+    det.n_detect = len(SAM3_PROMPTS)
+    det._cls = np.array([ROAD_CLASSES.index(c) for c in [*SAM3_PROMPTS.values(), *SAM3_EVIDENCE.values()]], np.int16)
+    det.classes = sorted({*SAM3_PROMPTS.values(), *SAM3_EVIDENCE.values()}, key=ROAD_CLASSES.index)
     det._text = torch.arange(len(det.prompts), dtype=torch.float32).view(-1, 1, 1)
     det._text_mask = torch.ones(len(det.prompts), 1, dtype=torch.long)
     det.class_names = ROAD_CLASSES
-    det.model = _Sam3Stub({det.classes.index(c): v for c, v in found.items()})
+    det.model = _Sam3Stub({det.prompts.index(k): v for k, v in found.items()})
     return det
 
 
-def test_sam3_cross_prompt_duplicates_are_merged():
-    same = [0.25, 0.25, 0.75, 0.75]
+def test_sam3_vehicle_classes_come_from_the_evidence_prompts():
+    bus = [0.05, 0.05, 0.45, 0.45]
+    car = [0.55, 0.55, 0.75, 0.75]
+    moto = [0.55, 0.05, 0.65, 0.25]
     det = _sam3_stub(
         {
-            "car": [(0.9, same)],
-            # the car again (a looser box, box IoU 0.69, but the same mask), and an object below the threshold
-            "truck": [(0.6, [0.2, 0.2, 0.8, 0.8], same), (0.2, [0.0, 0.0, 0.1, 0.1])],
-            "person": [(0.8, [0.0, 0.5, 0.125, 1.0])],
+            # three vehicles, one of them twice (same mask); a person
+            "vehicle": [(0.9, bus), (0.85, car), (0.8, [0.54, 0.54, 0.76, 0.76], car), (0.7, moto)],
+            "person": [(0.8, [0.9, 0.5, 0.97, 0.9])],
+            # evidence: the large one is a bus, the small one a motorcycle (beats bike); no evidence for the car
+            "bus": [(0.7, bus)],
+            "truck": [(0.3, bus)],
+            "bike": [(0.5, moto), (0.6, [0.2, 0.7, 0.3, 0.9])],  # the second bike is covered by no vehicle
+            "motorcycle": [(0.65, moto)],
         }
     )
-    xyxy, score, cls, cub, crops = det([np.zeros((64, 96, 3), np.uint8)] * 2)[1]
-    assert cub is None and sorted(ROAD_CLASSES[c] for c in cls) == ["car", "person"]
-    car = cls.tolist().index(CAR)
-    np.testing.assert_allclose(score[car], 0.9, atol=1e-3)  # class score times presence score
-    np.testing.assert_allclose(xyxy[car], [24, 16, 72, 48], atol=1e-3)
-    x0, y0, m = crops[car]
-    assert m.sum() == pytest.approx(48 * 32, rel=0.15) and x0 <= 24 and y0 <= 16
+    xyxy, score, cls, cub, crops = det([np.zeros((64, 96, 3), np.uint8)])[0]
+    names = sorted(ROAD_CLASSES[c] for c in cls)
+    assert cub is None and names == ["bicycle", "bus", "car", "motorcycle", "person"]
+    k = [ROAD_CLASSES[c] for c in cls].index("bus")
+    np.testing.assert_allclose(score[k], 0.9, atol=1e-3)  # the vehicle prompt's score, not the evidence score
+    assert all(c is not None for c in crops)
 
 
 def test_sam3_gated_repository_error(monkeypatch):
@@ -220,9 +226,9 @@ def test_sam3_gated_repository_error(monkeypatch):
 
 def test_detector_names_and_removed_backends(monkeypatch):
     names = detector_names()
-    assert names[0] == "rfdetr-seg-l" and "sam3" in names and "uod2-x" in names
+    assert names[0] == "sam3" and "rfdetr-seg-l" in names and "uod2-x" in names
     assert not any("xlarge" in n or n.endswith("-xl") for n in names)
-    assert DetectorConfig().name == "rfdetr-seg-l"
+    assert DetectorConfig().name == "sam3"
     for bad in ("yolo:yolo11x.pt", "yolo11x.pt", "rfdetr-seg-xl"):
         with pytest.raises(ValueError, match="unknown detector"):
             build_detector(DetectorConfig(name=bad))

@@ -261,8 +261,7 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--set", action="append", metavar="KEY=VALUE", help="override any setting, e.g. detector.imgsz=1280")
     r.add_argument(
         "--detector",
-        help="rfdetr-seg-{n,s,m,l} (default rfdetr-seg-l), rfdetr-{n,s,m,l}, sam3, uod2-{n,s,m,l,x} "
-        "or precomputed:<npz or folder>",
+        help="sam3 (default), rfdetr-seg-{n,s,m,l}, rfdetr-{n,s,m,l}, uod2-{n,s,m,l,x} or precomputed:<npz or folder>",
     )
     r.add_argument("--rate", type=float, help="frames analysed per second (default 15)")
     r.add_argument("--imgsz", type=int, help="detector input size (default: the detector's own, e.g. 1008)")
@@ -287,7 +286,7 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--reference", help="orthophoto or site plan (pick)")
     c.add_argument("--gsd", type=float, help="metres per pixel of the reference image (pick)")
     c.add_argument("--preview", help="preview image path")
-    c.add_argument("--detector", default="rfdetr-seg-l", help="detector for vehicle masks or cuboids (auto)")
+    c.add_argument("--detector", default="sam3", help="detector for vehicle masks or cuboids (auto)")
     c.add_argument("--hfov", type=float, help="known horizontal field of view of the lens, degrees (auto)")
     c.add_argument("--device", default="auto")
     c.set_defaults(func=cmd_calibrate)
@@ -318,7 +317,7 @@ def build_parser() -> argparse.ArgumentParser:
     m.set_defaults(func=cmd_demo)
 
     w = sub.add_parser("download", help="download detector weights")
-    w.add_argument("--detector", default="rfdetr-seg-l", help="rfdetr-seg-{n,s,m,l}, rfdetr-{n,s,m,l}, sam3, uod2-*")
+    w.add_argument("--detector", default="sam3", help="sam3, rfdetr-seg-{n,s,m,l}, rfdetr-{n,s,m,l}, uod2-*")
     w.set_defaults(func=cmd_download)
 
     g = sub.add_parser("config", help="print or save the default configuration")

@@ -195,7 +195,7 @@ def _metric_scale(
         return out, info
     if len(quads) < 10:
         raise CalibrationError(
-            "a vehicle-size scale needs instance masks (rfdetr-seg-*, sam3) or cuboid footprints (uod2-*); "
+            "a vehicle-size scale needs instance masks (sam3, rfdetr-seg-*) or cuboid footprints (uod2-*); "
             "pass scale='height=<m>' or scale='lane_width=<m>' instead"
         )
     s, info = footprint_scale(cam, quads, wts, cfg.car_length_m, cfg.car_width_m)

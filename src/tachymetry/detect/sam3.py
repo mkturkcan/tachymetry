@@ -1,12 +1,21 @@
 """SAM 3 (Meta, 2025) through Hugging Face ``transformers``: text-prompted detection and segmentation.
 
-Each road class is a text prompt (``car``, ``bus``, ``truck``, ``motorcycle``,
-``bicycle``, ``person``). The image encoder runs once per frame and the
-prompt-conditioned DETR decoder once per (frame, prompt) pair, in batches.
-SAM 3 is a set predictor without non-maximum suppression; duplicates across
-prompts (one vehicle found by ``car`` and by ``truck``) are removed by mask
-overlap, keeping the higher score. The checkpoint ``facebook/sam3`` is gated
-on Hugging Face.
+The default detector of Tachymetry. Detection follows a two-level prompt scheme:
+
+* **detection prompts** ``vehicle`` and ``person`` give the boxes and instance
+  masks that are tracked (score threshold 0.4);
+* **class-evidence prompts** ``car``, ``van``, ``suv``, ``bus``, ``truck``,
+  ``bike`` and ``motorcycle`` run in the same forward pass. Each vehicle
+  detection takes the class of the overlapping evidence detection with the
+  highest score (``car``, ``van`` and ``suv`` fold into ``car``; ``bike`` is a
+  bicycle unless ``motorcycle`` scores higher), provided that score reaches
+  0.20; otherwise it is a car. Two-wheeler evidence that no vehicle detection
+  covers is kept as a detection of its own, so cyclists are counted.
+
+The image encoder runs once per frame and the prompt-conditioned DETR decoder
+once per (frame, prompt) pair, in batches. SAM 3 is a set predictor without
+non-maximum suppression; duplicates are removed by mask overlap, keeping the
+higher score. The checkpoint ``facebook/sam3`` is gated on Hugging Face.
 """
 
 from __future__ import annotations
@@ -23,20 +32,37 @@ from .base import Detector, DetectorOutput, resolve_device
 from .masks import mask_crops
 from .postprocess import MASK_DUPLICATE_IOU, prefilter, refine
 
-__all__ = ["Sam3Detector", "SAM3_REPO", "SAM3_PROMPTS", "SAM3_CONF", "SAM3_ACCESS_HELP", "load_sam3", "sam3_download"]
+__all__ = [
+    "Sam3Detector",
+    "SAM3_REPO",
+    "SAM3_PROMPTS",
+    "SAM3_EVIDENCE",
+    "SAM3_CONF",
+    "SAM3_ACCESS_HELP",
+    "load_sam3",
+    "sam3_download",
+    "assign_classes",
+]
 
 SAM3_REPO = "facebook/sam3"
-#: Road class -> text prompt.
-SAM3_PROMPTS = {
-    "person": "person",
-    "bicycle": "bicycle",
+#: Detection prompts: text prompt -> road class (vehicles get their class from the evidence prompts).
+SAM3_PROMPTS = {"vehicle": "car", "person": "person"}
+#: Class-evidence prompts: text prompt -> road class.
+SAM3_EVIDENCE = {
     "car": "car",
-    "motorcycle": "motorcycle",
+    "van": "car",
+    "suv": "car",
     "bus": "bus",
     "truck": "truck",
+    "bike": "bicycle",
+    "motorcycle": "motorcycle",
 }
-#: Score threshold (class score times presence score) when ``DetectorConfig.conf`` is ``None``.
-SAM3_CONF = 0.30
+#: Score threshold of the detection prompts (class score times presence score) when ``DetectorConfig.conf`` is ``None``.
+SAM3_CONF = 0.40
+#: Minimum evidence score for a vehicle class; below it a vehicle detection is a car.
+SAM3_EVIDENCE_MIN = 0.20
+#: Box overlap (intersection over the smaller box) that attributes evidence to a vehicle detection.
+SAM3_EVIDENCE_OVERLAP = 0.6
 #: (frame, prompt) pairs per decoder pass; bounds memory (about 8 GB at 8 pairs and batch 8, BF16).
 PAIRS_PER_PASS = 8
 
@@ -114,9 +140,13 @@ class Sam3Detector(Detector):
         ip = self.processor.image_processor
         self._mean = torch.tensor(ip.image_mean, device=self.device).view(1, 3, 1, 1)
         self._std = torch.tensor(ip.image_std, device=self.device).view(1, 3, 1, 1)
-        self.classes = [c for c in ROAD_CLASSES if c in cfg.classes and c in SAM3_PROMPTS]
-        self.prompts = [SAM3_PROMPTS[c] for c in self.classes]
-        self._cls = np.array([ROAD_CLASSES.index(c) for c in self.classes], np.int16)
+        # the vehicle prompt always runs (vehicle classes come from the evidence); person only when requested
+        detect = {p: c for p, c in SAM3_PROMPTS.items() if c != "person" or "person" in cfg.classes}
+        evidence = {p: c for p, c in SAM3_EVIDENCE.items() if c in cfg.classes}
+        self.prompts = list(detect) + list(evidence)
+        self.n_detect = len(detect)
+        self._cls = np.array([ROAD_CLASSES.index(c) for c in list(detect.values()) + list(evidence.values())], np.int16)
+        self.classes = sorted({*detect.values(), *evidence.values()}, key=ROAD_CLASSES.index)
         self.class_names = ROAD_CLASSES
         self.name = "SAM 3"
         text = self.processor(text=self.prompts, return_tensors="pt") if self.prompts else None
@@ -161,6 +191,7 @@ class Sam3Detector(Detector):
         scores: list[list[np.ndarray]] = [[] for _ in images]
         classes: list[list[np.ndarray]] = [[] for _ in images]
         maps: list[list[Any]] = [[] for _ in images]
+        prompt_of: list[list[np.ndarray]] = [[] for _ in images]
         if n_prompt:
             amp = torch.autocast("cuda", dtype=self.dtype) if self.half else contextlib.nullcontext()
             with torch.inference_mode(), amp:
@@ -181,7 +212,11 @@ class Sam3Detector(Detector):
                     score = res.pred_logits.float().sigmoid()
                     if res.presence_logits is not None:
                         score = score * res.presence_logits.float().sigmoid()
-                    keep = score > self.conf
+                    thr = torch.as_tensor(
+                        [self.conf if p < self.n_detect else min(self.conf, SAM3_EVIDENCE_MIN) for _, p in chunk],
+                        device=score.device,
+                    ).view(-1, 1)
+                    keep = score > thr
                     score_np, keep_np = score.cpu().numpy(), keep.cpu().numpy()
                     box_np = res.pred_boxes.float().cpu().numpy()  # (n, Q, 4) x1, y1, x2, y2 in [0, 1]
                     for k, (i, p) in enumerate(chunk):
@@ -192,6 +227,7 @@ class Sam3Detector(Detector):
                         boxes[i].append(xyxy)
                         scores[i].append(score_np[k, q].astype(np.float32))
                         classes[i].append(np.full(len(q), self._cls[p], np.int16))
+                        prompt_of[i].append(np.full(len(q), p, np.int16))
                         sel = torch.as_tensor(q, device=self.device, dtype=torch.long)
                         maps[i].append(res.pred_masks[k].index_select(0, sel).float().sigmoid())
                     del res
@@ -201,7 +237,14 @@ class Sam3Detector(Detector):
                 out.append((np.zeros((0, 4), np.float32), np.zeros(0, np.float32), np.zeros(0, np.int16), None, []))
                 continue
             xyxy, score, cls = np.concatenate(boxes[i]), np.concatenate(scores[i]), np.concatenate(classes[i])
+            prm = np.concatenate(prompt_of[i])
             mp = torch.cat(maps[i])
+            sel = assign_classes(xyxy, score, cls, prm, self.n_detect, self.prompts, self.conf)
+            xyxy, score, cls = xyxy[sel[0]], sel[1], sel[2]
+            mp = mp.index_select(0, torch.as_tensor(sel[0], device=mp.device, dtype=torch.long))
+            if not len(xyxy):
+                out.append((np.zeros((0, 4), np.float32), np.zeros(0, np.float32), np.zeros(0, np.int16), None, []))
+                continue
             idx = prefilter(xyxy, score, cls, w, self.cfg, self.class_names)
             xyxy, score, cls = xyxy[idx], score[idx], cls[idx]
             masks = mask_crops(mp.index_select(0, torch.as_tensor(idx, device=mp.device)), xyxy, (w, h), 0.5)
@@ -222,9 +265,70 @@ class Sam3Detector(Detector):
         return {
             **super().describe(),
             "model": self.repo,
-            "prompts": dict(zip(self.classes, self.prompts)),
+            "prompts": self.prompts[: self.n_detect],
+            "evidence_prompts": self.prompts[self.n_detect :],
             "device": str(self.device),
             "imgsz": list(self.imgsz),
             "conf": self.conf,
             "half": self.half,
         }
+
+
+def assign_classes(
+    xyxy: np.ndarray,
+    score: np.ndarray,
+    cls: np.ndarray,
+    prompt: np.ndarray,
+    n_detect: int,
+    prompts: Sequence[str],
+    conf: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Classes of the detection-prompt results from the class-evidence results of the same frame.
+
+    Returns ``(rows, score, cls)``: the rows to keep (detection-prompt results
+    and unclaimed two-wheeler evidence), their scores and their road classes.
+    """
+    names = list(ROAD_CLASSES)
+    det = np.flatnonzero(prompt < n_detect)
+    ev = np.flatnonzero(prompt >= n_detect)
+    out_rows, out_score, out_cls = [], [], []
+    claimed = np.zeros(len(xyxy), bool)
+    car = names.index("car")
+    for r in det:
+        if names[int(cls[r])] == "person":
+            out_rows.append(r)
+            out_score.append(score[r])
+            out_cls.append(cls[r])
+            continue
+        best_c = car
+        if len(ev):
+            b = xyxy[r]
+            e = xyxy[ev]
+            iw = np.clip(np.minimum(b[2], e[:, 2]) - np.maximum(b[0], e[:, 0]), 0, None)
+            ih = np.clip(np.minimum(b[3], e[:, 3]) - np.maximum(b[1], e[:, 1]), 0, None)
+            area = lambda q: (q[..., 2] - q[..., 0]) * (q[..., 3] - q[..., 1])  # noqa: E731
+            ov = iw * ih / np.maximum(np.minimum(area(b), area(e)), 1e-9)
+            hit = ev[ov >= SAM3_EVIDENCE_OVERLAP]
+            claimed[hit] = True
+            ev_score: dict[int, float] = {}
+            for k in hit:
+                c = int(cls[k])
+                if prompts[int(prompt[k])] == "motorcycle":
+                    c = names.index("motorcycle")
+                ev_score[c] = max(ev_score.get(c, 0.0), float(score[k]))
+            if ev_score:
+                c, s_ = max(ev_score.items(), key=lambda kv: kv[1])
+                if s_ >= SAM3_EVIDENCE_MIN:
+                    best_c = c
+        out_rows.append(r)
+        out_score.append(score[r])
+        out_cls.append(best_c)
+    # two-wheelers that the vehicle prompt missed: confident bike / motorcycle evidence covered by no vehicle
+    two = {names.index("bicycle"), names.index("motorcycle")}
+    for k in ev:
+        if not claimed[k] and int(cls[k]) in two and score[k] >= conf:
+            out_rows.append(k)
+            out_score.append(score[k])
+            out_cls.append(cls[k])
+    rows = np.asarray(out_rows, np.int64)
+    return rows, np.asarray(out_score, np.float32), np.asarray(out_cls, np.int16)

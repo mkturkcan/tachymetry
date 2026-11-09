@@ -144,7 +144,6 @@ SAMPLES: dict[str, Sample] = {
         duration_s=30.0,
         # straight down from 111.7 m (flight-log altitude); DJI Mini 2 4K horizontal field of view 68.4 deg
         camera={"image_size": (3840, 2160), "focal": 2825.2, "height": 111.7, "pitch": 90.0, "yaw": 90.0},
-        overrides={"detector.imgsz": 2560},
     ),
 }
 

@@ -53,13 +53,15 @@ class DetectorConfig:
     """Object detector and detection-level post-processing.
 
     ``imgsz`` and ``conf`` default to ``None``, which selects the back-end's own
-    values: RF-DETR a square input of twice its training resolution, at most
-    1008 pixels (1008 for ``rfdetr-seg-l``), and 0.15; SAM 3 its fixed 1008 x
-    1008 input and 0.30; UrbanOmniDetect-2 a letterboxed long side of 960 and
-    0.10. Detections below ``TrackerConfig.high_conf`` only extend existing tracks.
+    values: SAM 3 its fixed 1008 x 1008 input and 0.40 (detection prompts);
+    RF-DETR a square input of twice its training resolution, at most 1008 pixels
+    (1008 for ``rfdetr-seg-l``), and 0.15; UrbanOmniDetect-2 a letterboxed long
+    side of 960 and 0.10. Detections below ``TrackerConfig.high_conf`` only
+    extend existing tracks; see :data:`DETECTOR_SCORE_PROFILES` for thresholds
+    that follow the detector.
     """
 
-    name: str = "rfdetr-seg-l"  #: ``rfdetr[-seg]-{n,s,m,l}``, ``sam3``, ``uod2-{n,s,m,l,x}`` or ``precomputed:<path>``
+    name: str = "sam3"  #: ``sam3``, ``rfdetr[-seg]-{n,s,m,l}``, ``uod2-{n,s,m,l,x}`` or ``precomputed:<path>``
     weights: str | None = None  #: explicit checkpoint (path, or Hugging Face repository for ``sam3``)
     imgsz: int | None = None  #: inference size in pixels; ``None`` = the back-end's default
     conf: float | None = None  #: model score threshold; ``None`` = the back-end's default
@@ -214,6 +216,14 @@ class RenderConfig:
     bev_range_m: float | None = None
 
 
+#: Tracking thresholds that differ by detector, because detectors report confidence on different scales:
+#: SAM 3 and UrbanOmniDetect-2 use the defaults; RF-DETR scores parked and distant vehicles at 0.15-0.5.
+#: :meth:`PipelineConfig.with_detector_profile` applies them to fields still at their defaults.
+DETECTOR_SCORE_PROFILES: dict[str, dict[str, float]] = {
+    "rfdetr": {"tracker.high_conf": 0.30, "filters.ghost_min_score": 0.20, "filters.ghost_parked_score": 0.20},
+}
+
+
 @dataclass
 class PipelineConfig:
     """Complete configuration of a run."""
@@ -231,6 +241,18 @@ class PipelineConfig:
     keep_detections: bool = True
 
     # ---------------------------------------------------------------- io
+    def with_detector_profile(self) -> PipelineConfig:
+        """Apply the detector's score profile (:data:`DETECTOR_SCORE_PROFILES`) to fields left at their defaults."""
+        name = self.detector.name.strip().lower()
+        prof = next((v for k, v in DETECTOR_SCORE_PROFILES.items() if name.startswith(k)), None)
+        if prof:
+            base = PipelineConfig()
+            for key, value in prof.items():
+                sec, attr = key.split(".")
+                if getattr(getattr(self, sec), attr) == getattr(getattr(base, sec), attr):
+                    setattr(getattr(self, sec), attr, value)
+        return self
+
     def to_dict(self) -> dict[str, Any]:
         return _to_plain(dataclasses.asdict(self))
 

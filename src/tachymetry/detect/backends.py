@@ -4,14 +4,18 @@ All back-ends map their native labels into the shared road-user taxonomy
 (:data:`tachymetry.config.ROAD_CLASSES`) and return, per image,
 ``(xyxy, score, class_index, cuboid_or_None, masks_or_None)``.
 
-``rfdetr-seg-{n,s,m,l}`` (default ``rfdetr-seg-l``)
+``sam3`` (default)
+    SAM 3 (Meta) through Hugging Face ``transformers``: ``vehicle`` and
+    ``person`` prompts for boxes and masks, class-evidence prompts for the
+    vehicle class (:mod:`tachymetry.detect.sam3`). The ``facebook/sam3``
+    checkpoint is gated.
+``rfdetr-seg-{n,s,m,l}``
     RF-DETR-Seg (Roboflow): COCO-trained real-time DETR with an instance
-    segmentation head; boxes and masks. Apache-2.0 weights, downloaded on first use.
+    segmentation head; boxes and masks. Apache-2.0 weights, downloaded on first
+    use, about nine times faster than SAM 3 with lower recall of parked and
+    distant vehicles.
 ``rfdetr-{n,s,m,l}``
     RF-DETR detection models; boxes only.
-``sam3``
-    SAM 3 (Meta) through Hugging Face ``transformers``, prompted with the class
-    names; boxes and masks. The ``facebook/sam3`` checkpoint is gated.
 ``uod2-{n,s,m,l,x}``
     UrbanOmniDetect-2: boxes and the eight projected corners of a 3D cuboid per
     road user. Needs the optional ``uod2`` extra (Ultralytics).
@@ -48,7 +52,7 @@ def detector_names() -> list[str]:
     """Names accepted by :func:`build_detector`, in order of preference."""
     seg = [n for n in RFDETR_MODELS if n.startswith("rfdetr-seg-")]
     box = [n for n in RFDETR_MODELS if not n.startswith("rfdetr-seg-")]
-    return [*reversed(seg), *reversed(box), "sam3", *(f"uod2-{s}" for s in reversed(UOD2_SIZES))]
+    return ["sam3", *reversed(seg), *reversed(box), *(f"uod2-{s}" for s in reversed(UOD2_SIZES))]
 
 
 def build_detector(cfg: DetectorConfig, device: str = "auto") -> Detector:

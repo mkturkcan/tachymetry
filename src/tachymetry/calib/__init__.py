@@ -69,7 +69,7 @@ def calibrate_source(
     points: str | Path | None = None,
     scale: Any = None,
     lens: Any = None,
-    detector: str = "rfdetr-seg-l",
+    detector: str = "sam3",
     device: str = "auto",
     seconds: float = 90.0,
     rate_hz: float = 5.0,

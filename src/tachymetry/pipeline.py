@@ -122,7 +122,7 @@ class Pipeline:
     ):
         if isinstance(config, (str, Path)):
             config = PipelineConfig.load(config)
-        self.config = config or PipelineConfig()
+        self.config = (config or PipelineConfig()).with_detector_profile()
         if device is not None:
             self.config.device = device
         self.camera_spec = camera
