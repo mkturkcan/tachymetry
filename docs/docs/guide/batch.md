@@ -1,0 +1,64 @@
+# Batch processing on multiple GPUs
+
+`tachymetry run` and `tm.track_many` (`batch/scheduler.py`, `run_batch`) process many videos in parallel worker processes spread over the selected devices. Each video goes through the same [pipeline](pipeline.md) as `tm.track` and gets its own run directory.
+
+```bash
+tachymetry run "videos/**/*.mp4" --out runs --devices auto --render
+tachymetry devices                          # devices and the worker plan
+```
+
+```python
+import tachymetry as tm
+
+if __name__ == "__main__":
+    report = tm.track_many(["videos/a/", "videos/b/*.mp4"], out="runs", devices="cuda:0,cuda:1")
+    print(report)
+```
+
+A worked example with two public clips is in [Examples: batch processing](../examples/batch.md).
+
+## Inputs
+
+`io.find_videos` expands each input: a file is used as is; a directory is searched recursively for files with a video extension (`.mp4`, `.mov`, `.avi`, `.mkv`, `.m4v`, `.mpg`, `.mpeg`, `.ts`, `.mts`, `.webm`, `.wmv`, `.flv`, `.h264`, `.hevc`), and a directory that holds images but no videos becomes one image-sequence source (10 fps unless `VideoSource(path, fps=...)` is used directly); a pattern containing `*`, `?` or `[` is expanded with `pathlib` glob, where `**` matches any depth. Quote patterns on the command line so that the library, not the shell, expands them (this also makes `**` work in shells without recursive globbing, and on Windows, where shells do not expand patterns). Files are sorted in natural order and duplicates removed.
+
+## Devices and workers
+
+`--devices` (`devices=`) accepts `auto` (all CUDA GPUs, else Apple MPS, else CPU), `cpu`, `cuda` (all GPUs), indices such as `0,2`, or names such as `cuda:1,cuda:3`. `plan_workers` then assigns worker processes:
+
+| Device | Workers per device with `--workers-per-device auto` |
+|---|---|
+| CUDA GPU | $\min(2, \max(1, \lfloor \text{free GB} / 6 \rfloor))$; 2 if free memory is unknown |
+| Apple MPS | 1 |
+| CPU | $\max(1, \lfloor \text{CPU threads} / 4 \rfloor)$ |
+
+Two workers per GPU overlap decoding, tracking and rendering in one process with inference in the other. When GPUs are used, the total number of workers is capped at $\max(\text{number of devices}, \min(\text{workers}, \lfloor\text{CPU threads}/2\rfloor))$ so that each worker keeps CPU threads for decoding and tracking, and it never exceeds the number of pending videos. An integer `--workers-per-device N` overrides the rule. `tachymetry devices` prints the devices with their free memory and the resulting plan.
+
+## Scheduling
+
+* **Processes.** Workers are started with the `spawn` method on every platform, which is the only method on Windows and the safe one with CUDA. Each worker takes one device slot; for a CUDA slot it sets `CUDA_VISIBLE_DEVICES` to that GPU before CUDA initialises and then uses `cuda:0` internally, and it sets `OMP_NUM_THREADS=4` unless already set. The pipeline and its detector are created once per worker and reused for all its videos.
+* **Order.** Pending videos are dispatched longest first by file size, which shortens the makespan when durations differ.
+* **Failures.** An exception in one video is recorded with its traceback (`status: failed`) and does not stop the batch. The command exits with status 1 if any video failed.
+* **Resume.** A video whose run directory already contains `summary.json` is skipped (`status: cached`) and its summary is read from disk, unless `--overwrite` (`overwrite=True`) is given. `--overwrite` repeats the pipeline but, like any re-run, reuses the cached detections and the automatic camera in the run directory ([Pipeline](pipeline.md#caching-and-re-runs)); delete the run directory to start from scratch. `summary.json` is written after export and before rendering, so a run interrupted during rendering counts as finished; re-run it with `--overwrite` or render it with `tachymetry render`.
+* **Progress.** Per-video progress from all workers is aggregated in the parent process (a `rich` live display, or plain log lines).
+
+!!! warning "Select GPUs with `--devices`, not `CUDA_VISIBLE_DEVICES`"
+    Device names are resolved in the parent process and each worker then sets `CUDA_VISIBLE_DEVICES` to the parent's device index. In version 0.1.0 this assumes the parent sees all GPUs: if the parent itself runs with `CUDA_VISIBLE_DEVICES=2,3`, its `cuda:0` and `cuda:1` are physical GPUs 2 and 3, but the workers select physical GPUs 0 and 1. Leave `CUDA_VISIBLE_DEVICES` unset and use `--devices cuda:2,cuda:3`.
+
+## Cameras in batch mode
+
+`--camera` (`camera=`) applies to all videos of the batch: `auto` calibrates each video separately; a camera JSON or correspondence file is used for all videos (resized to each video's resolution); a directory is searched per video for `<stem>.camera.json`, `<stem>.json` or `camera.json`, and videos without a match are calibrated automatically (`pipeline.resolve_camera`).
+
+## Output layout
+
+Each video gets the directory `output_dir_for(video, out, common)`: its path relative to the deepest directory common to all inputs, without the extension, with path separators replaced by `__`. Inputs `videos/a/clip.mp4` and `videos/b/clip.mp4` therefore map to `runs/a__clip` and `runs/b__clip`, and a folder of clips maps to one directory per file stem.
+
+The output root also receives `batch_summary.json` (workers, wall time, and per video: `video`, `out_dir`, `status`, `size`, `summary`, `seconds`, `device`, `camera`, `calibration`, `error`) and `batch_summary.csv` with the columns `video, status, out_dir, tracks, vehicles_moving, pedestrians, median_speed_kmh, seconds, device, error`.
+
+`track_many` returns a `BatchReport` with `jobs` (the dictionaries above), `ok` (done or cached), `failed`, `workers`, `seconds` and `out_dir`.
+
+## Windows
+
+* Install the CUDA build of PyTorch before Tachymetry, for example `pip install torch --index-url https://download.pytorch.org/whl/cu128`; the default PyPI wheel on Windows is CPU-only ([Installation](../installation.md)).
+* Because workers are spawned, a script that calls `tm.track_many` is imported again by every worker. Put the call under `if __name__ == "__main__":`, as in the example above; without the guard each worker would start a batch of its own. The command line `tachymetry run` needs no guard.
+* Neither `cmd` nor PowerShell expands glob patterns; Tachymetry does. Passing a folder, for example `tachymetry run D:\videos --out runs`, is the simplest form, since folders are searched recursively.
+* Linux and macOS use the same `spawn` method, so a script that works on one platform behaves the same on the others.

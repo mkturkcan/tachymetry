@@ -1,0 +1,149 @@
+site_name: Tachymetry
+site_description: Metric trajectories, speeds and counts from traffic-camera video.
+site_author: Mehmet Kerem Turkcan
+site_url: https://mkturkcan.github.io/tachymetry/
+repo_url: https://github.com/mkturkcan/tachymetry
+repo_name: mkturkcan/tachymetry
+edit_uri: edit/main/docs/
+copyright: >-
+  Mehmet Kerem Turkcan, Department of Civil Engineering, Columbia University.
+  Tachymetry is released under the GNU AGPL-3.0.
+
+docs_dir: docs
+site_dir: site
+
+# The landing page (docs/index.html) and the figures are copied as static files.
+# Generated tables are included into pages with pymdownx.snippets and are not pages themselves.
+exclude_docs: |
+  media/*.md
+  hooks/
+
+hooks:
+  - docs/hooks/config_reference.py
+
+theme:
+  name: material
+  language: en
+  logo: media/logo.svg
+  favicon: media/favicon.svg
+  font: false
+  palette:
+    scheme: slate
+    primary: custom
+    accent: custom
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.highlight
+    - content.code.copy
+    - toc.follow
+
+extra:
+  homepage: docs/
+  generator: false
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/mkturkcan/tachymetry
+    - icon: fontawesome/solid/globe
+      link: https://mehmetkeremturkcan.com/
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - def_list
+  - footnotes
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: numpy
+            docstring_options:
+              warn_unknown_params: false
+            show_source: false
+            show_root_heading: true
+            show_root_full_path: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            members_order: source
+            separate_signature: true
+            show_signature_annotations: true
+            signature_crossrefs: false
+            merge_init_into_class: true
+            filters: ["!^_"]
+            heading_level: 2
+
+nav:
+  - Project page: https://mkturkcan.github.io/tachymetry/
+  - Documentation:
+      - Overview: docs/index.md
+      - Installation: docs/installation.md
+      - Quick start: docs/quickstart.md
+  - Guide:
+      - Pipeline:
+          - Pipeline overview: docs/guide/pipeline.md
+          - Detection: docs/guide/detection.md
+          - Association and track hygiene: docs/guide/tracking.md
+          - Cross-track verdicts: docs/guide/verdicts.md
+          - Bird's-eye view and speed: docs/guide/bev-speed.md
+      - Calibration:
+          - Overview and choice of method: docs/guide/calibration.md
+          - Manual calibration: docs/guide/manual-calibration.md
+          - Automatic calibration: docs/guide/auto-calibration.md
+          - Lens models: docs/guide/lens-models.md
+      - Output and scale:
+          - Rendering: docs/guide/rendering.md
+          - Batch processing and multiple GPUs: docs/guide/batch.md
+          - Outputs and file formats: docs/guide/outputs.md
+          - Configuration reference: docs/guide/configuration.md
+  - Examples:
+      - Synthetic calibration: docs/examples/synthetic-calibration.md
+      - Lens rectification: docs/examples/lens-rectification.md
+      - Intersection clip, end to end: docs/examples/intersection.md
+      - Batch processing: docs/examples/batch.md
+      - Custom detectors: docs/examples/custom-detector.md
+  - Benchmarks: docs/benchmarks.md
+  - Limitations: docs/limitations.md
+  - API reference:
+      - tachymetry: docs/reference/tachymetry.md
+      - tachymetry.geometry: docs/reference/geometry.md
+      - tachymetry.calib: docs/reference/calib.md
+      - tachymetry.tracking: docs/reference/tracking.md
+      - tachymetry.render: docs/reference/render.md
+      - tachymetry.batch: docs/reference/batch.md
+      - tachymetry.results: docs/reference/results.md
+      - tachymetry.config: docs/reference/config.md
+  - About:
+      - Changelog: docs/changelog.md
+      - Citation: docs/citation.md

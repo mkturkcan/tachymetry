@@ -1,0 +1,506 @@
+{
+ "clip": {
+  "hero_time_s": 27.466666666666665,
+  "viewer_time_s": 13.466666666666667,
+  "summary": {
+   "tracks": 44,
+   "by_class": {
+    "person": 9,
+    "bus": 2,
+    "car": 31,
+    "bicycle": 2
+   },
+   "moving_by_class": {
+    "person": 8,
+    "bus": 2,
+    "car": 20,
+    "bicycle": 2
+   },
+   "parked_by_class": {
+    "car": 11
+   },
+   "rejected": {
+    "rider": 2,
+    "ghost": 1,
+    "duplicate": 2
+   },
+   "vehicle_speed_kmh": {
+    "median": 24.72,
+    "p85": 35.24,
+    "max": 55.82
+   }
+  },
+  "camera": "f=2163.0px (hfov 47.9 deg), height=28.40 m, pitch=18.22 deg, roll=-0.16 deg, yaw=133.7 deg, lens=identity"
+ },
+ "raw_vs_clean": {
+  "frame": 404,
+  "raw_boxes_in_frame": 54,
+  "raw_associations": 81,
+  "tachymetry_tracks": 44
+ },
+ "calibration_clip": {
+  "fused": {
+   "method": "auto:fused",
+   "camera": "f=2232.1px (hfov 46.5 deg), height=28.38 m, pitch=17.84 deg, roll=-0.48 deg, yaw=134.3 deg, lens=identity",
+   "focal_px": 2232.0766664332855,
+   "height_m": 28.381399988820558,
+   "pitch_deg": 17.837366221648818,
+   "roll_deg": -0.480012089416154,
+   "seconds": 10.2
+  },
+  "lines": {
+   "method": "auto:lines",
+   "camera": "f=1777.3px (hfov 56.7 deg), height=20.97 m, pitch=18.13 deg, roll=-3.10 deg, yaw=127.6 deg, lens=identity",
+   "focal_px": 1777.349852825967,
+   "height_m": 20.96731947952219,
+   "pitch_deg": 18.128510115162406,
+   "roll_deg": -3.0973840235938224,
+   "seconds": 10.0
+  },
+  "cuboids": {
+   "method": "auto:cuboids",
+   "camera": "f=2267.8px (hfov 45.9 deg), height=29.61 m, pitch=18.00 deg, roll=-0.15 deg, yaw=139.2 deg, lens=identity",
+   "focal_px": 2267.8233349364277,
+   "height_m": 29.606732788465454,
+   "pitch_deg": 17.997205438141915,
+   "roll_deg": -0.15480220784482762,
+   "seconds": 0.4
+  },
+  "depth": {
+   "method": "auto:depth",
+   "camera": "f=1792.5px (hfov 56.3 deg), height=30.97 m, pitch=22.92 deg, roll=-3.48 deg, yaw=110.4 deg, lens=identity",
+   "focal_px": 1792.4893264127572,
+   "height_m": 30.96860159095215,
+   "pitch_deg": 22.918989318586082,
+   "roll_deg": -3.483746827863399,
+   "seconds": 4.1
+  }
+ },
+ "synthetic_calibration": {
+  "true_camera": "f=914.0px (hfov 70.0 deg), height=8.00 m, pitch=32.00 deg, roll=1.50 deg, yaw=55.0 deg, lens=identity",
+  "seconds": 12.7,
+  "rows": {
+   "manual": {
+    "method": "manual",
+    "camera": "f=915.3px (hfov 69.9 deg), height=8.00 m, pitch=31.98 deg, roll=1.54 deg, yaw=55.0 deg, lens=identity",
+    "focal_pct": 0.1385746605690112,
+    "pitch_deg": -0.02476884506546284,
+    "roll_deg": 0.0419527961966466,
+    "height_m": -0.0009087337176447718,
+    "scale_pct": 0.05910322379640842,
+    "ground_rms_m": 0.019003252505348633,
+    "n_eval": 2304,
+    "cv_rmse_m": 0.09395819842235432
+   },
+   "lines": {
+    "method": "lines",
+    "camera": "f=889.6px (hfov 71.5 deg), height=8.00 m, pitch=32.43 deg, roll=1.83 deg, yaw=55.5 deg, lens=identity",
+    "focal_pct": -2.672496982748546,
+    "pitch_deg": 0.4282142943284484,
+    "roll_deg": 0.32998653491018515,
+    "height_m": -8.881784197001252e-16,
+    "scale_pct": -1.8364884269457593,
+    "ground_rms_m": 0.28631360907445885,
+    "n_eval": 2304,
+    "cv_rmse_m": null
+   },
+   "cuboids": {
+    "method": "cuboids",
+    "camera": "f=873.8px (hfov 72.4 deg), height=7.59 m, pitch=32.53 deg, roll=1.92 deg, yaw=61.8 deg, lens=identity",
+    "focal_pct": -4.403863298135181,
+    "pitch_deg": 0.5341467935221473,
+    "roll_deg": 0.4227957355176639,
+    "height_m": -0.40771899874765616,
+    "scale_pct": 0.7760949366129699,
+    "ground_rms_m": 0.29212477423199734,
+    "n_eval": 2304,
+    "cv_rmse_m": null
+   },
+   "auto": {
+    "method": "auto:lines",
+    "camera": "f=889.6px (hfov 71.5 deg), height=7.82 m, pitch=32.43 deg, roll=1.83 deg, yaw=55.5 deg, lens=identity",
+    "focal_pct": -2.672496982748546,
+    "pitch_deg": 0.4282142943284484,
+    "roll_deg": 0.3299865349101896,
+    "height_m": -0.17798107722097445,
+    "scale_pct": 0.39710979188323225,
+    "ground_rms_m": 0.17996904509714146,
+    "n_eval": 2304,
+    "cv_rmse_m": null
+   }
+  }
+ },
+ "lens": {
+  "division": {
+   "true": "division, k = -0.27",
+   "rows": {
+    "No correction (identity)": {
+     "estimate": "identity",
+     "rms_px": 34.66463388096795,
+     "max_px": 139.99277827154665,
+     "params": {
+      "model": "identity",
+      "image_size": [
+       1280,
+       720
+      ],
+      "center": [
+       639.5,
+       359.5
+      ]
+     }
+    },
+    "Plumb line, division": {
+     "estimate": "division, k = -0.068",
+     "rms_px": 26.922448000576175,
+     "max_px": 110.82870228492523,
+     "params": {
+      "model": "division",
+      "image_size": [
+       1280,
+       720
+      ],
+      "center": [
+       639.5,
+       359.5
+      ],
+      "k": -0.0676122546575418,
+      "scale": 734.3023900274328
+     }
+    },
+    "Plumb line, tan": {
+     "estimate": "tan, s = 1581 px",
+     "rms_px": 26.282633485540742,
+     "max_px": 108.19826852085443,
+     "params": {
+      "model": "equidistant",
+      "image_size": [
+       1280,
+       720
+      ],
+      "center": [
+       639.5,
+       359.5
+      ],
+      "s": 1580.5556553043605
+     }
+    },
+    "Vanishing-point consistency (tan or division)": {
+     "estimate": "division, k = -0.267",
+     "rms_px": 0.4981376751170325,
+     "max_px": 2.196639837255018,
+     "params": {
+      "model": "division",
+      "image_size": [
+       1280,
+       720
+      ],
+      "center": [
+       639.5,
+       359.5
+      ],
+      "k": -0.2666666666666667,
+      "scale": 734.3023900274328
+     }
+    },
+    "Manual, 16 points, lens auto (cross-validated)": {
+     "estimate": "division, k = -0.270",
+     "rms_px": 0.02809177433340387,
+     "max_px": 0.12403426690500224,
+     "params": {
+      "model": "division",
+      "image_size": [
+       1280,
+       720
+      ],
+      "center": [
+       639.5,
+       359.5
+      ],
+      "k": -0.2698123986034079,
+      "scale": 734.3023900274328
+     }
+    }
+   },
+   "seconds": 6.4
+  },
+  "equidistant": {
+   "true": "equidistant (tan), s = 900 px",
+   "rows": {
+    "No correction (identity)": {
+     "estimate": "identity",
+     "rms_px": 28.382651072490216,
+     "max_px": 114.47599045190105,
+     "params": {
+      "model": "identity",
+      "image_size": [
+       1280,
+       720
+      ],
+      "center": [
+       639.5,
+       359.5
+      ]
+     }
+    },
+    "Plumb line, division": {
+     "estimate": "division, k = 0.098",
+     "rms_px": 38.518032379069865,
+     "max_px": 150.82081140547808,
+     "params": {
+      "model": "division",
+      "image_size": [
+       1280,
+       720
+      ],
+      "center": [
+       639.5,
+       359.5
+      ],
+      "k": 0.09847869564764726,
+      "scale": 734.3023900274328
+     }
+    },
+    "Plumb line, tan": {
+     "estimate": "identity",
+     "rms_px": 28.382651072490216,
+     "max_px": 114.47599045190105,
+     "params": {
+      "model": "equidistant",
+      "image_size": [
+       1280,
+       720
+      ],
+      "center": [
+       639.5,
+       359.5
+      ],
+      "s": 1000000000000.0
+     }
+    },
+    "Vanishing-point consistency (tan or division)": {
+     "estimate": "division, k = -0.233",
+     "rms_px": 0.34453270482144505,
+     "max_px": 1.4004355102449244,
+     "params": {
+      "model": "division",
+      "image_size": [
+       1280,
+       720
+      ],
+      "center": [
+       639.5,
+       359.5
+      ],
+      "k": -0.2333333333333334,
+      "scale": 734.3023900274328
+     }
+    },
+    "Manual, 16 points, lens auto (cross-validated)": {
+     "estimate": "tan, s = 900 px",
+     "rms_px": 0.024871349564327634,
+     "max_px": 0.10989502130787135,
+     "params": {
+      "model": "equidistant",
+      "image_size": [
+       1280,
+       720
+      ],
+      "center": [
+       639.5,
+       359.5
+      ],
+      "s": 899.6689812986267
+     }
+    }
+   },
+   "seconds": 6.1
+  },
+  "brown": {
+   "true": "Brown-Conrady, k1 = -0.25, k2 = 0.06",
+   "rows": {
+    "No correction (identity)": {
+     "estimate": "identity",
+     "rms_px": 37.47481196082226,
+     "max_px": 121.46857355953414,
+     "params": {
+      "model": "identity",
+      "image_size": [
+       1280,
+       720
+      ],
+      "center": [
+       639.5,
+       359.5
+      ]
+     }
+    },
+    "Plumb line, division": {
+     "estimate": "division, k = -0.223",
+     "rms_px": 9.519861107160297,
+     "max_px": 20.04497246122347,
+     "params": {
+      "model": "division",
+      "image_size": [
+       1280,
+       720
+      ],
+      "center": [
+       639.5,
+       359.5
+      ],
+      "k": -0.2234548837119155,
+      "scale": 734.3023900274328
+     }
+    },
+    "Plumb line, tan": {
+     "estimate": "tan, s = 903 px",
+     "rms_px": 8.616346387062869,
+     "max_px": 17.2548538078141,
+     "params": {
+      "model": "equidistant",
+      "image_size": [
+       1280,
+       720
+      ],
+      "center": [
+       639.5,
+       359.5
+      ],
+      "s": 903.1808447198606
+     }
+    },
+    "Vanishing-point consistency (tan or division)": {
+     "estimate": "division, k = -0.300",
+     "rms_px": 3.4249628234013554,
+     "max_px": 40.67813372080668,
+     "params": {
+      "model": "division",
+      "image_size": [
+       1280,
+       720
+      ],
+      "center": [
+       639.5,
+       359.5
+      ],
+      "k": -0.30000000000000004,
+      "scale": 734.3023900274328
+     }
+    },
+    "Manual, 16 points, lens auto (cross-validated)": {
+     "estimate": "division, k = -0.279",
+     "rms_px": 2.6881945735893593,
+     "max_px": 26.224406032403056,
+     "params": {
+      "model": "division",
+      "image_size": [
+       1280,
+       720
+      ],
+      "center": [
+       639.5,
+       359.5
+      ],
+      "k": -0.27925324824448783,
+      "scale": 734.3023900274328
+     }
+    }
+   },
+   "seconds": 6.7
+  },
+  "fisheye": {
+   "true": "Kannala-Brandt, k1 = 0.05, k2 = -0.01",
+   "rows": {
+    "No correction (identity)": {
+     "estimate": "identity",
+     "rms_px": 22.341737377679802,
+     "max_px": 88.2630430058138,
+     "params": {
+      "model": "identity",
+      "image_size": [
+       1280,
+       720
+      ],
+      "center": [
+       639.5,
+       359.5
+      ]
+     }
+    },
+    "Plumb line, division": {
+     "estimate": "division, k = -0.177",
+     "rms_px": 1.8280073028955124,
+     "max_px": 9.040147820215097,
+     "params": {
+      "model": "division",
+      "image_size": [
+       1280,
+       720
+      ],
+      "center": [
+       639.5,
+       359.5
+      ],
+      "k": -0.17742556351026764,
+      "scale": 734.3023900274328
+     }
+    },
+    "Plumb line, tan": {
+     "estimate": "tan, s = 1040 px",
+     "rms_px": 2.52627391107752,
+     "max_px": 10.904504349010109,
+     "params": {
+      "model": "equidistant",
+      "image_size": [
+       1280,
+       720
+      ],
+      "center": [
+       639.5,
+       359.5
+      ],
+      "s": 1040.1266588144547
+     }
+    },
+    "Vanishing-point consistency (tan or division)": {
+     "estimate": "division, k = -0.200",
+     "rms_px": 1.1237469308685377,
+     "max_px": 2.920106800723116,
+     "params": {
+      "model": "division",
+      "image_size": [
+       1280,
+       720
+      ],
+      "center": [
+       639.5,
+       359.5
+      ],
+      "k": -0.20000000000000004,
+      "scale": 734.3023900274328
+     }
+    },
+    "Manual, 16 points, lens auto (cross-validated)": {
+     "estimate": "division, k = -0.192",
+     "rms_px": 0.2507595965355223,
+     "max_px": 1.3182236736243653,
+     "params": {
+      "model": "division",
+      "image_size": [
+       1280,
+       720
+      ],
+      "center": [
+       639.5,
+       359.5
+      ],
+      "k": -0.1921094904975246,
+      "scale": 734.3023900274328
+     }
+    }
+   },
+   "seconds": 6.9
+  }
+ }
+}

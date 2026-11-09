@@ -1,0 +1,163 @@
+/* Tachymetry documentation theme: the colours, type and spacing of the project page. */
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap");
+
+:root {
+  --tm-bg: #0a0b0d;
+  --tm-surface: #111317;
+  --tm-surface-2: #171a1f;
+  --tm-line: rgba(255, 255, 255, 0.08);
+  --tm-line-strong: rgba(255, 255, 255, 0.16);
+  --tm-text: #ecebe8;
+  --tm-muted: #9b9ca3;
+  --tm-faint: #6c6e76;
+  --tm-amber: #ffb547;
+  --tm-cyan: #6fe3ff;
+  --md-text-font: "Geist";
+  --md-code-font: "Geist Mono";
+}
+
+[data-md-color-scheme="slate"] {
+  --md-hue: 220;
+  --md-default-bg-color: var(--tm-bg);
+  --md-default-bg-color--light: rgba(10, 11, 13, 0.54);
+  --md-default-bg-color--lighter: rgba(10, 11, 13, 0.26);
+  --md-default-bg-color--lightest: rgba(10, 11, 13, 0.07);
+  --md-default-fg-color: rgba(236, 235, 232, 0.92);
+  --md-default-fg-color--light: var(--tm-muted);
+  --md-default-fg-color--lighter: var(--tm-faint);
+  --md-default-fg-color--lightest: rgba(236, 235, 232, 0.12);
+  --md-primary-fg-color: var(--tm-bg);
+  --md-primary-fg-color--light: var(--tm-surface);
+  --md-primary-fg-color--dark: var(--tm-bg);
+  --md-primary-bg-color: var(--tm-text);
+  --md-primary-bg-color--light: var(--tm-muted);
+  --md-accent-fg-color: var(--tm-amber);
+  --md-accent-fg-color--transparent: rgba(255, 181, 71, 0.1);
+  --md-accent-bg-color: #1a1206;
+  --md-typeset-color: rgba(236, 235, 232, 0.9);
+  --md-typeset-a-color: var(--tm-cyan);
+  --md-code-bg-color: var(--tm-surface);
+  --md-code-fg-color: #c9cad0;
+  --md-code-hl-color: rgba(255, 181, 71, 0.18);
+  --md-code-hl-keyword-color: #e8e8ec;
+  --md-code-hl-string-color: var(--tm-cyan);
+  --md-code-hl-number-color: var(--tm-amber);
+  --md-code-hl-constant-color: var(--tm-amber);
+  --md-code-hl-function-color: #c7b8ff;
+  --md-code-hl-name-color: #c9cad0;
+  --md-code-hl-comment-color: var(--tm-faint);
+  --md-code-hl-operator-color: var(--tm-muted);
+  --md-code-hl-punctuation-color: var(--tm-muted);
+  --md-code-hl-special-color: #ff9b7a;
+  --md-code-hl-variable-color: #c9cad0;
+  --md-code-hl-generic-color: var(--tm-muted);
+  --md-footer-bg-color: var(--tm-bg);
+  --md-footer-bg-color--dark: var(--tm-bg);
+  --md-footer-fg-color: var(--tm-muted);
+  --md-footer-fg-color--light: var(--tm-faint);
+  --md-footer-fg-color--lighter: var(--tm-faint);
+  --md-typeset-table-color: var(--tm-line-strong);
+  --md-typeset-table-color--light: rgba(255, 255, 255, 0.03);
+  --md-admonition-bg-color: var(--tm-surface);
+  --md-admonition-fg-color: rgba(236, 235, 232, 0.9);
+  --md-shadow-z1: none;
+  --md-shadow-z2: none;
+  --md-shadow-z3: 0 0 0 1px var(--tm-line-strong);
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "ss01", "tnum";
+}
+
+/* Header and tabs: flat, hairline separated, like the project page navigation. */
+.md-header {
+  background-color: rgba(10, 11, 13, 0.86);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--tm-line);
+  box-shadow: none;
+}
+.md-header__title { font-weight: 600; letter-spacing: -0.01em; }
+.md-tabs { background-color: var(--tm-bg); border-bottom: 1px solid var(--tm-line); }
+.md-tabs__link { font-size: 0.72rem; opacity: 0.75; }
+.md-tabs__link--active, .md-tabs__link:hover { color: var(--tm-text); opacity: 1; }
+.md-search__form { background-color: var(--tm-surface); border: 1px solid var(--tm-line); border-radius: 999px; }
+.md-search__input::placeholder { color: var(--tm-faint); }
+
+/* Navigation */
+.md-nav { font-size: 0.72rem; }
+.md-nav__title { color: var(--tm-faint); font-weight: 500; }
+.md-nav__item--section > .md-nav__link { color: var(--tm-faint); font-weight: 500; letter-spacing: 0.02em; }
+.md-nav__link--active, .md-nav__link:is(:focus, :hover) { color: var(--tm-amber); }
+
+/* Typography */
+.md-typeset { font-size: 0.82rem; line-height: 1.7; }
+.md-typeset h1, .md-typeset h2, .md-typeset h3 { color: var(--tm-text); font-weight: 600; }
+.md-typeset h1 { font-size: 2.1rem; letter-spacing: -0.035em; line-height: 1.08; margin-bottom: 1.4em; }
+.md-typeset h2 { font-size: 1.32rem; letter-spacing: -0.025em; line-height: 1.2; margin-top: 2.4em; }
+.md-typeset h3 { font-size: 1.02rem; letter-spacing: -0.015em; margin-top: 1.9em; }
+.md-typeset h4 { font-weight: 600; color: var(--tm-text); }
+.md-typeset p, .md-typeset ul, .md-typeset ol { margin-bottom: 1.05em; }
+.md-typeset a { text-decoration: none; border-bottom: 1px solid rgba(111, 227, 255, 0.28); }
+.md-typeset a:hover { color: var(--tm-amber); border-bottom-color: rgba(255, 181, 71, 0.5); }
+.md-typeset a.headerlink, .md-typeset .md-button { border-bottom: 0; }
+.md-typeset hr { border-bottom-color: var(--tm-line); }
+.md-content__inner { padding-bottom: 3.5rem; }
+.md-main__inner { margin-top: 1.6rem; }
+
+/* Code */
+.md-typeset code { border-radius: 6px; font-size: 0.82em; }
+.md-typeset pre > code { border-radius: 14px; padding: 1.1em 1.3em; }
+.md-typeset pre { border: 1px solid var(--tm-line); border-radius: 14px; }
+.md-typeset .highlight { border-radius: 14px; }
+.md-typeset :not(pre) > code { background-color: var(--tm-surface-2); color: #dcdde2; padding: 0.1em 0.38em; }
+.md-clipboard { color: var(--tm-faint); }
+
+/* Tables */
+.md-typeset table:not([class]) {
+  border: 1px solid var(--tm-line);
+  border-radius: 14px;
+  font-size: 0.74rem;
+  background-color: var(--tm-surface);
+  overflow: hidden;
+}
+.md-typeset table:not([class]) th { background-color: var(--tm-surface-2); color: var(--tm-text); font-weight: 500; }
+.md-typeset table:not([class]) td, .md-typeset table:not([class]) th { border-top: 1px solid var(--tm-line); padding: 0.75em 1em; }
+.md-typeset table:not([class]) tr:hover { background-color: rgba(255, 255, 255, 0.02); box-shadow: none; }
+
+/* Admonitions */
+.md-typeset .admonition, .md-typeset details {
+  border: 1px solid var(--tm-line-strong);
+  border-radius: 14px;
+  background-color: var(--tm-surface);
+  box-shadow: none;
+  font-size: 0.78rem;
+}
+.md-typeset .admonition-title, .md-typeset summary { background-color: rgba(255, 255, 255, 0.03) !important; border-radius: 13px 13px 0 0; }
+.md-typeset .admonition.note, .md-typeset details.note { border-color: rgba(111, 227, 255, 0.35); }
+.md-typeset .admonition.warning, .md-typeset details.warning { border-color: rgba(255, 181, 71, 0.45); }
+
+/* Figures and images */
+.md-typeset img { border-radius: 14px; border: 1px solid var(--tm-line); background-color: var(--tm-surface); }
+.md-typeset figure { margin: 2em auto; }
+.md-typeset figcaption { color: var(--tm-faint); font-size: 0.72rem; max-width: 64ch; margin-top: 0.8em; }
+.md-typeset svg { max-width: 100%; height: auto; }
+.md-typeset .tm-diagram svg { display: block; margin: 1.6em auto; }
+
+/* Math */
+.md-typeset .arithmatex { overflow-x: auto; overflow-y: hidden; }
+
+/* API reference (mkdocstrings) */
+.md-typeset .doc-heading code { background: none; padding: 0; }
+.md-typeset .doc-signature { border-radius: 10px; }
+.doc-contents { padding-left: 0.4rem; border-left: 1px solid var(--tm-line); }
+.md-typeset .doc-symbol { border-radius: 4px; }
+
+/* Footer */
+.md-footer { border-top: 1px solid var(--tm-line); }
+.md-footer-meta { background-color: var(--tm-bg); border-top: 1px solid var(--tm-line); }
+.md-copyright { color: var(--tm-faint); }
+
+/* Logo: the mark is drawn with currentColor strokes. */
+.md-header__button.md-logo img, .md-nav__button.md-logo img { height: 1.4rem; }
