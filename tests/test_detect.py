@@ -266,3 +266,25 @@ def test_detect_video_stores_masks(tmp_path):
     assert ds.masks is not None and len(ds.masks) == 3 and ds.masks.has(2)
     assert ds.masks.full(0, (60, 40))[2:8, 2:8].all()
 
+
+def test_prefetch_joins_its_worker_when_the_consumer_stops():
+    """A consumer that stops early (max_frames) must not leave the decoder running while the source closes."""
+    import threading
+    import time
+
+    from tachymetry.io.video import prefetch
+
+    workers = []
+
+    def frames():
+        workers.append(threading.current_thread())
+        for i in range(10_000):
+            time.sleep(0.001)
+            yield i
+
+    got = []
+    for x in prefetch(frames(), depth=4):
+        got.append(x)
+        if len(got) == 3:
+            break
+    assert got == [0, 1, 2] and workers and not workers[0].is_alive()

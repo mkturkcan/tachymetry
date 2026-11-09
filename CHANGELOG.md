@@ -9,6 +9,7 @@
 - Detection: `DetectorConfig.imgsz` and `DetectorConfig.conf` default to `None`, the back-end's own values (RF-DETR 1008 and 0.15 for `rfdetr-seg-l`, SAM 3 1008 and 0.30, UrbanOmniDetect-2 960 and 0.10). Detectors may return a fifth element per image, the mask crops.
 - UrbanOmniDetect-2 (`uod2-*`) needs the optional `uod2` extra (`pip install "tachymetry[uod2]"`), which installs Ultralytics; `UltralyticsDetector` is now `UOD2Detector`. The `yolo:<weights>` back-end is removed. `transformers` and `rfdetr` are core dependencies.
 - `tachymetry download --detector <name>` fetches RF-DETR, SAM 3 and UrbanOmniDetect-2 weights; the default is `rfdetr-seg-l`.
+- Video decoding: a consumer that stops early (`max_frames`) now stops and joins the prefetch thread before the video is released.
 
 ## 0.1.0 (2026-11-09)
 

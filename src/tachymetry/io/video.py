@@ -288,14 +288,22 @@ class _FFmpegReader:
 
 
 def prefetch(iterator: Iterator, depth: int = 16) -> Iterator:
-    """Run an iterator in a background thread (overlaps decoding with inference)."""
+    """Run an iterator in a background thread (overlaps decoding with inference).
+
+    When the consumer stops early (``break``, ``max_frames``), the worker is
+    stopped and joined before control returns, so the source is never released
+    while the worker is still decoding from it.
+    """
     q: queue.Queue = queue.Queue(maxsize=depth)
     sentinel = object()
     error: list[BaseException] = []
+    stop = threading.Event()
 
     def worker() -> None:
         try:
             for item in iterator:
+                if stop.is_set():
+                    break
                 q.put(item)
         except BaseException as exc:  # noqa: BLE001 - re-raised in the consumer
             error.append(exc)
@@ -304,11 +312,19 @@ def prefetch(iterator: Iterator, depth: int = 16) -> Iterator:
 
     t = threading.Thread(target=worker, daemon=True)
     t.start()
-    while True:
-        item = q.get()
-        if item is sentinel:
-            break
-        yield item
-    t.join()
+    try:
+        while True:
+            item = q.get()
+            if item is sentinel:
+                break
+            yield item
+    finally:
+        stop.set()
+        while t.is_alive():  # drain, so that a worker blocked on a full queue can finish
+            try:
+                q.get(timeout=0.05)
+            except queue.Empty:
+                pass
+        t.join()
     if error:
         raise error[0]
