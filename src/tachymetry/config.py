@@ -50,19 +50,26 @@ SUPER_CLASS = {
 
 @dataclass
 class DetectorConfig:
-    """Object detector and detection-level post-processing."""
+    """Object detector and detection-level post-processing.
 
-    name: str = "uod2-x"  #: ``uod2-{n,s,m,l,x}``, ``yolo:<weights>``, ``precomputed:<.npz file or folder>``
-    weights: str | None = None  #: explicit checkpoint path (overrides the download)
-    imgsz: int = 960  #: inference size; 960 recovers small, distant traffic
-    conf: float = 0.10  #: model threshold; low-score detections only extend existing tracks
+    ``imgsz`` and ``conf`` default to ``None``, which selects the back-end's own
+    values: RF-DETR a square input of twice its training resolution, at most
+    1008 pixels (1008 for ``rfdetr-seg-l``), and 0.15; SAM 3 its fixed 1008 x
+    1008 input and 0.30; UrbanOmniDetect-2 a letterboxed long side of 960 and
+    0.10. Detections below ``TrackerConfig.high_conf`` only extend existing tracks.
+    """
+
+    name: str = "rfdetr-seg-l"  #: ``rfdetr[-seg]-{n,s,m,l}``, ``sam3``, ``uod2-{n,s,m,l,x}`` or ``precomputed:<path>``
+    weights: str | None = None  #: explicit checkpoint (path, or Hugging Face repository for ``sam3``)
+    imgsz: int | None = None  #: inference size in pixels; ``None`` = the back-end's default
+    conf: float | None = None  #: model score threshold; ``None`` = the back-end's default
     class_conf: dict[str, float] = field(default_factory=lambda: {"person": 0.40, "bicycle": 0.50, "motorcycle": 0.50})
     classes: tuple[str, ...] = ROAD_CLASSES
     cuboid_conf: float = 0.5  #: minimum per-corner cuboid confidence (UrbanOmniDetect-2)
     nested_containment: float = 0.85  #: drop a vehicle box this much inside a larger vehicle box ...
     nested_ground_overlap: float = 0.30  #: ... when their ground footprints also overlap this much
     batch: int = 8
-    half: bool = True  #: FP16 inference on CUDA
+    half: bool = True  #: reduced-precision inference on CUDA (FP16; BF16 for SAM 3 where supported)
     max_box_width_frac: float = 1.01  #: drop boxes wider than this fraction of the frame (1.01 = off)
 
 

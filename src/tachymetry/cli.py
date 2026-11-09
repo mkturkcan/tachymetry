@@ -225,14 +225,9 @@ def cmd_demo(args: argparse.Namespace) -> int:
 
 
 def cmd_download(args: argparse.Namespace) -> int:
-    from .detect.backends import uod2_checkpoint
+    from .detect import download_weights
 
-    name = args.detector.lower()
-    if not name.startswith("uod2"):
-        _print("Only UrbanOmniDetect-2 weights are downloaded by Tachymetry; Ultralytics fetches its own.")
-        return 0
-    size = name.split("-")[-1] if "-" in name else "x"
-    _print(f"{uod2_checkpoint(size)}")
+    _print(download_weights(args.detector))
     return 0
 
 
@@ -264,9 +259,13 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--camera", default="auto", help="auto | camera.json | correspondences.yaml | folder of cameras")
     r.add_argument("--config", help="YAML/JSON configuration file")
     r.add_argument("--set", action="append", metavar="KEY=VALUE", help="override any setting, e.g. detector.imgsz=1280")
-    r.add_argument("--detector", help="uod2-{n,s,m,l,x} or yolo:<weights>")
+    r.add_argument(
+        "--detector",
+        help="rfdetr-seg-{n,s,m,l} (default rfdetr-seg-l), rfdetr-{n,s,m,l}, sam3, uod2-{n,s,m,l,x} "
+        "or precomputed:<npz or folder>",
+    )
     r.add_argument("--rate", type=float, help="frames analysed per second (default 15)")
-    r.add_argument("--imgsz", type=int, help="detector input size (default 960)")
+    r.add_argument("--imgsz", type=int, help="detector input size (default: the detector's own, e.g. 1008)")
     r.add_argument("--devices", default="auto", help="auto | cpu | cuda | 0,1 | cuda:0,cuda:2")
     r.add_argument("--workers-per-device", default="auto", help="auto or an integer")
     r.add_argument("--render", action="store_true", help="also write an annotated overlay.mp4 per video")
@@ -318,7 +317,7 @@ def build_parser() -> argparse.ArgumentParser:
     m.set_defaults(func=cmd_demo)
 
     w = sub.add_parser("download", help="download detector weights")
-    w.add_argument("--detector", default="uod2-x")
+    w.add_argument("--detector", default="rfdetr-seg-l", help="rfdetr-seg-{n,s,m,l}, rfdetr-{n,s,m,l}, sam3, uod2-*")
     w.set_defaults(func=cmd_download)
 
     g = sub.add_parser("config", help="print or save the default configuration")

@@ -31,7 +31,7 @@ jobs:
           cache: pip
       # The API reference is read statically from src/ by mkdocstrings (griffe), and the configuration
       # reference is generated from src/tachymetry/config.py by docs/hooks/config_reference.py, so the
-      # package's run-time dependencies (PyTorch, Ultralytics) are not needed to build the site.
+      # package's run-time dependencies (PyTorch, RF-DETR, transformers) are not needed to build the site.
       - name: Install MkDocs
         run: pip install "mkdocs-material>=9.5" "mkdocstrings[python]>=0.25"
       - name: Build

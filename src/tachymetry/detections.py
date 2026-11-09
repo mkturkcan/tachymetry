@@ -12,19 +12,25 @@ import numpy as np
 
 from .config import ROAD_CLASSES
 
-__all__ = ["FrameDetections", "DetectionSet", "MaskStore", "crop_mask"]
+__all__ = ["FrameDetections", "DetectionSet", "MaskStore", "crop_mask", "crop_window"]
 
 
 MaskCrop = tuple[int, int, np.ndarray]  # (x0, y0, bool mask of shape (h, w)) in full-resolution pixels
 
 
-def crop_mask(mask: np.ndarray, xyxy: np.ndarray, pad: int = 2) -> MaskCrop | None:
-    """Crop a full-frame boolean instance mask to its box (plus ``pad`` pixels)."""
-    h, w = mask.shape
+def crop_window(xyxy: np.ndarray, shape: tuple[int, int], pad: int = 2) -> tuple[int, int, int, int]:
+    """Pixel window ``(x0, y0, x1, y1)`` (end exclusive) of a box plus ``pad``, clipped to ``shape = (h, w)``."""
+    h, w = shape
     x0 = int(max(0, np.floor(xyxy[0]) - pad))
     y0 = int(max(0, np.floor(xyxy[1]) - pad))
     x1 = int(min(w, np.ceil(xyxy[2]) + pad + 1))
     y1 = int(min(h, np.ceil(xyxy[3]) + pad + 1))
+    return x0, y0, x1, y1
+
+
+def crop_mask(mask: np.ndarray, xyxy: np.ndarray, pad: int = 2) -> MaskCrop | None:
+    """Crop a full-frame boolean instance mask to its box (plus ``pad`` pixels)."""
+    x0, y0, x1, y1 = crop_window(xyxy, mask.shape, pad)
     if x1 <= x0 or y1 <= y0:
         return None
     m = np.ascontiguousarray(mask[y0:y1, x0:x1], dtype=bool)

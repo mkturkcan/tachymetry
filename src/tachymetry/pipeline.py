@@ -208,9 +208,9 @@ class Pipeline:
         if res.camera.meta.get("metric") is False:
             raise CalibrationError(
                 f"{src.path.name}: automatic calibration found the camera orientation but no metric scale "
-                "(the detector provides no 3D cuboids). Use the default detector (uod2-*), give a scale cue "
-                "with --set calibration.scale=height=<metres>, or calibrate manually "
-                "(tachymetry calibrate pick / manual)."
+                "(the detector provides no 3D cuboids). Give a scale cue with "
+                "--set calibration.scale=height=<metres>, calibrate manually (tachymetry calibrate pick / manual), "
+                "or use a cuboid detector (uod2-*, from the optional uod2 extra)."
             )
         if res.camera.height > MAX_PLAUSIBLE_HEIGHT_M:
             note = (

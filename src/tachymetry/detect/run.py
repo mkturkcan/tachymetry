@@ -36,8 +36,10 @@ def detect_video(
         if not buf:
             return
         outs = detector([b[2] for b in buf])
-        for (idx, t, _), (xyxy, score, cls, cub) in zip(buf, outs):
-            frames.append(FrameDetections(idx, t, xyxy, score, cls, cub))
+        for (idx, t, _), res in zip(buf, outs):
+            xyxy, score, cls, cub = res[:4]
+            masks = res[4] if len(res) > 4 else None  # detectors without masks may return four elements
+            frames.append(FrameDetections(idx, t, xyxy, score, cls, cub, None if masks is None else list(masks)))
         buf.clear()
         if progress is not None:
             progress(len(frames), expected)

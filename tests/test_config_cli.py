@@ -20,7 +20,7 @@ def test_partial_config_overrides_defaults(tmp_path):
     p = tmp_path / "partial.yaml"
     p.write_text("detector:\n  name: uod2-s\n")
     cfg = PipelineConfig.load(p)
-    assert cfg.detector.name == "uod2-s" and cfg.detector.imgsz == 960
+    assert cfg.detector.name == "uod2-s" and cfg.detector.imgsz is None and cfg.detector.batch == 8
 
 
 def test_unknown_key_raises():
