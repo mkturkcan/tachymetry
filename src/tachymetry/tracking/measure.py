@@ -3,7 +3,9 @@
 For each detection this computes, in world metres:
 
 * the **ground contact**: the ground point under the bottom-centre of the box,
-  i.e. the vehicle edge nearest the camera;
+  i.e. the vehicle edge nearest the camera; with instance masks, the
+  bottom-centre of the mask (mean column of its lowest three rows), which lies
+  on the object's own silhouette;
 * the **footprint** from predicted cuboid corners when trusted (UrbanOmniDetect-2):
   its four ground corners, centroid, heading (front face = corners 0 and 3),
   length and width;
@@ -65,6 +67,7 @@ class GroundObservations:
     heading: np.ndarray  # (M,) radians, NaN without a trusted footprint
     length: np.ndarray  # (M,)
     width: np.ndarray  # (M,)
+    has_mask: np.ndarray | None = None  # (M,) bool: contact from the instance mask
 
     @property
     def has_footprint(self) -> np.ndarray:
@@ -79,6 +82,17 @@ def measure_ground(dets: DetectionSet, camera: Camera, cfg: HygieneConfig) -> Gr
         camera = camera.resized((w, h))
     xyxy = dets.xyxy.astype(np.float64)
     bottom = np.column_stack([(xyxy[:, 0] + xyxy[:, 2]) / 2, xyxy[:, 3]])
+    has_mask = None
+    if dets.masks is not None and cfg.mask_geometry and m:
+        from .envelope import mask_contact_px
+
+        has_mask = np.zeros(m, bool)
+        for i in range(m):
+            crop = dets.masks.crop(i)
+            p = mask_contact_px(crop) if crop is not None else None
+            if p is not None:
+                bottom[i] = p
+                has_mask[i] = True
     contact = camera.image_to_ground(bottom) if m else np.zeros((0, 2))
     gsd = camera.ground_sampling_distance(bottom) if m else np.zeros(0)
     below = camera.below_horizon(bottom, margin_px=2.0) if m else np.zeros(0, bool)
@@ -130,4 +144,4 @@ def measure_ground(dets: DetectionSet, camera: Camera, cfg: HygieneConfig) -> Gr
             heading[idx] = np.arctan2(ax[good, 1], ax[good, 0])
             length[idx] = L[good]
             width[idx] = W[good]
-    return GroundObservations(contact, gsd, valid, truncated, big, quad, center, heading, length, width)
+    return GroundObservations(contact, gsd, valid, truncated, big, quad, center, heading, length, width, has_mask)

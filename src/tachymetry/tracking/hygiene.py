@@ -12,7 +12,10 @@ Stages, in order (all thresholds in seconds and metres):
 4. **End trimming** of truncated, frame-filling and far-field-collapsed boxes.
    Truncated boxes inside a track keep their time stamps but contribute no
    measurement.
-5. **Centre estimation**: the trusted cuboid footprint centroid where available;
+5. **Centre estimation**: for vehicles with instance masks, the mask path of
+   :mod:`tachymetry.tracking.maskgeom` (mask ground contact, truncation-aware
+   envelope anchor and calibrated box-silhouette fit with shared dimensions);
+   otherwise the trusted cuboid footprint centroid where available, and
    elsewhere the ground contact pushed along the viewing ray by half the
    footprint's ray extent, minus the parallax of the lowest visible edge, with
    the footprint-model residual interpolated through gaps.
@@ -28,13 +31,16 @@ Stages, in order (all thresholds in seconds and metres):
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 
 from ..config import SUPER_CLASS, HygieneConfig
 from ..detections import DetectionSet
 from ..geometry.camera import Camera
+from .boxfit import StreetAxes
+from .maskgeom import vehicle_geometry
 from .measure import CLEARANCE_PRIORS, DIM_BOUNDS, GroundObservations, dims_for
 from .model import Flags, Track
 from .signal import fill_angles, hampel, running_median, segments_by_gap, smooth_kinematics, wrap
@@ -48,6 +54,8 @@ class TrackContext:
     obs: GroundObservations
     camera: Camera
     cfg: HygieneConfig
+    axes: StreetAxes | None = None  #: street axes from moving traffic (stopped vehicles' headings)
+    mask_cache: dict[int, Any] = field(default_factory=dict)  #: per-detection mask envelopes
 
     @property
     def image_size(self) -> tuple[int, int]:
@@ -456,7 +464,20 @@ def _build(rows: np.ndarray, ctx: TrackContext, cls: str, stats: HygieneStats) -
         stats.dropped_short += 1
         return None
     L, W, H = _dims(rows, ctx, cls, use)
-    if cfg.footprints:
+    geo = None
+    if cfg.footprints and sup == "vehicle" and cfg.mask_geometry and d.masks is not None:
+        geo = vehicle_geometry(rows, d, o, ctx.camera, cfg, cls, use, ctx.axes, ctx.mask_cache)
+    if geo is not None:
+        # occlusion and truncation are handled by the shared-dimension box fit and the envelope anchor, so partly
+        # visible samples are kept rather than trimmed
+        hidden = use & ~geo.measured
+        use = use & geo.measured
+        if use.sum() < 3:
+            stats.dropped_short += 1
+            return None
+        centre, hd_model, has_fp = geo.centre, geo.heading, geo.box_ok & use
+        L, W, H = geo.L, geo.W, geo.H
+    elif cfg.footprints:
         centre, hd_model, has_fp = _centres(rows, ctx, cls, use, L, W)
         if sup == "vehicle" and cfg.trim:
             partial = _partial_visibility(rows, ctx, centre, hd_model, L, W, H, has_fp)
@@ -481,7 +502,11 @@ def _build(rows: np.ndarray, ctx: TrackContext, cls: str, stats: HygieneStats) -
         has_fp = np.zeros(len(rows), bool)
     flags = np.full(len(rows), Flags.OBSERVED, np.uint8)
     flags[~use] = Flags.INTERPOLATED | Flags.TRUNCATED
+    if geo is not None:
+        flags[hidden] = Flags.INTERPOLATED  # hidden behind an occluder, not truncated by the frame
     flags[has_fp] |= Flags.FOOTPRINT
+    if geo is not None:
+        flags[has_fp] |= Flags.SILHOUETTE
     meas = centre.copy()
     meas[~use] = np.nan
     ok = use.copy()
@@ -510,9 +535,12 @@ def _build(rows: np.ndarray, ctx: TrackContext, cls: str, stats: HygieneStats) -
     centre, meas, flags, hd_model, has_fp = centre[sel], meas[sel], flags[sel], hd_model[sel], has_fp[sel]
     sp = np.linalg.norm(vel, axis=1)
     move = cfg.move_speed_kmh / 3.6
-    heading = np.where(sp > move, np.arctan2(vel[:, 1], vel[:, 0]), np.nan)
-    if np.isfinite(heading).sum() == 0:
-        heading = hd_model.copy()
+    if geo is not None:
+        heading = hd_model.copy()  # trajectory heading with the silhouette-measured correction
+    else:
+        heading = np.where(sp > move, np.arctan2(vel[:, 1], vel[:, 0]), np.nan)
+        if np.isfinite(heading).sum() == 0:
+            heading = hd_model.copy()
     heading = fill_angles(heading)
     if cfg.hold_still:
         _hold_still(t, pos, vel, meas, cfg, flags)
@@ -554,7 +582,10 @@ def _build(rows: np.ndarray, ctx: TrackContext, cls: str, stats: HygieneStats) -
         vel[:] = 0.0
         flags |= Flags.HELD
         fh = o.heading[rows]
-        if np.isfinite(fh).any():
+        if geo is not None:
+            ref = has_fp if has_fp.any() else np.ones(len(rows), bool)
+            heading[:] = np.angle(np.mean(np.exp(2j * hd_model[ref]))) / 2
+        elif np.isfinite(fh).any():
             heading[:] = np.angle(np.nanmean(np.exp(2j * fh[np.isfinite(fh)]))) / 2
         else:
             heading[:] = float(np.angle(np.mean(np.exp(1j * heading))))
@@ -581,6 +612,13 @@ def _build(rows: np.ndarray, ctx: TrackContext, cls: str, stats: HygieneStats) -
         state=state,
         cuboid=None if d.cuboid is None else d.cuboid[rows].copy(),
     )
+    if geo is not None:
+        tr.meta["geometry"] = {
+            "source": geo.source,
+            "clearance_m": round(geo.gap, 3),
+            "silhouette_share": round(float(np.mean(has_fp)), 3),
+            "seconds": round(geo.seconds, 3),
+        }
     reason = _validity(tr, ctx) if (state == "moving" and cfg.validity) else ""
     if reason:
         tr.verdict, tr.reason = "invalid", reason

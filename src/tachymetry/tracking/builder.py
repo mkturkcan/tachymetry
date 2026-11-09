@@ -11,6 +11,7 @@ from ..config import PipelineConfig
 from ..detections import DetectionSet
 from ..geometry.camera import Camera
 from .associate import ByteTracker
+from .boxfit import street_axes
 from .hygiene import HygieneStats, TrackContext, process_raw_track
 from .measure import GroundObservations, measure_ground
 from .model import Track
@@ -59,6 +60,8 @@ def build_tracks(dets: DetectionSet, camera: Camera, cfg: PipelineConfig) -> tup
     ctx = TrackContext(dets, obs, camera, cfg.hygiene)
     stats = HygieneStats()
     raw = _group(ids)
+    if cfg.hygiene.mask_geometry and dets.masks is not None:
+        ctx.axes = street_axes(raw, dets, obs, cfg.hygiene)
     stats.raw_tracks = len(raw)
     tracks: list[Track] = []
     for rows in raw:

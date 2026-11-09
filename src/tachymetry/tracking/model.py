@@ -18,7 +18,8 @@ class Flags:
     REPAIRED = 4  #: an outlier replaced by the local median
     TRUNCATED = 8  #: the box touched the image border
     HELD = 16  #: position frozen during a stop (speed set to zero)
-    FOOTPRINT = 32  #: centre measured from a trusted cuboid footprint
+    FOOTPRINT = 32  #: centre measured from a footprint (trusted cuboid corners or a silhouette box fit)
+    SILHOUETTE = 64  #: centre and heading from the calibrated box fit to the instance mask
 
 
 #: Track-level verdicts. Only ``ok`` tracks appear in default exports and renders.

@@ -59,7 +59,15 @@ from typing import Any
 
 import numpy as np
 
-__all__ = ["project_box", "box_ground_corners", "MaskRaster", "silhouette_cost", "fit_centre", "LON_PROBE_M"]
+__all__ = [
+    "project_box",
+    "box_ground_corners",
+    "MaskRaster",
+    "silhouette_cost",
+    "silhouette_fill",
+    "fit_centre",
+    "LON_PROBE_M",
+]
 
 #: probe step (m) of the cost curvature along the vehicle axis in the longitudinal fusion
 LON_PROBE_M = 0.6
@@ -296,6 +304,23 @@ def silhouette_cost(
     if w_edge:
         c += w_edge * raster.chamfer(poly, cap=edge_cap)
     return float(c)
+
+
+def silhouette_fill(pts8: np.ndarray, raster: MaskRaster) -> float:
+    """Share of the in-frame box silhouette covered by the mask, ``|M n S| / |S n F|`` (NaN if undefined).
+
+    A fully visible vehicle fills most of its box silhouette (the box is more
+    angular than the body); an occluder lowers the share in proportion to the
+    hidden part of the silhouette.
+    """
+    pts8 = np.asarray(pts8, np.float64)
+    if raster.area <= 0 or not np.all(np.isfinite(pts8)):
+        return float("nan")
+    poly = _hull(raster.to_raster(pts8))
+    if len(poly) < 3:
+        return float("nan")
+    a = raster.clipped_area(poly)
+    return float(raster.overlap(poly) / a) if a > 0 else float("nan")
 
 
 def fit_centre(

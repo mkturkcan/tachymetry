@@ -141,6 +141,18 @@ class HygieneConfig:
     reversal_min_m: float = 1.5
     inside_box_margin: float = 0.15
     inside_box_share: float = 0.70
+    # vehicle geometry from instance masks (detectors that segment); see tracking/maskgeom.py
+    mask_geometry: bool = True  #: use instance masks for vehicle footprints (mask ground contact, envelope, box fit)
+    mask_min_share: float = 0.5  #: ... for vehicle tracks with masks on at least this share of usable samples
+    mask_slow_kmh: float = 4.0  #: below this contact speed a vehicle counts as stopped (heading held, offset frozen)
+    street_snap_deg: float = 25.0  #: a stopped vehicle's reference heading snaps to a street axis within this angle
+    boxfit: bool = True  #: fit a calibrated 3D box to the mask silhouettes (else the envelope anchor alone)
+    boxfit_down: int = 4  #: down-sampling of the mask raster for the silhouette cost
+    boxfit_min_mask_px: int = 700  #: masks with fewer full-resolution pixels are not fitted
+    boxfit_min_depression_deg: float = 8.5  #: ... nor vehicles seen below this depression angle (grazing views)
+    boxfit_max_cost: float = 2.5  #: per-frame fits with a higher silhouette cost are not used
+    boxfit_dim_frames: int = 6  #: evidence frames for the shared box dimensions
+    boxfit_slow_hz: float = 3.0  #: pose-fit rate inside stopped stretches (offsets are frozen there)
 
 
 @dataclass
