@@ -33,12 +33,11 @@ from ..config import CalibrationConfig
 from ..detections import DetectionSet
 from ..geometry.camera import CalibrationError, Camera
 from ..geometry.lens import IdentityLens, Lens
+from .from_cuboids import ASPECT_WEIGHT, calibrate_from_cuboids, collect_footprints, footprint_metrics, footprint_scale
 from .from_cuboids import _residuals as _cuboid_residuals
-from .from_cuboids import calibrate_from_cuboids, collect_footprints, footprint_metrics
 from .from_lines import ScaleCue, apply_scale_cue, calibrate_from_lines
 from .lines import VanishingPoint, detect_segments, marking_mask
 from .result import CalibrationResult
-from .scale import scale_from_vehicle_sizes
 from .vanishing import vanishing_points_from_segments
 
 __all__ = ["calibrate_auto", "fuse_evidence", "consistency"]
@@ -119,7 +118,7 @@ def fuse_evidence(
     scale_c = 1.0
     n_eff = 0
     if len(quads):
-        r0 = _cuboid_residuals(make(p0), quads, wts, asp, 0.15, 2.0)
+        r0 = _cuboid_residuals(make(p0), quads, wts, asp, ASPECT_WEIGHT, 2.0)
         sigma_c = max(1.4826 * float(np.median(np.abs(r0))), 1e-3)
         w, h = size
         ctr = quads.mean(axis=1)
@@ -130,12 +129,12 @@ def fuse_evidence(
 
     def fun(p: np.ndarray) -> np.ndarray:
         c = make(p)
-        parts = [_cuboid_residuals(c, quads, wts, asp, 0.15, 2.0) / scale_c] if len(quads) else []
+        parts = [_cuboid_residuals(c, quads, wts, asp, ASPECT_WEIGHT, 2.0) / scale_c] if len(quads) else []
         parts.append(_vp_residuals(c, use_h, use_v, 1.0 / sigma_vp))
         return np.concatenate(parts)
 
     w_img = size[0]
-    lo = np.array([math.log(w_img * 0.15), math.radians(1.0), math.radians(-25)])
+    lo = np.array([math.log(w_img * 0.15), math.radians(-10.0), math.radians(-25)])
     hi = np.array([math.log(w_img * 12), math.radians(89.5), math.radians(25)])
     res = least_squares(
         fun, np.clip(p0, lo, hi), bounds=(lo, hi), loss="soft_l1", f_scale=2.0, max_nfev=800, x_scale="jac"
@@ -184,13 +183,7 @@ def _metric_scale(
         return apply_scale_cue(cam, cue)
     if len(quads) < 10:
         raise CalibrationError("vehicle-size scale needs cuboid footprints; pass scale='height=<m>' instead")
-    g = cam.image_to_ground(quads.reshape(-1, 2)).reshape(-1, 4, 2)
-    ok = np.all(np.isfinite(g), axis=(1, 2))
-    g = g[ok]
-    L = 0.5 * (np.linalg.norm(g[:, 0] - g[:, 1], axis=1) + np.linalg.norm(g[:, 3] - g[:, 2], axis=1))
-    W = 0.5 * (np.linalg.norm(g[:, 0] - g[:, 3], axis=1) + np.linalg.norm(g[:, 1] - g[:, 2], axis=1))
-    rep = np.repeat(np.arange(len(L)), np.maximum(1, np.round(wts[ok] * 2).astype(int)))
-    s, info = scale_from_vehicle_sizes(L[rep], W[rep], cfg.car_length_m, cfg.car_width_m)
+    s, info = footprint_scale(cam, quads, wts, cfg.car_length_m, cfg.car_width_m)
     out = cam.scaled(s)
     out.meta["metric"] = True
     return out, {"scale": "vehicle footprints", **info}

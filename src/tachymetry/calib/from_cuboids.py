@@ -30,9 +30,64 @@ from ..detections import DetectionSet
 from ..geometry.camera import CalibrationError, Camera
 from ..geometry.lens import IdentityLens, Lens
 from .result import CalibrationResult
-from .scale import CAR_LENGTH_M, CAR_WIDTH_M, scale_from_vehicle_sizes
+from .scale import CAR_LENGTH_M, CAR_WIDTH_M
 
 __all__ = ["calibrate_from_cuboids", "collect_footprints", "footprint_metrics"]
+
+
+ASPECT_WEIGHT = 1.0  #: weight of the passenger-car length-to-width prior (log-ratio residual)
+
+
+def footprint_scale(
+    cam: Camera,
+    quads: np.ndarray,
+    wts: np.ndarray,
+    car_length_m: float = CAR_LENGTH_M,
+    car_width_m: float = CAR_WIDTH_M,
+) -> tuple[float, dict[str, Any]]:
+    """Metric scale from passenger-car footprints, using each footprint's well-conditioned dimension.
+
+    Distances along the viewing ray are far more sensitive to pitch and corner
+    errors than distances across it. Each footprint therefore contributes the
+    dimension that lies across the ray: its width when seen head-on or from
+    behind, its length when seen from the side (both when oblique). Estimates are
+    combined by a weighted median; widths carry four times the weight of lengths
+    because car widths vary about half as much as car lengths.
+    """
+    g = cam.image_to_ground(quads.reshape(-1, 2)).reshape(-1, 4, 2)
+    ok = np.all(np.isfinite(g), axis=(1, 2))
+    g, w = g[ok], wts[ok]
+    if len(g) < 5:
+        raise CalibrationError("too few footprints for a metric scale")
+    L = 0.5 * (np.linalg.norm(g[:, 0] - g[:, 1], axis=1) + np.linalg.norm(g[:, 3] - g[:, 2], axis=1))
+    W = 0.5 * (np.linalg.norm(g[:, 0] - g[:, 3], axis=1) + np.linalg.norm(g[:, 1] - g[:, 2], axis=1))
+    axis = (g[:, 0] + g[:, 3]) / 2 - (g[:, 1] + g[:, 2]) / 2
+    ray = g.mean(axis=1) - cam.center[:2]
+    cosang = np.abs(np.sum(axis * ray, axis=1)) / np.maximum(
+        np.linalg.norm(axis, axis=1) * np.linalg.norm(ray, axis=1), 1e-9
+    )
+    est, wt = [], []
+    use_w = cosang > 0.5  # axis roughly along the ray: the width lies across it
+    use_l = cosang < 0.85  # axis roughly across the ray: the length lies across it
+    est.append(car_width_m / np.maximum(W[use_w], 1e-9))
+    wt.append(4.0 * w[use_w])
+    est.append(car_length_m / np.maximum(L[use_l], 1e-9))
+    wt.append(w[use_l])
+    e, v = np.concatenate(est), np.concatenate(wt)
+    good = np.isfinite(e) & (e > 0)
+    e, v = e[good], v[good]
+    order = np.argsort(e)
+    cw = np.cumsum(v[order])
+    s = float(e[order][np.searchsorted(cw, 0.5 * cw[-1])])
+    info = {
+        "scale": s,
+        "n": int(len(g)),
+        "n_width_based": int(use_w.sum()),
+        "n_length_based": int(use_l.sum()),
+        "scale_width_only": float(np.median(car_width_m / np.maximum(W, 1e-9))),
+        "scale_length_only": float(np.median(car_length_m / np.maximum(L, 1e-9))),
+    }
+    return s, info
 
 
 def collect_footprints(
@@ -159,10 +214,10 @@ def calibrate_from_cuboids(
     sub = rng.choice(len(quads_r), size=min(600, len(quads_r)), replace=False)
 
     def fun(p: np.ndarray, q: np.ndarray, wq: np.ndarray) -> np.ndarray:
-        return _residuals(_cam(p, size, IdentityLens(size)), q, wq, asp, 0.15, 2.0)
+        return _residuals(_cam(p, size, IdentityLens(size)), q, wq, asp, ASPECT_WEIGHT, 2.0)
 
     starts = []
-    for pitch in (8, 15, 25, 35, 50, 65, 80):
+    for pitch in (1, 8, 15, 25, 35, 50, 65, 80):
         for hfov in (35, 55, 75, 95):
             f = (w_img / 2) / math.tan(math.radians(hfov / 2))
             p0 = np.array([math.log(f), math.radians(pitch), 0.0])
@@ -172,7 +227,7 @@ def calibrate_from_cuboids(
                 continue
             starts.append((float(np.sum(r0**2)), p0))
     starts.sort(key=lambda s: s[0])
-    lo = np.array([math.log(w_img * 0.15), math.radians(1.0), math.radians(-25)])
+    lo = np.array([math.log(w_img * 0.15), math.radians(-10.0), math.radians(-25)])
     hi = np.array([math.log(w_img * 12), math.radians(89.5), math.radians(25)])
     best = None
     for _, p0 in starts[:8]:
@@ -193,17 +248,13 @@ def calibrate_from_cuboids(
         fun, best.x, args=(quads_r, wts), bounds=(lo, hi), loss="soft_l1", f_scale=0.12, max_nfev=600, x_scale="jac"
     )
     cam = _cam(final.x, size, lens)
-    # metric scale from passenger-car footprints (diversity-weighted, robust medians)
-    g = _bev(cam, quads)
-    ok = np.all(np.isfinite(g), axis=(1, 2))
-    g = g[ok]
-    L = 0.5 * (np.linalg.norm(g[:, 0] - g[:, 1], axis=1) + np.linalg.norm(g[:, 3] - g[:, 2], axis=1))
-    W = 0.5 * (np.linalg.norm(g[:, 0] - g[:, 3], axis=1) + np.linalg.norm(g[:, 1] - g[:, 2], axis=1))
-    rep = np.repeat(np.arange(len(L)), np.maximum(1, np.round(wts[ok] * 2).astype(int)))
-    s, sinfo = scale_from_vehicle_sizes(L[rep], W[rep], car_length_m, car_width_m)
+    # metric scale from passenger-car footprints (conditioning-aware, diversity-weighted)
+    s, sinfo = footprint_scale(cam, quads, wts, car_length_m, car_width_m)
     cam = cam.scaled(s)
     # world frame: +x along the dominant vehicle axis, origin at the median vehicle position
-    gm = _bev(cam, quads)[ok]
+    gm = _bev(cam, quads)
+    ok = np.all(np.isfinite(gm), axis=(1, 2))
+    gm = gm[ok]
     ax = (gm[:, 0] + gm[:, 3]) / 2 - (gm[:, 1] + gm[:, 2]) / 2
     phi = 0.5 * float(np.angle(np.sum(wts[ok] * np.exp(2j * np.arctan2(ax[:, 1], ax[:, 0])))))
     ctr = np.median(gm.mean(axis=1), axis=0)
