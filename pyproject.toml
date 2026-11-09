@@ -1,0 +1,80 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tachymetry"
+dynamic = ["version"]
+description = "Metric trajectories, speeds and counts from traffic-camera video: detection, tracking, camera calibration and bird's-eye view."
+readme = "README.md"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
+authors = [{ name = "Mehmet Kerem Turkcan" }]
+requires-python = ">=3.10"
+keywords = ["traffic", "computer-vision", "multi-object-tracking", "birds-eye-view", "camera-calibration",
+            "homography", "speed-estimation", "intelligent-transportation-systems"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: MacOS",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Image Recognition",
+]
+dependencies = [
+  "numpy>=1.23",
+  "scipy>=1.9",
+  "opencv-python>=4.8",
+  "pillow>=9.0",
+  "pyyaml>=6.0",
+  "rich>=13.0",
+  "huggingface_hub>=0.20",
+  "imageio-ffmpeg>=0.4.9",
+  "pandas>=1.5",
+  "torch>=2.1",
+  "ultralytics>=8.4.61",
+]
+
+[project.optional-dependencies]
+depth = ["transformers>=4.48", "accelerate>=0.26"]
+parquet = ["pyarrow>=12"]
+docs = ["mkdocs-material>=9.5", "mkdocstrings[python]>=0.25"]
+dev = ["pytest>=7.4", "ruff>=0.5", "pyarrow>=12", "pandas>=1.5"]
+all = ["tachymetry[depth,parquet]"]
+
+[project.scripts]
+tachymetry = "tachymetry.cli:main"
+
+[project.urls]
+Homepage = "https://mkturkcan.github.io/tachymetry/"
+Documentation = "https://mkturkcan.github.io/tachymetry/docs/"
+Repository = "https://github.com/mkturkcan/tachymetry"
+Issues = "https://github.com/mkturkcan/tachymetry/issues"
+
+[tool.hatch.version]
+path = "src/tachymetry/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tachymetry"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/tachymetry", "tests", "README.md", "LICENSE", "CITATION.cff"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "NPY"]
+ignore = ["E741", "B905"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = ["gpu: needs a CUDA device and model downloads", "slow: longer end-to-end tests"]

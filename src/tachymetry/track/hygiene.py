@@ -1,0 +1,503 @@
+"""Per-track repair: from raw associations to clean metric trajectories.
+
+Stages, in order (all thresholds in seconds and metres):
+
+1. **Validity** of each detection (below the horizon, ground sampling distance
+   within bounds) and one detection per frame.
+2. **Presplit** at long gaps and at physically impossible steps of the robust
+   (running-median) ground path. All resulting runs are kept.
+3. **Identity-switch split**, only when two independent signals agree: the box
+   jumps away from its constant-velocity prediction *and* the ground position
+   violates the local kinematics.
+4. **End trimming** of truncated, frame-filling and far-field-collapsed boxes.
+   Truncated boxes inside a track keep their time stamps but contribute no
+   measurement.
+5. **Centre estimation**: the trusted cuboid footprint centroid where available;
+   elsewhere the ground contact pushed along the viewing ray by half the
+   footprint's ray extent, minus the parallax of the lowest visible edge, with
+   the footprint-model residual interpolated through gaps.
+6. **Hampel repair** of isolated outliers.
+7. **Gap-aware zero-phase smoothing** (uniform-time resampling, edge-replicated
+   median, Savitzky-Golay with analytic derivative).
+8. **End-fold trimming** of hook-shaped track ends.
+9. **Kinematics** (speed, heading held through stops), **hold-still** freezing of
+   stopped runs, and **parked** classification.
+10. **Physical validity**: sustained impossible speed or acceleration, path
+    reversal, and the centre-inside-own-box referee.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import numpy as np
+
+from ..config import SUPER_CLASS, HygieneConfig
+from ..geometry.camera import Camera
+from ..types import DetectionSet
+from .measure import CLEARANCE_PRIORS, DIM_BOUNDS, GroundObservations, dims_for
+from .model import Flags, Track
+from .signal import fill_angles, hampel, running_median, segments_by_gap, smooth_kinematics, wrap
+
+__all__ = ["TrackContext", "class_vote", "process_raw_track", "HygieneStats"]
+
+
+@dataclass
+class TrackContext:
+    dets: DetectionSet
+    obs: GroundObservations
+    camera: Camera
+    cfg: HygieneConfig
+
+    @property
+    def image_size(self) -> tuple[int, int]:
+        return self.dets.image_size if self.dets.image_size[0] else self.camera.image_size
+
+
+@dataclass
+class HygieneStats:
+    raw_tracks: int = 0
+    splits_gap_or_teleport: int = 0
+    splits_identity: int = 0
+    trimmed_samples: int = 0
+    dropped_short: int = 0
+    repaired_samples: int = 0
+    folds_trimmed: int = 0
+    invalid: int = 0
+    parked: int = 0
+
+    def as_dict(self) -> dict[str, int]:
+        return dict(self.__dict__)
+
+
+def class_vote(dets: DetectionSet, rows: np.ndarray, image_size: tuple[int, int]) -> tuple[str, dict[str, float]]:
+    """Class by weighted vote: score x sqrt(box area) x centrality (central, near-field views dominate)."""
+    w, h = image_size
+    b = dets.xyxy[rows].astype(np.float64)
+    area = np.maximum((b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1]), 1.0)
+    xm = 0.5 * (b[:, 0] + b[:, 2])
+    central = np.clip(1 - 0.8 * np.abs(xm - w / 2) / (w / 2), 0.05, 1) * (0.4 + 0.6 * np.clip(b[:, 3] / h, 0, 1))
+    wt = dets.score[rows] * np.sqrt(area) * central
+    votes: dict[str, float] = {}
+    for c, v in zip(dets.cls[rows], wt):
+        name = dets.class_names[int(c)]
+        votes[name] = votes.get(name, 0.0) + float(v)
+    tot = sum(votes.values()) or 1.0
+    shares = {k: v / tot for k, v in sorted(votes.items(), key=lambda kv: -kv[1])}
+    return next(iter(shares)), shares
+
+
+def _box_centres(b: np.ndarray) -> np.ndarray:
+    return np.column_stack([(b[:, 0] + b[:, 2]) / 2, (b[:, 1] + b[:, 3]) / 2])
+
+
+def _split_raw(rows: np.ndarray, ctx: TrackContext, sup: str, stats: HygieneStats) -> list[np.ndarray]:
+    cfg = ctx.cfg
+    d, o = ctx.dets, ctx.obs
+    t = d.time[rows]
+    if len(rows) < 2:
+        return [rows]
+    c = o.contact[rows]
+    cm = running_median(t, c, cfg.median_window_s) if len(rows) >= 3 else c
+    dt = np.diff(t)
+    step = np.linalg.norm(np.diff(cm, axis=0), axis=1)
+    s = np.maximum(cfg.position_noise_m, 3.0 * np.nan_to_num(o.gsd[rows], nan=1.0))
+    sig = np.sqrt(s[:-1] ** 2 + s[1:] ** 2)
+    vmax = cfg.teleport_speed_mps.get(sup, 55.0)
+    cut = (dt > cfg.max_gap_s) | (step > vmax * dt + 3.0 * sig)
+    stats.splits_gap_or_teleport += int(cut.sum())
+    # identity switch: box jump AND kinematic violation
+    b = d.xyxy[rows].astype(np.float64)
+    bc = _box_centres(b)
+    bw = np.maximum(b[:, 2] - b[:, 0], 20.0 * ctx.image_size[1] / 1080.0)
+    area = np.maximum((b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1]), 1.0)
+    trunc = o.truncated[rows] | o.big[rows]
+    lo_a, hi_a = cfg.switch_area
+    for i in range(len(rows) - 1):
+        if cut[i] or dt[i] > 1.0:
+            continue
+        j = int(np.searchsorted(t, t[i] - 0.5, side="left"))
+        v_img = (bc[i] - bc[j]) / (t[i] - t[j]) if j < i else np.zeros(2)
+        jump = np.linalg.norm(bc[i + 1] - (bc[i] + v_img * dt[i])) / bw[i]
+        ratio = area[i + 1] / area[i]
+        boxy = jump > cfg.switch_jump or (not trunc[i] and not trunc[i + 1] and not (lo_a <= ratio <= hi_a))
+        if not boxy:
+            continue
+        k = int(np.searchsorted(t, t[i] - 1.0, side="left"))
+        vg = (cm[i] - cm[k]) / (t[i] - t[k]) if k < i else np.zeros(2)
+        resid = np.linalg.norm(cm[i + 1] - (cm[i] + vg * dt[i]))
+        if resid > max(2.0, 3.0 * sig[i]):
+            cut[i] = True
+            stats.splits_identity += 1
+    return [r for r in np.split(rows, np.flatnonzero(cut) + 1) if len(r)]
+
+
+def _trim_ends(rows: np.ndarray, ctx: TrackContext, stats: HygieneStats) -> np.ndarray:
+    cfg = ctx.cfg
+    o, d = ctx.obs, ctx.dets
+    bad = o.truncated[rows] | o.big[rows]
+    n = len(rows)
+    a, b = 0, n
+    while a < b and bad[a]:
+        a += 1
+    while b > a and bad[b - 1]:
+        b -= 1
+    rows2 = rows[a:b]
+    # far-field collapse at either end: box height far below its inward running median
+    if len(rows2) >= 6:
+        t = d.time[rows2]
+        hgt = (d.xyxy[rows2, 3] - d.xyxy[rows2, 1]).astype(np.float64)
+        n2 = len(rows2)
+
+        def collapsed(i: int, inward: int) -> bool:
+            if inward > 0:
+                sel = (t > t[i] + 0.1) & (t <= t[i] + 1.0)
+            else:
+                sel = (t < t[i] - 0.1) & (t >= t[i] - 1.0)
+            if sel.sum() < 3:
+                return False
+            return hgt[i] < cfg.far_shrink * float(np.median(hgt[sel]))
+
+        a2, b2 = 0, n2
+        while a2 < n2 - 3 and collapsed(a2, +1):
+            a2 += 1
+        while b2 > a2 + 3 and collapsed(b2 - 1, -1):
+            b2 -= 1
+        rows2 = rows2[a2:b2]
+    stats.trimmed_samples += n - len(rows2)
+    return rows2
+
+
+def _dims(rows: np.ndarray, ctx: TrackContext, cls: str, use: np.ndarray) -> tuple[float, float, float]:
+    L0, W0, H0 = dims_for(cls)
+    o = ctx.obs
+    sel = use & o.has_footprint[rows]
+    if cls == "person" or sel.sum() < 3:
+        return L0, W0, H0
+    g = o.gsd[rows][sel]
+    near = g <= np.percentile(g, 75)
+    Lv = o.length[rows][sel][near]
+    Wv = o.width[rows][sel][near]
+    if len(Lv) < 3:
+        return L0, W0, H0
+    lo_l, hi_l, lo_w, hi_w = DIM_BOUNDS.get(cls, (0.3, 25, 0.3, 4))
+    L = float(np.clip(np.percentile(Lv, 70), lo_l, hi_l))
+    W = float(np.clip(np.percentile(Wv, 60), lo_w, hi_w))
+    return L, W, H0
+
+
+def _centres(
+    rows: np.ndarray,
+    ctx: TrackContext,
+    cls: str,
+    use: np.ndarray,
+    L: float,
+    W: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Footprint centres, the motion/footprint heading used, and a footprint flag per sample."""
+    cfg, o, cam = ctx.cfg, ctx.obs, ctx.camera
+    t = ctx.dets.time[rows]
+    contact = o.contact[rows]
+    pc, vc, _ = smooth_kinematics(
+        t, contact, use, cfg.median_window_s, max(1.5, cfg.smooth_window_s), 1, cfg.interp_gap_s
+    )
+    sp = np.linalg.norm(np.nan_to_num(vc), axis=1)
+    hd = np.where(sp > 1.0, np.arctan2(vc[:, 1], vc[:, 0]), np.nan)
+    fh = o.heading[rows]
+    has_fp = o.has_footprint[rows] & use
+    if np.isfinite(hd).sum() == 0 and np.isfinite(fh).any():
+        # axial (mod pi) circular mean of the footprint headings
+        a2 = np.nanmean(np.exp(2j * fh[np.isfinite(fh)]))
+        hd[:] = np.angle(a2) / 2
+    hd = fill_angles(hd)
+    ray = contact - cam.center[:2]
+    dist = np.maximum(np.linalg.norm(ray, axis=1), 1e-6)
+    rhat = ray / dist[:, None]
+    if not np.isfinite(hd).any():
+        hd = np.arctan2(rhat[:, 1], rhat[:, 0])
+    b = hd - np.arctan2(rhat[:, 1], rhat[:, 0])
+    ext = np.abs(L * np.cos(b)) + np.abs(W * np.sin(b))
+    clearance = CLEARANCE_PRIORS.get(cls, 0.08)
+    overshoot = dist * clearance / max(cam.height, 0.5)
+    rho = np.maximum(0.5 * ext - overshoot, 0.0)
+    model = contact + rhat * rho[:, None]
+    centre = model.copy()
+    if has_fp.any():
+        fp = o.center[rows]
+        resid = fp - model
+        idx = np.flatnonzero(has_fp)
+        for ax in range(2):
+            ri = np.interp(t, t[idx], resid[idx, ax])
+            # decay the borrowed residual far from any footprint sample
+            near_t = np.min(np.abs(t[:, None] - t[idx][None, :]), axis=1)
+            ri *= np.clip(1.0 - (near_t - 1.0) / 2.0, 0.0, 1.0)
+            centre[:, ax] = model[:, ax] + ri
+        centre[has_fp] = fp[has_fp]
+    return centre, hd, has_fp
+
+
+def _fold_trim(t: np.ndarray, pos: np.ndarray, speed: np.ndarray, cfg: HygieneConfig) -> tuple[int, int]:
+    """Indices ``[a, b)`` that remove hook-shaped ends."""
+    n = len(t)
+    if n < 6:
+        return 0, n
+    seg = np.linalg.norm(np.diff(pos, axis=0), axis=1)
+    s = np.concatenate([[0.0], np.cumsum(seg)])
+    lim = np.cos(np.radians(cfg.fold_deg))
+    move = cfg.move_speed_kmh / 3.6
+
+    def end_fold(sv: np.ndarray, p: np.ndarray, sp: np.ndarray) -> int:
+        """Number of samples to cut from the end of (s, p)."""
+        total = sv[-1]
+        if total < 3 * cfg.fold_dist_m or sp[-1] < move:
+            return 0
+        k = int(np.searchsorted(sv, total - cfg.fold_dist_m, side="right")) - 1
+        j = int(np.searchsorted(sv, sv[k] - cfg.fold_dist_m, side="right")) - 1
+        if j < 0 or k <= j or k >= len(sv) - 1:
+            return 0
+        d_end = p[-1] - p[k]
+        d_prev = p[k] - p[j]
+        ne, npv = np.linalg.norm(d_end), np.linalg.norm(d_prev)
+        if ne < 0.3 or npv < 0.3:
+            return 0
+        if float(d_end @ d_prev) / (ne * npv) < lim:
+            return len(sv) - 1 - k
+        return 0
+
+    cut_end = end_fold(s, pos, speed)
+    cut_start = end_fold((s[-1] - s)[::-1], pos[::-1], speed[::-1])
+    return cut_start, n - cut_end
+
+
+def _hold_still(
+    t: np.ndarray, pos: np.ndarray, vel: np.ndarray, raw: np.ndarray, cfg: HygieneConfig, flags: np.ndarray
+) -> None:
+    sp = np.linalg.norm(vel, axis=1)
+    stop = sp < cfg.stop_speed_kmh / 3.6
+    if not stop.any():
+        return
+    edges = np.flatnonzero(np.diff(np.concatenate([[0], stop.astype(int), [0]])))
+    for a, b in zip(edges[::2], edges[1::2]):
+        if t[b - 1] - t[a] < 0.6:
+            continue
+        r = raw[a:b]
+        r = r[np.all(np.isfinite(r), axis=1)]
+        ref = r if len(r) >= 2 else pos[a:b]
+        med = np.median(ref, axis=0)
+        if np.sqrt(np.mean(np.sum((ref - med) ** 2, axis=1))) > 0.6:
+            continue
+        pos[a:b] = med
+        vel[a:b] = 0.0
+        flags[a:b] |= Flags.HELD
+
+
+def _validity(tr: Track, ctx: TrackContext) -> str:
+    """Empty string when physically valid, else the reason."""
+    cfg = ctx.cfg
+    t, sp = tr.t, tr.speed
+    if len(t) < 3:
+        return ""
+    vmax = cfg.impossible_speed_mps.get(tr.super_cls, 60.0)
+
+    def sustained(mask: np.ndarray) -> bool:
+        if not mask.any():
+            return False
+        edges = np.flatnonzero(np.diff(np.concatenate([[0], mask.astype(int), [0]])))
+        return any(t[b - 1] - t[a] >= cfg.accel_duration_s for a, b in zip(edges[::2], edges[1::2]))
+
+    if sustained(sp > vmax):
+        return "impossible_speed"
+    spm = running_median(t, sp[:, None], 0.4)[:, 0]
+    acc = np.gradient(spm, t) if len(np.unique(t)) == len(t) else np.zeros_like(spm)
+    if tr.super_cls != "person" and sustained(np.abs(acc) > cfg.max_accel_mps2):
+        return "impossible_acceleration"
+    # path reversal on a 0.4 s lattice
+    if tr.duration > 1.2:
+        tau = np.arange(t[0], t[-1], 0.4)
+        P = np.column_stack([np.interp(tau, t, tr.xy[:, 0]), np.interp(tau, t, tr.xy[:, 1])])
+        dP = np.diff(P, axis=0)
+        n = np.linalg.norm(dP, axis=1)
+        for i in range(len(dP) - 1):
+            if n[i] > cfg.reversal_min_m and n[i + 1] > cfg.reversal_min_m:
+                cosang = float(dP[i] @ dP[i + 1]) / (n[i] * n[i + 1])
+                if cosang < np.cos(np.radians(cfg.reversal_deg)):
+                    return "path_reversal"
+    # referee: the footprint centre must project inside the object's own box
+    obs = (tr.flags & Flags.OBSERVED) > 0
+    if obs.sum() >= 10 and tr.super_cls != "person":
+        cam = ctx.camera
+        pts = np.column_stack([tr.xy[obs], np.full(obs.sum(), 0.3 * tr.height)])
+        uv = cam.project(pts)
+        b = tr.bbox[obs]
+        mw = cfg.inside_box_margin * (b[:, 2] - b[:, 0])
+        mh = cfg.inside_box_margin * (b[:, 3] - b[:, 1])
+        inside = (
+            (uv[:, 0] >= b[:, 0] - mw)
+            & (uv[:, 0] <= b[:, 2] + mw)
+            & (uv[:, 1] >= b[:, 1] - mh)
+            & (uv[:, 1] <= b[:, 3] + mh)
+        )
+        if np.mean(inside) < cfg.inside_box_share:
+            return "centre_outside_box"
+    return ""
+
+
+def _build(rows: np.ndarray, ctx: TrackContext, cls: str, stats: HygieneStats) -> Track | None:
+    cfg = ctx.cfg
+    d, o = ctx.dets, ctx.obs
+    sup = SUPER_CLASS.get(cls, cls)
+    t = d.time[rows].astype(np.float64)
+    if len(rows) < 3 or t[-1] - t[0] < cfg.min_track_s:
+        stats.dropped_short += 1
+        return None
+    use = ~(o.truncated[rows] | o.big[rows])
+    if use.sum() < 3:
+        stats.dropped_short += 1
+        return None
+    L, W, H = _dims(rows, ctx, cls, use)
+    if cfg.footprints:
+        centre, hd_model, has_fp = _centres(rows, ctx, cls, use, L, W)
+    else:
+        centre = o.contact[rows].copy()
+        hd_model = np.zeros(len(rows))
+        has_fp = np.zeros(len(rows), bool)
+    flags = np.full(len(rows), Flags.OBSERVED, np.uint8)
+    flags[~use] = Flags.INTERPOLATED | Flags.TRUNCATED
+    flags[has_fp] |= Flags.FOOTPRINT
+    meas = centre.copy()
+    meas[~use] = np.nan
+    ok = use.copy()
+    if ok.sum() >= 5 and cfg.repair:
+        rep_xy, rep = hampel(t[ok], meas[ok], cfg.hampel_window_s, cfg.hampel_sigma, cfg.hampel_min_m)
+        idx = np.flatnonzero(ok)
+        meas[idx] = rep_xy
+        flags[idx[rep]] |= Flags.REPAIRED
+        stats.repaired_samples += int(rep.sum())
+    pos, vel, _ = smooth_kinematics(
+        t, meas, ok, cfg.median_window_s, cfg.smooth_window_s, cfg.smooth_order, cfg.interp_gap_s
+    )
+    good = np.all(np.isfinite(pos), axis=1)
+    if good.sum() < 3:
+        stats.dropped_short += 1
+        return None
+    sel = np.flatnonzero(good)
+    a, b = _fold_trim(t[sel], pos[sel], np.linalg.norm(vel[sel], axis=1), cfg)
+    if cfg.trim and (a > 0 or b < len(sel)):
+        stats.folds_trimmed += 1
+        sel = sel[a:b]
+    if len(sel) < 3 or t[sel[-1]] - t[sel[0]] < cfg.min_track_s:
+        stats.dropped_short += 1
+        return None
+    rows, t, pos, vel = rows[sel], t[sel], pos[sel], vel[sel]
+    centre, meas, flags, hd_model, has_fp = centre[sel], meas[sel], flags[sel], hd_model[sel], has_fp[sel]
+    sp = np.linalg.norm(vel, axis=1)
+    move = cfg.move_speed_kmh / 3.6
+    heading = np.where(sp > move, np.arctan2(vel[:, 1], vel[:, 0]), np.nan)
+    if np.isfinite(heading).sum() == 0:
+        heading = hd_model.copy()
+    heading = fill_angles(heading)
+    if cfg.hold_still:
+        _hold_still(t, pos, vel, meas, cfg, flags)
+    # parked: little motion over its whole life
+    sp = np.linalg.norm(vel, axis=1)
+    moving_share = float(np.mean(sp > move))
+    raw_ok = meas[np.all(np.isfinite(meas), axis=1)]
+    ref = raw_ok if len(raw_ok) >= 3 else pos
+    med = np.median(ref, axis=0)
+    rog = float(np.sqrt(np.mean(np.sum((ref - med) ** 2, axis=1))))
+    net = float(np.linalg.norm(pos[-1] - pos[0]))
+    path = float(np.sum(np.linalg.norm(np.diff(pos, axis=0), axis=1))) if len(pos) > 1 else 0.0
+    # image-space stillness: box centre wanders less than a third of its own width (immune to the
+    # far-field amplification that makes ground positions of distant parked cars jitter)
+    bb = d.xyxy[rows].astype(np.float64)
+    bc = np.column_stack([(bb[:, 0] + bb[:, 2]) / 2, (bb[:, 1] + bb[:, 3]) / 2])
+    bw = float(np.median(np.maximum(bb[:, 2] - bb[:, 0], 1.0)))
+    img_net = float(
+        np.linalg.norm(np.median(bc[: max(3, len(bc) // 5)], axis=0) - np.median(bc[-max(3, len(bc) // 5) :], axis=0))
+    )
+    img_still = (
+        img_net < 0.35 * bw and float(np.percentile(np.linalg.norm(bc - np.median(bc, axis=0), axis=1), 90)) < 0.6 * bw
+    )
+    jitter = net < 3.0 and path > 4.0 * max(net, 0.5)
+    state = "moving"
+    if (
+        cfg.parked
+        and sup != "person"
+        and (
+            (rog < cfg.parked_radius_m and moving_share < cfg.parked_moving_share)
+            or (moving_share < 0.3 and net < 3.0)
+            or (jitter and moving_share < 0.6)
+            or (img_still and net < 6.0)
+        )
+    ):
+        state = "parked"
+        stats.parked += 1
+        pos[:] = med
+        vel[:] = 0.0
+        flags |= Flags.HELD
+        fh = o.heading[rows]
+        if np.isfinite(fh).any():
+            heading[:] = np.angle(np.nanmean(np.exp(2j * fh[np.isfinite(fh)]))) / 2
+        else:
+            heading[:] = float(np.angle(np.mean(np.exp(1j * heading))))
+    if sup == "person" and moving_share < 0.25 and net < 2.0:
+        state = "stationary"
+    tr = Track(
+        id=-1,
+        cls=cls,
+        super_cls=sup,
+        t=t,
+        frame=d.frame[rows].astype(np.int64),
+        rows=rows.astype(np.int64),
+        xy=pos,
+        vel=vel,
+        heading=wrap(heading),
+        raw_xy=meas,
+        contact=o.contact[rows].copy(),
+        bbox=d.xyxy[rows].astype(np.float64),
+        score=d.score[rows].astype(np.float64),
+        flags=flags,
+        length=L,
+        width=W,
+        height=H,
+        state=state,
+        cuboid=None if d.cuboid is None else d.cuboid[rows].copy(),
+    )
+    reason = _validity(tr, ctx) if (state == "moving" and cfg.validity) else ""
+    if reason:
+        tr.verdict, tr.reason = "invalid", reason
+        stats.invalid += 1
+    return tr
+
+
+def process_raw_track(rows: np.ndarray, ctx: TrackContext, stats: HygieneStats | None = None) -> list[Track]:
+    """Turn one raw association (detection rows) into zero or more clean tracks."""
+    stats = stats if stats is not None else HygieneStats()
+    d, o = ctx.dets, ctx.obs
+    rows = np.asarray(rows, dtype=np.int64)
+    rows = rows[o.valid[rows]]
+    if len(rows) < 2:
+        return []
+    order = np.lexsort((-d.score[rows], d.time[rows]))
+    rows = rows[order]
+    _, first = np.unique(d.frame[rows], return_index=True)
+    rows = rows[np.sort(first)]
+    cls, _ = class_vote(d, rows, ctx.image_size)
+    sup = SUPER_CLASS.get(cls, cls)
+    out = []
+    segments = _split_raw(rows, ctx, sup, stats) if ctx.cfg.split else [rows]
+    for seg in segments:
+        if ctx.cfg.trim:
+            seg = _trim_ends(seg, ctx, stats)
+        if len(seg) < 3:
+            stats.dropped_short += 1
+            continue
+        seg_cls, _ = class_vote(d, seg, ctx.image_size)
+        tr = _build(seg, ctx, seg_cls, stats)
+        if tr is not None:
+            out.append(tr)
+    return out
+
+
+def _unused() -> None:  # pragma: no cover - keeps linters quiet about re-exported helpers
+    _ = segments_by_gap

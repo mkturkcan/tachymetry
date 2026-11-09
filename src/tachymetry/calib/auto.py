@@ -1,0 +1,345 @@
+"""Automatic calibration: candidate methods, evidence fusion and selection.
+
+:func:`calibrate_auto` runs the applicable methods on a video's traffic-free
+background image and its detections:
+
+``cuboids``  vehicle-footprint rectification (needs a cuboid detector),
+``lines``    vanishing points of road markings and vertical structures,
+``depth``    monocular metric depth plus road segmentation (optional extras),
+``geocalib`` single-image gravity and focal length (optional extra).
+
+When both cuboid footprints and vanishing points are available, a **fused**
+candidate refines the camera by maximum likelihood over all evidence at once:
+footprint rectangularity and size consistency, horizontal vanishing points
+constrained to the ground plane, and the vertical vanishing point constrained
+to the ground normal. No assumption is made that streets meet at right angles.
+
+Candidates are ranked by method-independent consistency (footprint right
+angles, size-versus-range slope, vanishing-point residuals); all candidates are
+kept in ``result.details["candidates"]`` and can be previewed side by side with
+:func:`tachymetry.calib.preview.compare`.
+"""
+
+from __future__ import annotations
+
+import math
+import warnings
+from collections.abc import Sequence
+from typing import Any
+
+import numpy as np
+
+from ..config import CalibrationConfig
+from ..geometry.camera import CalibrationError, Camera
+from ..geometry.lens import IdentityLens, Lens
+from ..types import DetectionSet
+from .from_cuboids import _residuals as _cuboid_residuals
+from .from_cuboids import calibrate_from_cuboids, collect_footprints, footprint_metrics
+from .from_lines import ScaleCue, apply_scale_cue, calibrate_from_lines
+from .lines import VanishingPoint, detect_segments, marking_mask
+from .result import CalibrationResult
+from .scale import scale_from_vehicle_sizes
+from .vanishing import vanishing_points_from_segments
+
+__all__ = ["calibrate_auto", "fuse_evidence", "consistency"]
+
+
+def _vp_residuals(
+    cam: Camera, horiz: Sequence[VanishingPoint], vertical: VanishingPoint | None, weight: float
+) -> np.ndarray:
+    Ki = np.linalg.inv(cam.K)
+    up = cam.R @ np.array([0.0, 0.0, 1.0])
+    r = []
+    for vp in horiz:
+        d = Ki @ vp.point
+        d /= np.linalg.norm(d)
+        r.append(weight * float(up @ d))  # sine of the elevation of a ground direction: must be 0
+    if vertical is not None:
+        d = Ki @ vertical.point
+        d /= np.linalg.norm(d)
+        if d @ up < 0:
+            d = -d
+        r.extend(weight * np.cross(up, d))  # parallel to the ground normal
+    return np.asarray(r)
+
+
+def fuse_evidence(
+    cam0: Camera,
+    quads: np.ndarray,
+    wts: np.ndarray,
+    horiz: Sequence[VanishingPoint],
+    vertical: VanishingPoint | None,
+    car_length_m: float = 4.6,
+    car_width_m: float = 1.85,
+    vp_gate_deg: float = 6.0,
+) -> tuple[Camera, dict[str, Any]]:
+    """Maximum-likelihood refinement of focal length, pitch and roll over footprints and vanishing points."""
+    from scipy.optimize import least_squares
+
+    size = cam0.image_size
+    # gate the vanishing points with the starting camera (drops e.g. elevated signal mast arms)
+    Ki = np.linalg.inv(cam0.K)
+    up0 = cam0.R @ np.array([0.0, 0.0, 1.0])
+    use_h = []
+    for vp in horiz:
+        d = Ki @ vp.point
+        d /= np.linalg.norm(d)
+        if abs(math.degrees(math.asin(np.clip(up0 @ d, -1, 1)))) < vp_gate_deg:
+            use_h.append(vp)
+    use_v = None
+    if vertical is not None:
+        d = Ki @ vertical.point
+        d /= np.linalg.norm(d)
+        if math.degrees(math.acos(min(1.0, abs(float(up0 @ d))))) < 2 * vp_gate_deg:
+            use_v = vertical
+    n = max(len(quads), 1)
+    w_vp = 5.0 * math.sqrt(n)
+    yaw0, pitch0, roll0 = cam0.angles
+    p0 = np.array([math.log(cam0.focal), math.radians(pitch0), math.radians(roll0)])
+
+    def make(p: np.ndarray) -> Camera:
+        return Camera.from_pose(
+            size,
+            focal=math.exp(p[0]),
+            height=1.0,
+            pitch=math.degrees(p[1]),
+            yaw=90.0,
+            roll=math.degrees(p[2]),
+            lens=IdentityLens(size),
+        )
+
+    asp = car_length_m / car_width_m
+
+    def fun(p: np.ndarray) -> np.ndarray:
+        c = make(p)
+        parts = [_cuboid_residuals(c, quads, wts, asp, 0.15, 2.0)] if len(quads) else []
+        parts.append(_vp_residuals(c, use_h, use_v, w_vp))
+        return np.concatenate(parts)
+
+    w_img = size[0]
+    lo = np.array([math.log(w_img * 0.15), math.radians(1.0), math.radians(-25)])
+    hi = np.array([math.log(w_img * 12), math.radians(89.5), math.radians(25)])
+    res = least_squares(
+        fun, np.clip(p0, lo, hi), bounds=(lo, hi), loss="soft_l1", f_scale=0.12, max_nfev=800, x_scale="jac"
+    )
+    cam = make(res.x).with_lens(cam0.lens)
+    info = {
+        "n_footprints": int(len(quads)),
+        "n_vp_horizontal": len(use_h),
+        "vertical_vp": use_v is not None,
+        "cost": float(res.cost),
+    }
+    return cam, info
+
+
+def consistency(
+    cam: Camera, quads: np.ndarray, wts: np.ndarray, horiz: Sequence[VanishingPoint], vertical: VanishingPoint | None
+) -> dict[str, float]:
+    """Method-independent consistency metrics (lower is better except ``score``)."""
+    out: dict[str, float] = {}
+    if len(quads):
+        m = footprint_metrics(cam, quads, wts)
+        out["footprint_right_angle_deg"] = m["right_angle_deg"]
+        out["size_range_slope"] = m["size_range_slope"]
+    if horiz or vertical is not None:
+        r = _vp_residuals(cam, horiz, vertical, 1.0)
+        out["vp_residual_deg"] = float(np.degrees(np.arcsin(np.clip(np.median(np.abs(r)), 0, 1)))) if len(r) else 0.0
+    s = 1.0
+    if "footprint_right_angle_deg" in out and np.isfinite(out["footprint_right_angle_deg"]):
+        s *= float(np.exp(-out["footprint_right_angle_deg"] / 10.0))
+        s *= float(np.exp(-abs(out["size_range_slope"]) / 0.15))
+    if "vp_residual_deg" in out:
+        s *= float(np.exp(-out["vp_residual_deg"] / 3.0))
+    hf = cam.fov[0]
+    if not (10.0 <= hf <= 125.0):
+        s *= 0.1
+    out["score"] = s
+    return out
+
+
+def _metric_scale(
+    cam: Camera, quads: np.ndarray, wts: np.ndarray, cfg: CalibrationConfig, cue: ScaleCue | None
+) -> tuple[Camera, dict[str, Any]]:
+    if cue is not None and not cue.vehicles:
+        return apply_scale_cue(cam, cue)
+    if len(quads) < 10:
+        raise CalibrationError("vehicle-size scale needs cuboid footprints; pass scale='height=<m>' instead")
+    g = cam.image_to_ground(quads.reshape(-1, 2)).reshape(-1, 4, 2)
+    ok = np.all(np.isfinite(g), axis=(1, 2))
+    g = g[ok]
+    L = 0.5 * (np.linalg.norm(g[:, 0] - g[:, 1], axis=1) + np.linalg.norm(g[:, 3] - g[:, 2], axis=1))
+    W = 0.5 * (np.linalg.norm(g[:, 0] - g[:, 3], axis=1) + np.linalg.norm(g[:, 1] - g[:, 2], axis=1))
+    rep = np.repeat(np.arange(len(L)), np.maximum(1, np.round(wts[ok] * 2).astype(int)))
+    s, info = scale_from_vehicle_sizes(L[rep], W[rep], cfg.car_length_m, cfg.car_width_m)
+    out = cam.scaled(s)
+    out.meta["metric"] = True
+    return out, {"scale": "vehicle footprints", **info}
+
+
+def _align_world(cam: Camera, quads: np.ndarray, wts: np.ndarray, horiz: Sequence[VanishingPoint] = ()) -> Camera:
+    """World +x along the main road, origin at the median vehicle position.
+
+    The road direction is the best-supported ground vanishing direction (lane
+    lines) when one exists; otherwise the dominant vehicle axis (which can be a
+    parking angle, hence the preference for markings).
+    """
+    phi = None
+    if horiz:
+        Ki = np.linalg.inv(cam.K)
+        up = cam.R @ np.array([0.0, 0.0, 1.0])
+        best = None
+        for vp in horiz:
+            d = Ki @ vp.point
+            d /= np.linalg.norm(d)
+            if abs(float(up @ d)) > math.sin(math.radians(6.0)):
+                continue
+            if best is None or vp.support > best[0]:
+                best = (vp.support, d)
+        if best is not None:
+            dw = cam.R.T @ best[1]
+            phi = math.atan2(dw[1], dw[0])
+    if len(quads) >= 5:
+        g = cam.image_to_ground(quads.reshape(-1, 2)).reshape(-1, 4, 2)
+        ok = np.all(np.isfinite(g), axis=(1, 2))
+        g, w = g[ok], wts[ok]
+        if phi is None and len(g):
+            ax = (g[:, 0] + g[:, 3]) / 2 - (g[:, 1] + g[:, 2]) / 2
+            phi = 0.5 * float(np.angle(np.sum(w * np.exp(2j * np.arctan2(ax[:, 1], ax[:, 0])))))
+        if len(g):
+            ctr = np.median(g.mean(axis=1), axis=0)
+            cam = cam.transformed(rotation_deg=0.0, translation=(-float(ctr[0]), -float(ctr[1])))
+    if phi is not None:
+        cam = cam.transformed(rotation_deg=-math.degrees(phi))
+    return cam
+
+
+def calibrate_auto(
+    background: np.ndarray,
+    detections: DetectionSet | None = None,
+    cfg: CalibrationConfig | None = None,
+    lens: Lens | str | None = None,
+    scale: Any = None,
+) -> CalibrationResult:
+    """Calibrate automatically from a background image and (optionally) detections.
+
+    Parameters
+    ----------
+    background:
+        Traffic-free image of the scene (:func:`~tachymetry.calib.lines.background_image`).
+    detections:
+        Detections from the same video; cuboid footprints enable the ``cuboids``
+        method, the fused estimate and the vehicle-size metric scale.
+    scale:
+        Metric cue overriding ``cfg.scale`` (``"vehicles"``, ``"height=8"``, ...).
+    """
+    cfg = cfg or CalibrationConfig()
+    size = (background.shape[1], background.shape[0])
+    cue = ScaleCue.parse(scale if scale is not None else (None if cfg.scale in ("none", "") else cfg.scale))
+    if detections is not None and tuple(detections.image_size) != size:
+        import cv2
+
+        background = cv2.resize(background, tuple(detections.image_size), interpolation=cv2.INTER_AREA)
+        size = tuple(detections.image_size)
+    quads, wts = collect_footprints(detections) if detections is not None else (np.zeros((0, 4, 2)), np.zeros(0))
+    candidates: list[CalibrationResult] = []
+    errors: dict[str, str] = {}
+    horiz: list[VanishingPoint] = []
+    vertical: VanishingPoint | None = None
+    lens_obj: Lens = lens if isinstance(lens, Lens) else IdentityLens(size)
+
+    if "lines" in cfg.methods:
+        try:
+            r = calibrate_from_lines(background, scale=None, lens=lens if lens is not None else cfg.lens)
+            lens_obj = r.camera.lens
+            candidates.append(r)
+        except CalibrationError as exc:
+            errors["lines"] = str(exc)
+        try:  # vanishing-point evidence for fusion and scoring, in the rectified image
+            rect = lens_obj.rectify_image(background) if not lens_obj.is_identity else background
+            ms = detect_segments(rect, marking_mask(rect))
+            al = detect_segments(rect, None)
+            if len(ms) >= 8:
+                horiz, vertical = vanishing_points_from_segments(ms, size, al)
+        except Exception as exc:  # pragma: no cover - evidence is optional
+            errors["vanishing_points"] = str(exc)
+
+    if "cuboids" in cfg.methods and len(quads):
+        try:
+            candidates.append(
+                calibrate_from_cuboids(
+                    detections, lens=lens_obj, car_length_m=cfg.car_length_m, car_width_m=cfg.car_width_m
+                )
+            )
+        except CalibrationError as exc:
+            errors["cuboids"] = str(exc)
+
+    if "depth" in cfg.methods:
+        try:
+            from .depth import calibrate_from_depth
+
+            candidates.append(calibrate_from_depth(background))
+        except Exception as exc:
+            errors["depth"] = str(exc)
+
+    if "geocalib" in cfg.methods:
+        try:
+            from .geocalib_backend import calibrate_geocalib
+
+            candidates.append(calibrate_geocalib(background))
+        except Exception as exc:
+            errors["geocalib"] = str(exc)
+
+    quads_r = (
+        lens_obj.rectify(quads.reshape(-1, 2)).reshape(-1, 4, 2) if len(quads) and not lens_obj.is_identity else quads
+    )
+    if len(quads_r) >= 40 and (horiz or vertical is not None):
+        base = max((c for c in candidates if c.method == "cuboids"), default=None, key=lambda c: c.score or 0)
+        if base is not None:
+            try:
+                cam_f, finfo = fuse_evidence(
+                    base.camera, quads_r, wts, horiz, vertical, cfg.car_length_m, cfg.car_width_m
+                )
+                candidates.append(CalibrationResult(cam_f, "fused", details=finfo))
+            except Exception as exc:
+                errors["fused"] = str(exc)
+
+    if not candidates:
+        raise CalibrationError("automatic calibration failed: " + "; ".join(f"{k}: {v}" for k, v in errors.items()))
+
+    ranked = []
+    for c in candidates:
+        cam = c.camera
+        cons = consistency(cam, quads_r, wts, horiz, vertical)
+        c.score = cons["score"]
+        c.details["consistency"] = cons
+        ranked.append(c)
+    ranked.sort(key=lambda c: -(c.score or 0))
+    best = ranked[0]
+    try:
+        cam, sinfo = _metric_scale(best.camera, quads, wts, cfg, cue)
+    except CalibrationError as exc:
+        cam, sinfo = best.camera, {"scale": "relative"}
+        cam.meta["metric"] = False
+        warnings.warn(f"{exc}; the camera has relative scale (height 1)", stacklevel=2)
+    cam = _align_world(cam, quads, wts, horiz)
+    cam.meta.update({"calibration_method": f"auto:{best.method}"})
+    details = {
+        "selected": best.method,
+        "scale": sinfo,
+        "candidates": [
+            {
+                "method": c.method,
+                "score": c.score,
+                "camera": c.camera.describe(),
+                "consistency": c.details.get("consistency"),
+            }
+            for c in ranked
+        ],
+        "errors": errors,
+        "n_footprints": int(len(quads)),
+        "vanishing_points": [vp.xy.tolist() for vp in horiz],
+        "vertical_vp": None if vertical is None else vertical.xy.tolist(),
+    }
+    out = CalibrationResult(cam, f"auto:{best.method}", score=best.score, details=details)
+    out.details["candidate_cameras"] = {c.method: c.camera for c in ranked}
+    return out

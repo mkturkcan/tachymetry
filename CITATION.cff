@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use Tachymetry in your research, please cite it as below."
+title: "Tachymetry: Metric Trajectories, Speeds and Counts from Traffic-Camera Video"
+type: software
+authors:
+  - family-names: Turkcan
+    given-names: Mehmet Kerem
+    affiliation: "Department of Civil Engineering, Columbia University"
+    website: "https://mehmetkeremturkcan.com/"
+repository-code: "https://github.com/mkturkcan/tachymetry"
+url: "https://mkturkcan.github.io/tachymetry/"
+license: AGPL-3.0-or-later
+version: 0.1.0
+date-released: "2026-11-09"
+keywords:
+  - traffic video analytics
+  - multi-object tracking
+  - camera calibration
+  - bird's-eye view
+  - speed estimation

@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Documentation build
+site/
+
+# Runs, caches and large local data
+runs/
+demo_run/
+*.npz
+checkpoints/
+*.pt
+*.engine
+*.onnx
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
