@@ -7,7 +7,7 @@ name = "tachymetry"
 dynamic = ["version"]
 description = "Metric trajectories, speeds and counts from traffic-camera video: detection, tracking, camera calibration and bird's-eye view."
 readme = "README.md"
-license = "AGPL-3.0-or-later"
+license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{ name = "Mehmet Kerem Turkcan" }]
 requires-python = ">=3.10"

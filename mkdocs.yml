@@ -7,7 +7,7 @@ repo_name: mkturkcan/tachymetry
 edit_uri: edit/main/docs/
 copyright: >-
   Mehmet Kerem Turkcan, Department of Civil Engineering, Columbia University.
-  Tachymetry is released under the GNU AGPL-3.0.
+  Tachymetry is released under the Apache License 2.0.
 
 docs_dir: docs
 site_dir: site

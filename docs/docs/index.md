@@ -36,4 +36,4 @@ Tachymetry assumes a static camera, a locally planar road and a constant frame r
 
 ## License and citation
 
-Tachymetry is released under the GNU Affero General Public License v3.0, matching its default detector [UrbanOmniDetect-2](https://huggingface.co/mehmetkeremturkcan/UrbanOmniDetect-2) and [Ultralytics](https://github.com/ultralytics/ultralytics). The sample clips are downloaded on demand from their hosts (CC BY 4.0, CC0 1.0 and MIT; see [Sample clips](samples.md)) and are not redistributed. To cite Tachymetry, see [Citation](citation.md).
+Tachymetry is released under the Apache License 2.0, as is its default detector, [RF-DETR](https://github.com/roboflow/rf-detr). The optional [UrbanOmniDetect-2](https://huggingface.co/mehmetkeremturkcan/UrbanOmniDetect-2) back-end depends on [Ultralytics](https://github.com/ultralytics/ultralytics), which is licensed AGPL-3.0. The sample clips are downloaded on demand from their hosts (CC BY 4.0, CC0 1.0 and MIT; see [Sample clips](samples.md)) and are not redistributed. To cite Tachymetry, see [Citation](citation.md).

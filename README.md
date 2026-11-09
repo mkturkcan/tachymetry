@@ -21,7 +21,7 @@
   <a href="https://github.com/mkturkcan/tachymetry/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/mkturkcan/tachymetry/ci.yml?branch=main&style=flat-square&label=tests" alt="Tests"></a>
   <img src="https://img.shields.io/badge/Python-3.10%E2%80%933.13-3776ab?style=flat-square" alt="Python 3.10 to 3.13">
   <img src="https://img.shields.io/badge/OS-Linux%20%7C%20Windows%20%7C%20macOS-555?style=flat-square" alt="Linux, Windows, macOS">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-orange?style=flat-square" alt="AGPL-3.0"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache--2.0-blue?style=flat-square" alt="Apache-2.0"></a>
 </p>
 
 ---
@@ -114,4 +114,4 @@ The [documentation](https://mkturkcan.github.io/tachymetry/docs/) covers the pip
 
 ## License
 
-Tachymetry is released under the [GNU Affero General Public License v3.0](LICENSE), matching its default detector, [UrbanOmniDetect-2](https://huggingface.co/mehmetkeremturkcan/UrbanOmniDetect-2), and [Ultralytics](https://github.com/ultralytics/ultralytics). The bundled Geist typeface is under the SIL Open Font License. The sample clips are downloaded on demand from their hosts and are not redistributed here: [svbrd-llm-roadside-video-av](https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av) (CC BY 4.0), [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Roundabout_14_61.webm) (CC0 1.0), [Small-Crowd-and-Traffic-Video-Footages](https://huggingface.co/datasets/parsafaramarzi/Small-Crowd-and-Traffic-Video-Footages) (MIT) and [DRINF](https://huggingface.co/datasets/hamimmahmud0/DRINF) (CC BY 4.0); see the [sample list](https://mkturkcan.github.io/tachymetry/docs/samples/).
+Tachymetry is released under the [Apache License 2.0](LICENSE). Its default detector, [RF-DETR](https://github.com/roboflow/rf-detr), is Apache-2.0 as well; the optional [UrbanOmniDetect-2](https://huggingface.co/mehmetkeremturkcan/UrbanOmniDetect-2) back-end (`pip install "tachymetry[uod2]"`) depends on [Ultralytics](https://github.com/ultralytics/ultralytics), which is licensed AGPL-3.0. The bundled Geist typeface is under the SIL Open Font License. The sample clips are downloaded on demand from their hosts and are not redistributed here: [svbrd-llm-roadside-video-av](https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av) (CC BY 4.0), [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Roundabout_14_61.webm) (CC0 1.0), [Small-Crowd-and-Traffic-Video-Footages](https://huggingface.co/datasets/parsafaramarzi/Small-Crowd-and-Traffic-Video-Footages) (MIT) and [DRINF](https://huggingface.co/datasets/hamimmahmud0/DRINF) (CC BY 4.0); see the [sample list](https://mkturkcan.github.io/tachymetry/docs/samples/).

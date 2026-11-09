@@ -15,6 +15,8 @@
 
 First public release.
 
+Licensed under the Apache License 2.0. The optional UrbanOmniDetect-2 back-end (`tachymetry[uod2]`) depends on Ultralytics (AGPL-3.0).
+
 - Detection with UrbanOmniDetect-2 (boxes and 3D cuboid corners) or an Ultralytics model; precomputed detections are loaded with `detector.name = "precomputed:<npz or folder>"`.
 - Two-stage BYTE association with a continuous-time Kalman filter, super-class gating and a metric plausibility gate.
 - Per-track filtering: footprint centres, gap-aware zero-phase smoothing, presplit and identity-switch splitting, end trimming (truncated, far-field and low-confidence ends), Hampel repair, parked-vehicle detection with hold-still, physical-validity checks.
