@@ -186,6 +186,41 @@ def _dims(rows: np.ndarray, ctx: TrackContext, cls: str, use: np.ndarray) -> tup
     return L, W, H0
 
 
+def _partial_visibility(
+    rows: np.ndarray,
+    ctx: TrackContext,
+    centre: np.ndarray,
+    heading: np.ndarray,
+    L: float,
+    W: float,
+    H: float,
+    min_ratio: float = 0.55,
+) -> np.ndarray:
+    """Samples whose detector box is much smaller than the projection of the track's own 3D box.
+
+    The expected box is the image bounding box of an upright ``L x W x H`` box at
+    the sample's centre and heading. A detector box covering less than
+    ``min_ratio`` of it in width or height means the object is partly occluded
+    or outside the frame, so its bottom edge does not locate the vehicle.
+    """
+    cam = ctx.camera
+    b = ctx.dets.xyxy[rows].astype(np.float64)
+    out = np.zeros(len(rows), bool)
+    c, s = np.cos(heading), np.sin(heading)
+    for i in range(len(rows)):
+        f = np.array([c[i], s[i]]) * L / 2
+        lf = np.array([-s[i], c[i]]) * W / 2
+        base = np.array([centre[i] + f + lf, centre[i] - f + lf, centre[i] - f - lf, centre[i] + f - lf])
+        pts = np.vstack([np.column_stack([base, np.zeros(4)]), np.column_stack([base, np.full(4, H)])])
+        uv = cam.project(pts)
+        if not np.all(np.isfinite(uv)):
+            continue
+        ew, eh = np.ptp(uv[:, 0]), np.ptp(uv[:, 1])
+        ow, oh = b[i, 2] - b[i, 0], b[i, 3] - b[i, 1]
+        out[i] = ow < min_ratio * ew or oh < min_ratio * eh
+    return out
+
+
 def _centres(
     rows: np.ndarray,
     ctx: TrackContext,
@@ -357,6 +392,23 @@ def _build(rows: np.ndarray, ctx: TrackContext, cls: str, stats: HygieneStats) -
     L, W, H = _dims(rows, ctx, cls, use)
     if cfg.footprints:
         centre, hd_model, has_fp = _centres(rows, ctx, cls, use, L, W)
+        if sup == "vehicle" and cfg.trim:
+            partial = _partial_visibility(rows, ctx, centre, hd_model, L, W, H) & ~has_fp
+            if partial.any():
+                # partly visible ends are trimmed; partly visible samples inside the track are interpolated
+                a, b = 0, len(rows)
+                while a < b and (partial[a] or not use[a]):
+                    a += 1
+                while b > a and (partial[b - 1] or not use[b - 1]):
+                    b -= 1
+                if a > 0 or b < len(rows):
+                    stats.trimmed_samples += len(rows) - (b - a)
+                    return _build(rows[a:b], ctx, cls, stats) if b - a >= 3 else None
+                use = use & ~partial
+                if use.sum() < 3:
+                    stats.dropped_short += 1
+                    return None
+                centre, hd_model, has_fp = _centres(rows, ctx, cls, use, L, W)
     else:
         centre = o.contact[rows].copy()
         hd_model = np.zeros(len(rows))
