@@ -124,17 +124,24 @@ class BEVCanvas:
             c = c[(np.abs(c[:, 0]) < 5 * self.W) & (np.abs(c[:, 1]) < 5 * self.H)]
             if len(c) > 2:
                 polyline_aa(self.base, c, (70, 64, 62), 1, closed=False, halo=False)
-        # scale bar
+        # camera position (clamped to the canvas edge when it lies outside)
+        cpx = self.to_canvas(self.camera.center[:2][None])[0]
+        cpx = np.clip(cpx, [14, 14], [self.W - 14, self.H - 14])
+        # scale bar: bottom left, else bottom right, else top left, whichever the camera chevron leaves clear
         bar_m = step * (2 if span > 40 else 1)
         px = bar_m / self.mpp
-        x0, y0 = 22, self.H - 26
+        group_w = px + 10 + 56  # bar, gap, label
+
+        def clear(x: float, y: float) -> bool:
+            return not (x - 16 < cpx[0] < x + group_w + 16 and y - 30 < cpx[1] < y + 22)
+
+        spots = [(22, self.H - 26), (int(self.W - 22 - group_w), self.H - 26), (22, 30)]
+        x0, y0 = next((s for s in spots if clear(*s)), spots[0])
         cv2.line(self.base, (x0, y0), (int(x0 + px), y0), (210, 210, 214), 2, cv2.LINE_AA)
         for xx in (x0, int(x0 + px)):
             cv2.line(self.base, (xx, y0 - 5), (xx, y0 + 5), (210, 210, 214), 2, cv2.LINE_AA)
         draw_text(self.base, f"{bar_m:g} m", (int(x0 + px + 10), y0 - 9), size=14, color=MUTED)
         # camera chevron
-        cpx = self.to_canvas(self.camera.center[:2][None])[0]
-        cpx = np.clip(cpx, [14, 14], [self.W - 14, self.H - 14])
         chev = np.array([[0, -11], [8, 7], [0, 3], [-8, 7]], np.float64) + cpx
         cv2.fillPoly(self.base, [np.round(chev * 16).astype(np.int32)], CYAN, cv2.LINE_AA, shift=4)
 
