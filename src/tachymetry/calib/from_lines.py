@@ -109,8 +109,10 @@ def calibrate_from_lines(
         Metric cue (:class:`ScaleCue` or ``"height=8"``, ``"lane_width=3.5"``). Without one
         the camera height is set to 1 and ``camera.meta["metric"]`` is ``False``.
     lens:
-        ``"auto"`` (division-model estimate that maximises vanishing-point
-        consistency, accepted only with a clear gain), ``None`` (pinhole) or a fixed :class:`Lens`.
+        ``"auto"`` estimates both the equidistant (``tan``) and the division
+        model by vanishing-point consistency and keeps the better one, accepted
+        only with a clear gain; ``"tan"``/``"equidistant"`` or ``"division"``
+        estimate that model; ``None`` is a pinhole; a :class:`Lens` is used as given.
     region:
         Optional boolean mask of the road surface (e.g. from semantic segmentation).
     """
@@ -118,12 +120,23 @@ def calibrate_from_lines(
     h, w = image.shape[:2]
     size = (w, h)
     details: dict[str, Any] = {}
-    if lens == "auto":
+    if isinstance(lens, str) and lens in ("auto", "tan", "equidistant", "division"):
         raw_segs = detect_segments(image, None)
-        est, info = estimate_lens_vp_consistency(raw_segs, size, model="division", seed=seed)
+        if lens == "auto":
+            models: tuple[str, ...] = ("equidistant", "division")
+        else:
+            models = ("equidistant",) if lens in ("tan", "equidistant") else ("division",)
+        best: tuple[Lens, dict[str, Any]] | None = None
+        for m in models:
+            est, info = estimate_lens_vp_consistency(raw_segs, size, model=m, seed=seed)
+            if best is None or info["support"] > best[1]["support"]:
+                best = (est, info)
+        assert best is not None
+        est, info = best
         details["lens_search"] = info
         # accept only a clear gain in vanishing-point support (absolute fraction of segment length)
-        lens_obj: Lens = est if info["gain"] > 0.03 else IdentityLens(size)
+        ratio = info["support"] / max(info["support_identity"], 1e-9)
+        lens_obj: Lens = est if (info["gain"] > 0.08 and ratio > 1.2) else IdentityLens(size)
     elif lens is None or lens in ("none", "identity"):
         lens_obj = IdentityLens(size)
     else:

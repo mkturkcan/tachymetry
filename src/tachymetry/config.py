@@ -159,10 +159,11 @@ class CalibrationConfig:
 
     methods: tuple[str, ...] = ("cuboids", "lines")  #: tried in order; also ``depth``, ``geocalib``
     scale: str = "vehicles"  #: ``vehicles``, ``height=<m>``, ``lane_width=<m>`` or ``none``
-    lens: str = "auto"
+    lens: str = "auto"  #: ``auto`` (tan or division, by vanishing-point consistency), ``tan``, ``division``, ``none``
     background_frames: int = 41
     car_length_m: float = 4.6
     car_width_m: float = 1.85
+    vp_sigma_deg: float = 0.5  #: angular uncertainty of vanishing points in the fused estimate
 
 
 @dataclass

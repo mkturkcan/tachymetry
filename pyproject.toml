@@ -41,7 +41,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-depth = ["transformers>=4.48", "accelerate>=0.26"]
+depth = ["transformers>=4.49", "accelerate>=0.26"]
 parquet = ["pyarrow>=12"]
 docs = ["mkdocs-material>=9.5", "mkdocstrings[python]>=0.25"]
 dev = ["pytest>=7.4", "ruff>=0.5", "pyarrow>=12", "pandas>=1.5"]

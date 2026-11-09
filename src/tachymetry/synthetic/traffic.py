@@ -27,8 +27,8 @@ from typing import Any
 import numpy as np
 
 from ..config import ROAD_CLASSES
+from ..detections import DetectionSet, FrameDetections
 from ..geometry.camera import Camera
-from ..types import DetectionSet, FrameDetections
 from .scene import Box3D, RoadLayout
 
 __all__ = ["TrafficSpec", "Agent", "simulate", "evaluate", "naive_speeds"]

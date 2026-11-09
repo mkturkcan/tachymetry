@@ -280,7 +280,7 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--points", help="correspondence file (manual)")
     c.add_argument("--camera", help="camera JSON (preview)")
     c.add_argument("--scale", help="metric cue: vehicles | height=<m> | lane_width=<m>")
-    c.add_argument("--lens", help="auto | identity | division | equidistant | brown")
+    c.add_argument("--lens", help="auto | identity | tan (equidistant) | division | brown")
     c.add_argument("--reference", help="orthophoto or site plan (pick)")
     c.add_argument("--gsd", type=float, help="metres per pixel of the reference image (pick)")
     c.add_argument("--preview", help="preview image path")

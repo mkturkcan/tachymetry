@@ -8,8 +8,8 @@ from typing import Any
 import numpy as np
 
 from ..config import PipelineConfig
+from ..detections import DetectionSet
 from ..geometry.camera import Camera
-from ..types import DetectionSet
 from .associate import ByteTracker
 from .hygiene import HygieneStats, TrackContext, process_raw_track
 from .measure import GroundObservations, measure_ground

@@ -12,9 +12,11 @@ Models
 ``division``      Fitzgibbon's one-parameter division model,
                   ``r_u = r_d / (1 + k r_d^2)``. Closed-form in both directions;
                   well suited to plumb-line estimation.
-``equidistant``   Equidistant fisheye rectified to a pinhole of equal focal
-                  length, ``r_u = s tan(r_d / s)``. One parameter (``s``, pixels).
-                  The single most transferable model for wide surveillance lenses.
+``equidistant``   The *tan* model (alias ``tan``): an equidistant fisheye
+                  projection rectified to a pinhole of the same focal length,
+                  ``r_u = s tan(r_d / s)``. One parameter (``s``, pixels), no
+                  separate focal length, monotone over the image. Recommended
+                  for wide-angle surveillance lenses.
 ``brown``         Brown–Conrady radial-tangential (OpenCV ``k1 k2 p1 p2 k3``).
 ``fisheye``       Kannala–Brandt equidistant polynomial (OpenCV fisheye ``k1..k4``).
 
@@ -250,11 +252,30 @@ class DivisionLens(Lens):
 
 @dataclass(repr=False)
 class EquidistantLens(Lens):
-    """Equidistant fisheye rectified to a pinhole: ``r_u = s tan(r_d / s)``.
+    """The tan model: equidistant fisheye rectified to a pinhole, ``r_u = s tan(r_d / s)``.
 
-    ``s`` (pixels) is the fisheye focal length; ``s -> inf`` is the identity.
-    One parameter, monotone everywhere, and stable outside the annotated area,
-    which makes it the recommended model for wide-angle surveillance cameras.
+    A wide-angle surveillance lens maps the angle ``theta`` between a ray and
+    the optical axis approximately linearly to image radius, ``r_d = s theta``
+    (equidistant projection); a pinhole maps it to ``r_u = s tan(theta)``.
+    Eliminating ``theta`` gives the rectification above, about the image centre,
+    with the inverse ``r_d = s atan(r_u / s)``.
+
+    Design choices:
+
+    * **One parameter.** ``s`` (pixels) is the fisheye focal length and
+      ``s -> inf`` is the identity; there is nothing else to fit, so the model
+      is identifiable from a handful of correspondences or straight lines.
+    * **No separate focal length.** The rectified image keeps the focal length
+      ``s``; for a ground plane, any remaining focal-length difference is
+      absorbed by the camera pose and homography, so lens and camera do not
+      compete for the same degree of freedom.
+    * **Monotone over the whole image.** Unlike polynomial models (Brown–Conrady,
+      Kannala–Brandt), it cannot fold back or inflate outside the region where it
+      was fitted, which matters when correspondences cover only part of the frame.
+
+    It is the recommended model for wide-angle surveillance cameras; manual
+    calibration selects it by cross-validation and the automatic methods
+    estimate it from vanishing-point consistency.
     """
 
     s: float = 1e9

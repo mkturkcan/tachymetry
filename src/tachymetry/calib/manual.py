@@ -254,7 +254,7 @@ def calibrate_manual(
     principal_point: tuple[float, float] | None = None,
     robust_px: float = 3.0,
     cv_folds: int | None = 10,
-    candidates: Sequence[str] = ("identity", "division", "equidistant"),
+    candidates: Sequence[str] = ("identity", "equidistant", "division"),
 ) -> CalibrationResult:
     """Calibrate a camera from correspondences.
 

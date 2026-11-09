@@ -30,9 +30,9 @@ from typing import Any
 import numpy as np
 
 from ..config import CalibrationConfig
+from ..detections import DetectionSet
 from ..geometry.camera import CalibrationError, Camera
 from ..geometry.lens import IdentityLens, Lens
-from ..types import DetectionSet
 from .from_cuboids import _residuals as _cuboid_residuals
 from .from_cuboids import calibrate_from_cuboids, collect_footprints, footprint_metrics
 from .from_lines import ScaleCue, apply_scale_cue, calibrate_from_lines
@@ -72,8 +72,17 @@ def fuse_evidence(
     car_length_m: float = 4.6,
     car_width_m: float = 1.85,
     vp_gate_deg: float = 6.0,
+    vp_sigma_deg: float = 0.5,
 ) -> tuple[Camera, dict[str, Any]]:
-    """Maximum-likelihood refinement of focal length, pitch and roll over footprints and vanishing points."""
+    """Maximum-likelihood refinement of focal length, pitch and roll over footprints and vanishing points.
+
+    Footprint residuals are normalised by their robust spread at the starting
+    camera and by an effective sample size (one independent observation per
+    occupied image cell, since a vehicle seen for several seconds yields dozens
+    of correlated footprints). Vanishing-point residuals are angles normalised
+    by ``vp_sigma_deg``. A soft-L1 loss at two standard deviations limits the
+    influence of outliers in either group.
+    """
     from scipy.optimize import least_squares
 
     size = cam0.image_size
@@ -92,8 +101,6 @@ def fuse_evidence(
         d /= np.linalg.norm(d)
         if math.degrees(math.acos(min(1.0, abs(float(up0 @ d))))) < 2 * vp_gate_deg:
             use_v = vertical
-    n = max(len(quads), 1)
-    w_vp = 5.0 * math.sqrt(n)
     yaw0, pitch0, roll0 = cam0.angles
     p0 = np.array([math.log(cam0.focal), math.radians(pitch0), math.radians(roll0)])
 
@@ -109,24 +116,37 @@ def fuse_evidence(
         )
 
     asp = car_length_m / car_width_m
+    scale_c = 1.0
+    n_eff = 0
+    if len(quads):
+        r0 = _cuboid_residuals(make(p0), quads, wts, asp, 0.15, 2.0)
+        sigma_c = max(1.4826 * float(np.median(np.abs(r0))), 1e-3)
+        w, h = size
+        ctr = quads.mean(axis=1)
+        cells = np.unique(np.floor(ctr[:, 0] / (w / 24)) * 1000 + np.floor(ctr[:, 1] / (h / 14)))
+        n_eff = max(10, len(cells))
+        scale_c = sigma_c * math.sqrt(len(quads) / n_eff)
+    sigma_vp = math.radians(vp_sigma_deg)
 
     def fun(p: np.ndarray) -> np.ndarray:
         c = make(p)
-        parts = [_cuboid_residuals(c, quads, wts, asp, 0.15, 2.0)] if len(quads) else []
-        parts.append(_vp_residuals(c, use_h, use_v, w_vp))
+        parts = [_cuboid_residuals(c, quads, wts, asp, 0.15, 2.0) / scale_c] if len(quads) else []
+        parts.append(_vp_residuals(c, use_h, use_v, 1.0 / sigma_vp))
         return np.concatenate(parts)
 
     w_img = size[0]
     lo = np.array([math.log(w_img * 0.15), math.radians(1.0), math.radians(-25)])
     hi = np.array([math.log(w_img * 12), math.radians(89.5), math.radians(25)])
     res = least_squares(
-        fun, np.clip(p0, lo, hi), bounds=(lo, hi), loss="soft_l1", f_scale=0.12, max_nfev=800, x_scale="jac"
+        fun, np.clip(p0, lo, hi), bounds=(lo, hi), loss="soft_l1", f_scale=2.0, max_nfev=800, x_scale="jac"
     )
     cam = make(res.x).with_lens(cam0.lens)
     info = {
         "n_footprints": int(len(quads)),
+        "effective_footprints": int(n_eff),
         "n_vp_horizontal": len(use_h),
         "vertical_vp": use_v is not None,
+        "vp_sigma_deg": vp_sigma_deg,
         "cost": float(res.cost),
     }
     return cam, info
@@ -297,7 +317,14 @@ def calibrate_auto(
         if base is not None:
             try:
                 cam_f, finfo = fuse_evidence(
-                    base.camera, quads_r, wts, horiz, vertical, cfg.car_length_m, cfg.car_width_m
+                    base.camera,
+                    quads_r,
+                    wts,
+                    horiz,
+                    vertical,
+                    cfg.car_length_m,
+                    cfg.car_width_m,
+                    vp_sigma_deg=cfg.vp_sigma_deg,
                 )
                 candidates.append(CalibrationResult(cam_f, "fused", details=finfo))
             except Exception as exc:
@@ -309,7 +336,7 @@ def calibrate_auto(
     ranked = []
     for c in candidates:
         cam = c.camera
-        cons = consistency(cam, quads_r, wts, horiz, vertical)
+        cons = consistency(cam, quads, wts, horiz, vertical)  # raw quads: the camera carries the lens
         c.score = cons["score"]
         c.details["consistency"] = cons
         ranked.append(c)

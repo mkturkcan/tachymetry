@@ -7,8 +7,8 @@ from collections.abc import Callable
 
 import numpy as np
 
+from ..detections import DetectionSet, FrameDetections
 from ..io.video import VideoSource, prefetch
-from ..types import DetectionSet, FrameDetections
 from .backends import Detector
 
 __all__ = ["detect_video"]

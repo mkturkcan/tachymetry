@@ -12,9 +12,9 @@ from typing import Any
 
 import numpy as np
 
+from .detections import DetectionSet
 from .geometry.camera import Camera, _json_default
 from .track.model import Flags, Track
-from .types import DetectionSet
 
 __all__ = ["TrackSet", "RunResult"]
 

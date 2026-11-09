@@ -33,8 +33,8 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..config import SUPER_CLASS, HygieneConfig
+from ..detections import DetectionSet
 from ..geometry.camera import Camera
-from ..types import DetectionSet
 from .measure import CLEARANCE_PRIORS, DIM_BOUNDS, GroundObservations, dims_for
 from .model import Flags, Track
 from .signal import fill_angles, hampel, running_median, segments_by_gap, smooth_kinematics, wrap

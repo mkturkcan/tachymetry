@@ -20,8 +20,8 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..config import HygieneConfig
+from ..detections import DetectionSet
 from ..geometry.camera import Camera
-from ..types import DetectionSet
 
 __all__ = ["GroundObservations", "measure_ground", "DIM_PRIORS", "CLEARANCE_PRIORS", "dims_for"]
 
@@ -53,7 +53,7 @@ def dims_for(cls_name: str) -> tuple[float, float, float]:
 
 @dataclass
 class GroundObservations:
-    """Column-aligned with a :class:`~tachymetry.types.DetectionSet`."""
+    """Column-aligned with a :class:`~tachymetry.detections.DetectionSet`."""
 
     contact: np.ndarray  # (M, 2)
     gsd: np.ndarray  # (M,)

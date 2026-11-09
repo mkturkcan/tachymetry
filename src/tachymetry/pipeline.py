@@ -22,10 +22,10 @@ import numpy as np
 from . import __version__
 from .calib.correspondences import Correspondences
 from .config import PipelineConfig
+from .detections import DetectionSet
 from .geometry.camera import CalibrationError, Camera, _json_default
 from .io.video import VideoSource
 from .results import RunResult, TrackSet
-from .types import DetectionSet
 
 __all__ = ["Pipeline", "resolve_camera"]
 

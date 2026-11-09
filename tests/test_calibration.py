@@ -4,10 +4,10 @@ from tachymetry.calib.correspondences import Correspondences, latlon_to_local, l
 from tachymetry.calib.from_cuboids import calibrate_from_cuboids
 from tachymetry.calib.from_lines import calibrate_from_lines
 from tachymetry.calib.manual import calibrate_manual
+from tachymetry.detections import DetectionSet
 from tachymetry.geometry import Camera, DivisionLens, EquidistantLens
 from tachymetry.synthetic import default_camera, make_scene
 from tachymetry.synthetic.scene import Box3D
-from tachymetry.types import DetectionSet
 
 
 def _correspondences(cam, rng, n=25, noise=1.0):
@@ -94,3 +94,12 @@ def test_cuboid_calibration_recovers_camera(rng):
     res = calibrate_from_cuboids(ds)
     assert abs(res.camera.pitch - 32) < 1.0
     assert abs(res.camera.height - 8) / 8 < 0.05
+
+
+def test_tan_lens_is_recovered_from_straight_lines():
+    cam = default_camera(position=(-8.7, -8.7), yaw=45, pitch=34, lens=EquidistantLens((1280, 720), s=700))
+    sc = make_scene(camera=cam, seed=2)
+    res = calibrate_from_lines(sc.image, scale=f"height={cam.height}", lens="tan")
+    assert res.camera.lens.kind == "equidistant"
+    assert abs(res.camera.lens.s - 700) / 700 < 0.05
+    assert abs(res.camera.pitch - cam.pitch) < 1.0

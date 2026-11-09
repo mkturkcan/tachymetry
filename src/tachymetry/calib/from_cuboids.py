@@ -26,9 +26,9 @@ from typing import Any
 
 import numpy as np
 
+from ..detections import DetectionSet
 from ..geometry.camera import CalibrationError, Camera
 from ..geometry.lens import IdentityLens, Lens
-from ..types import DetectionSet
 from .result import CalibrationResult
 from .scale import CAR_LENGTH_M, CAR_WIDTH_M, scale_from_vehicle_sizes
 
