@@ -1,0 +1,87 @@
+{
+  "format": "tachymetry.camera/1",
+  "image_size": [
+    1920,
+    1080
+  ],
+  "K": [
+    [
+      2181.765963769613,
+      0.0,
+      959.5
+    ],
+    [
+      0.0,
+      2181.765963769613,
+      539.5
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "R": [
+    [
+      0.7213097313431979,
+      0.6926058627844504,
+      -0.00306436065279892
+    ],
+    [
+      0.21069452569604397,
+      -0.2236367739987594,
+      -0.9516272432823404
+    ],
+    [
+      -0.6597879116135142,
+      0.68577234717655,
+      -0.30723964512517377
+    ]
+  ],
+  "t": [
+    0.08338272505774813,
+    25.894234319840354,
+    8.360138299293562
+  ],
+  "lens": {
+    "model": "identity",
+    "image_size": [
+      1920,
+      1080
+    ],
+    "center": [
+      959.5,
+      539.5
+    ]
+  },
+  "summary": {
+    "focal_px": 2181.766,
+    "height_m": 27.2105,
+    "yaw_deg": 133.8937,
+    "pitch_deg": 17.893,
+    "roll_deg": 0.1845,
+    "hfov_deg": 47.5
+  },
+  "H_image_to_ground": [
+    [
+      0.1274642717853122,
+      0.03723230551317764,
+      -396.7665902368963
+    ],
+    [
+      0.12239194634136048,
+      -0.03951935944228286,
+      168.28157832330584
+    ],
+    [
+      1.990079142128923e-05,
+      0.006180126109529755,
+      1.0
+    ]
+  ],
+  "meta": {
+    "calibration_method": "auto:fov+vp",
+    "metric": true,
+    "source": "automatic calibration of the sample intersection-day: 47.5 deg field of view, main ground vanishing point, vehicle-silhouette scale; shared by the samples of the same camera, whose backgrounds register to it within 4 px"
+  }
+}

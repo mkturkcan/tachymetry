@@ -13,7 +13,6 @@ intersection-day-2     same camera, another time of day                 CC BY 4.
 intersection-day-3     same camera, dense traffic                       CC BY 4.0
 intersection-turn      same camera, turning traffic                     CC BY 4.0
 intersection-night     same camera, infrared night view                 CC BY 4.0
-roundabout-aerial      roundabout seen from a hovering drone            CC0 1.0
 motorway-overpass      divided motorway seen from an overpass           MIT
 dhaka-roundabout       dense mixed traffic, straight-down drone view    CC BY 4.0
 =====================  ===============================================  ===============
@@ -65,7 +64,6 @@ _SVBRD_PAGE = "https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadsid
 _SVBRD_CREDIT = "svbrd-llm-roadside-video-av by Ryan-xiangyu-ut (Hugging Face)"
 _PARS = "parsafaramarzi/Small-Crowd-and-Traffic-Video-Footages"
 _DRINF = "hamimmahmud0/DRINF"
-_COMMONS = "https://upload.wikimedia.org/wikipedia/commons"
 
 SAMPLES: dict[str, Sample] = {
     "intersection-day": Sample(
@@ -75,6 +73,9 @@ SAMPLES: dict[str, Sample] = {
         "hf",
         f"{_SVBRD}/Non_AV/2/2.mp4",
         _SVBRD_PAGE,
+        # lens field of view from GeoCalib on four clips of this camera (focal 2053-2359 px), which the
+        # earlier cuboid calibrations matched (2094-2314 px)
+        overrides={"calibration.hfov_deg": 47.5},
     ),
     "intersection-day-2": Sample(
         "signalised urban intersection, another time of day",
@@ -83,6 +84,9 @@ SAMPLES: dict[str, Sample] = {
         "hf",
         f"{_SVBRD}/Non_AV/5/5.mp4",
         _SVBRD_PAGE,
+        camera={
+            "file": "svbrd-intersection.json"
+        },  # same camera as intersection-day (backgrounds register within 4 px)
     ),
     "intersection-day-3": Sample(
         "signalised urban intersection, dense traffic",
@@ -91,6 +95,9 @@ SAMPLES: dict[str, Sample] = {
         "hf",
         f"{_SVBRD}/Non_AV/7/7.mp4",
         _SVBRD_PAGE,
+        camera={
+            "file": "svbrd-intersection.json"
+        },  # same camera as intersection-day (backgrounds register within 4 px)
     ),
     "intersection-turn": Sample(
         "signalised urban intersection, turning traffic",
@@ -99,6 +106,9 @@ SAMPLES: dict[str, Sample] = {
         "hf",
         f"{_SVBRD}/clear/270/2025-09-24-sunny-northbound-right-turn-1.mp4",
         _SVBRD_PAGE,
+        camera={
+            "file": "svbrd-intersection.json"
+        },  # same camera as intersection-day (backgrounds register within 4 px)
     ),
     "intersection-night": Sample(
         "signalised urban intersection, infrared night view",
@@ -107,14 +117,9 @@ SAMPLES: dict[str, Sample] = {
         "hf",
         f"{_SVBRD}/clear-night/100/09252025 - 5-1.mp4",
         _SVBRD_PAGE,
-    ),
-    "roundabout-aerial": Sample(
-        "roundabout seen from a hovering drone",
-        "CC0 1.0",
-        "Roundabout 14 61 by Wikideas1 (Wikimedia Commons)",
-        "url",
-        f"{_COMMONS}/c/cc/Roundabout_14_61.webm",
-        "https://commons.wikimedia.org/wiki/File:Roundabout_14_61.webm",
+        camera={
+            "file": "svbrd-intersection.json"
+        },  # same camera as intersection-day (backgrounds register within 4 px)
     ),
     "motorway-overpass": Sample(
         "divided motorway seen from an overpass",
@@ -123,6 +128,9 @@ SAMPLES: dict[str, Sample] = {
         "hf",
         f"{_PARS}::cartraffic03.mp4",
         f"https://huggingface.co/datasets/{_PARS}",
+        # lens field of view from GeoCalib; checked with the lane dashes (2.7-3.1 m dashes, 8.5-9.2 m periods
+        # from near to far) and the lane width (3.43-3.45 m)
+        overrides={"calibration.hfov_deg": 59.0},
     ),
     "dhaka-roundabout": Sample(
         "dense mixed traffic at a roundabout, straight-down drone view",
@@ -158,8 +166,9 @@ def attribution(name: str) -> str:
 def sample_camera(name: str):
     """The known camera of a sample, or ``None`` when the sample is calibrated automatically.
 
-    Straight-down drone clips carry one: automatic calibration is designed for
-    oblique views (see the drone-footage example in the documentation).
+    Straight-down drone clips carry one (automatic calibration is designed for
+    oblique views; see the drone-footage example in the documentation), and
+    clips of a camera that was calibrated once on another clip share its file.
     """
     s = SAMPLES[name]
     if s.camera is None:
@@ -167,6 +176,10 @@ def sample_camera(name: str):
     from .geometry.camera import Camera
 
     kw = dict(s.camera)
+    if "file" in kw:  # a camera calibrated once and shipped with the package
+        from importlib.resources import files
+
+        return Camera.load(str(files("tachymetry.assets").joinpath("cameras", kw["file"])))
     size = tuple(kw.pop("image_size"))
     return Camera.from_pose(size, meta={"calibration_method": "known", "source": f"sample {name}"}, **kw)
 
