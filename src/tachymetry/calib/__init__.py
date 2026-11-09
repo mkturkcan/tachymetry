@@ -69,16 +69,19 @@ def calibrate_source(
     points: str | Path | None = None,
     scale: Any = None,
     lens: Any = None,
-    detector: str = "uod2-x",
+    detector: str = "rfdetr-seg-l",
     device: str = "auto",
     seconds: float = 90.0,
     rate_hz: float = 5.0,
+    hfov_deg: float | None = None,
     **kwargs: Any,
 ) -> CalibrationResult:
     """Calibrate the camera of a video (or a single image).
 
     For ``auto`` and ``cuboids`` the detector runs on up to ``seconds`` of video
-    at ``rate_hz`` to collect vehicle footprints.
+    at ``rate_hz``: instance masks give the vehicle-silhouette scale, UOD-2
+    cuboids the footprint method. ``hfov_deg`` is the lens's horizontal field of
+    view when known.
     """
     img, src = _load_image_or_background(source)
     size = (img.shape[1], img.shape[0])
@@ -112,5 +115,5 @@ def calibrate_source(
             return calibrate_from_cuboids(dets, **kwargs)
         from ..config import CalibrationConfig
 
-        return calibrate_auto(img, dets, CalibrationConfig(), lens=lens, scale=scale)
+        return calibrate_auto(img, dets, CalibrationConfig(hfov_deg=hfov_deg), lens=lens, scale=scale)
     raise ValueError(f"unknown calibration method {method!r}")

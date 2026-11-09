@@ -166,7 +166,7 @@ def cmd_calibrate(args: argparse.Namespace) -> int:
         return 0
     kwargs: dict[str, Any] = {}
     if args.method in ("auto", "cuboids"):
-        kwargs.update(detector=args.detector, device=args.device)
+        kwargs.update(detector=args.detector, device=args.device, hfov_deg=args.hfov)
     res = calibrate_source(
         args.source, method=args.method, points=args.points, scale=args.scale, lens=args.lens, **kwargs
     )
@@ -287,7 +287,8 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--reference", help="orthophoto or site plan (pick)")
     c.add_argument("--gsd", type=float, help="metres per pixel of the reference image (pick)")
     c.add_argument("--preview", help="preview image path")
-    c.add_argument("--detector", default="uod2-x")
+    c.add_argument("--detector", default="rfdetr-seg-l", help="detector for vehicle masks or cuboids (auto)")
+    c.add_argument("--hfov", type=float, help="known horizontal field of view of the lens, degrees (auto)")
     c.add_argument("--device", default="auto")
     c.set_defaults(func=cmd_calibrate)
 

@@ -207,10 +207,10 @@ class Pipeline:
         res = calibrate_auto(bg, dets, self.config.calibration)
         if res.camera.meta.get("metric") is False:
             raise CalibrationError(
-                f"{src.path.name}: automatic calibration found the camera orientation but no metric scale "
-                "(the detector provides no 3D cuboids). Give a scale cue with "
-                "--set calibration.scale=height=<metres>, calibrate manually (tachymetry calibrate pick / manual), "
-                "or use a cuboid detector (uod2-*, from the optional uod2 extra)."
+                f"{src.path.name}: automatic calibration found no reliable metric camera (no instance masks or "
+                "cuboids, or the car silhouettes did not fit the estimated orientation). Give the lens field of view "
+                "(--set calibration.hfov_deg=<degrees>), a scale cue (--set calibration.scale=height=<metres> or "
+                "lane_width=<metres>), or calibrate manually (tachymetry calibrate pick / manual)."
             )
         if res.camera.height > MAX_PLAUSIBLE_HEIGHT_M:
             note = (
