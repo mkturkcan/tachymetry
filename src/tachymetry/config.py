@@ -149,7 +149,10 @@ class FilterConfig:
 
     enabled: bool = True  #: run the cross-track verdicts (ghosts, duplicates, passengers, riders, shadows)
     ghost_min_duration_s: float = 1.0
-    ghost_min_score: float = 0.35
+    ghost_min_score: float = 0.35  #: static tracks with a lower mean score are ghosts
+    ghost_parked_score: float = 0.40  #: parked vehicles with a lower mean score are ghosts
+    ghost_parked_cuboid_score: float = 0.60  #: ... and, with a cuboid detector, those below this score that
+    #: received almost no trusted 3D footprint
     stitch: bool = True
     stitch_max_gap_s: float = 3.0
     stitch_radius_m: float = 2.5

@@ -238,7 +238,10 @@ def mark_ghosts(tracks: list[Track], cfg: FilterConfig) -> int:
         elif (
             tr.state == "parked"
             and tr.super_cls == "vehicle"
-            and ((cuboid_detector and fp_share < 0.15 and score < 0.6) or score < 0.4)
+            and (
+                (cuboid_detector and fp_share < 0.15 and score < cfg.ghost_parked_cuboid_score)
+                or score < cfg.ghost_parked_score
+            )
         ):
             tr.verdict, tr.reason = "ghost", "static low-confidence vehicle without a 3D footprint"
         else:
