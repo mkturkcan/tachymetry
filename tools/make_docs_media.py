@@ -1,7 +1,10 @@
 """Regenerate every figure used by the project page (docs/index.html) and the documentation.
 
-Real-footage figures use the public sample clip ``tachymetry.data.sample_video("intersection-day")``
-(svbrd-llm-roadside-video-av, CC BY 4.0, downloaded on demand). Synthetic figures use
+Real-footage figures use the public sample clips of :mod:`tachymetry.data` (downloaded on demand from
+their hosts; licences and credits in ``tachymetry.data.attribution``): ``intersection-day`` for the
+landing-page and guide figures, and all eight samples for the scene gallery (``docs/media/gallery``).
+Samples that carry a known camera (``tachymetry.data.sample_camera``, the straight-down drone clip) use
+it, with the configuration overrides they need; the others are calibrated automatically. Synthetic figures use
 :mod:`tachymetry.synthetic`, whose cameras and lenses are known, and also write the measured tables
 that the documentation includes (``synthetic_calibration.md``, ``lens_rectification.md``,
 ``figures.json``).
@@ -9,10 +12,12 @@ that the documentation includes (``synthetic_calibration.md``, ``lens_rectificat
     pip install -e ".[depth]"
     python tools/make_docs_media.py                      # all figures into docs/media
     python tools/make_docs_media.py --only lens,synthetic --device cpu
+    python tools/make_docs_media.py --only gallery          # stills of the eight sample clips
     CUDA_VISIBLE_DEVICES=1 python tools/make_docs_media.py --device cuda:0
 
-The pipeline run on the sample clip is cached in ``--work`` (default ``~/.cache/tachymetry/docs_media``),
-so re-running only redraws. JPEG quality is 85; images are at most 1920 px wide.
+Pipeline runs on the sample clips are cached in ``--work`` (default ``~/.cache/tachymetry/docs_media``),
+so re-running only redraws. JPEG quality is 85 (80 for the gallery); images are at most 1920 px wide
+(1280 px for the gallery).
 """
 
 from __future__ import annotations
@@ -28,7 +33,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 QUALITY = 85
-GROUPS = ("clip", "calib", "synthetic", "lens", "social")
+GROUPS = ("clip", "calib", "synthetic", "lens", "social", "gallery")
 INK = (13, 11, 10)
 TEXT = (232, 235, 236)
 MUTED = (163, 156, 155)
@@ -37,12 +42,12 @@ CYAN = (255, 227, 111)
 
 
 # ----------------------------------------------------------------------------- helpers
-def save(img: np.ndarray, path: Path, max_width: int = 1920) -> Path:
+def save(img: np.ndarray, path: Path, max_width: int = 1920, quality: int = QUALITY) -> Path:
     h, w = img.shape[:2]
     if w > max_width:
         img = cv2.resize(img, (max_width, int(round(h * max_width / w))), interpolation=cv2.INTER_AREA)
     path.parent.mkdir(parents=True, exist_ok=True)
-    cv2.imwrite(str(path), img, [cv2.IMWRITE_JPEG_QUALITY, QUALITY, cv2.IMWRITE_JPEG_PROGRESSIVE, 1])
+    cv2.imwrite(str(path), img, [cv2.IMWRITE_JPEG_QUALITY, quality, cv2.IMWRITE_JPEG_PROGRESSIVE, 1])
     shown = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path
     print(f"  {shown}  {w}x{h}  {path.stat().st_size / 1e3:.0f} kB")
     return path
@@ -109,8 +114,11 @@ def read_frame(run: Any, t: float) -> tuple[np.ndarray, float]:
 def pick_times(run: Any, n: int = 2, min_sep: float = 6.0) -> list[float]:
     """Times with the most moving road users in view (and some history for trails)."""
     ok = [tr for tr in run.tracks.ok if tr.state == "moving"]
+    if not ok:
+        return [0.5 * float(run.tracks.meta.get("duration_s") or 1.0)] * n
     t_all = np.unique(np.concatenate([tr.t for tr in ok]))
-    t_all = t_all[(t_all > t_all[0] + 3.5) & (t_all < t_all[-1] - 0.5)]
+    inner = t_all[(t_all > t_all[0] + 3.5) & (t_all < t_all[-1] - 0.5)]
+    t_all = inner if len(inner) else t_all
     score = np.zeros(len(t_all))
     for tr in ok:
         live = (t_all >= tr.t[0]) & (t_all <= tr.t[-1])
@@ -562,6 +570,59 @@ def social_card(out: Path) -> None:
     save(img, out / "social_preview.jpg", 1280)
 
 
+# ----------------------------------------------------------------------------- scene gallery
+GALLERY = (
+    "intersection-day",
+    "intersection-day-2",
+    "intersection-day-3",
+    "intersection-turn",
+    "intersection-night",
+    "roundabout-aerial",
+    "motorway-overpass",
+    "dhaka-roundabout",
+)
+
+
+def run_named_sample(name: str, work: Path, device: str) -> Any:
+    """Run the pipeline on a registered sample with its known camera and overrides, if it has them."""
+    from tachymetry import data
+    from tachymetry.config import PipelineConfig
+    from tachymetry.pipeline import Pipeline
+
+    cfg = PipelineConfig().override(data.sample_overrides(name))
+    camera = data.sample_camera(name)
+    path = data.sample_video(name)
+    print(f"Pipeline on {name} ({'known camera' if camera is not None else 'automatic calibration'}) -> {work / name}")
+    return Pipeline(cfg, camera=camera if camera is not None else "auto", device=device).run(path, work / name)
+
+
+def gallery_figures(work: Path, out: Path, stats: dict, device: str) -> None:
+    """One camera-view still per sample: the moment with the most moving road users, rendered as in overlay.mp4."""
+    from tachymetry import data
+    from tachymetry.config import RenderConfig
+    from tachymetry.render.video import Renderer
+
+    stats["gallery"] = {}
+    for name in GALLERY:
+        run = run_named_sample(name, work, device)
+        t = pick_times(run, 1)[0]
+        img, t = read_frame(run, t)
+        r = Renderer(run, RenderConfig(), layout="camera")
+        still = r.frame(img, t)[r.header_h :]  # drop the title bar; the caption on the page carries it
+        save(still, out / "gallery" / f"{name}.jpg", 1280, quality=80)
+        s = run.summary()
+        stats["gallery"][name] = {
+            "time_s": round(t, 2),
+            "calibration": run.camera.meta.get("calibration_method"),
+            "camera": run.camera.describe(),
+            "size": list(run.camera.image_size),
+            "tracks": s["tracks"],
+            "by_class": s["by_class"],
+            "vehicle_speed_kmh": s["vehicle_speed_kmh"],
+            "attribution": data.attribution(name),
+        }
+
+
 # ----------------------------------------------------------------------------- main
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -592,8 +653,10 @@ def main() -> None:
         lens_figures(out, stats)
     if "social" in only:
         social_card(out)
+    if "gallery" in only:
+        gallery_figures(Path(args.work), out, stats, args.device)
     stats_path.write_text(json.dumps(stats, indent=1, default=lambda o: o.tolist() if hasattr(o, "tolist") else str(o)))
-    total = sum(p.stat().st_size for p in out.glob("*") if p.is_file() and not p.name.startswith("trailer"))
+    total = sum(p.stat().st_size for p in out.rglob("*") if p.is_file() and not p.name.startswith("trailer"))
     print(f"Done in {time.time() - t0:.0f} s; {out} holds {total / 1e6:.1f} MB (without the trailer).")
 
 

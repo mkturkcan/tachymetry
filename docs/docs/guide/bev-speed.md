@@ -35,7 +35,7 @@ The along-ray term grows quadratically with range. Detections whose contact poin
 
 | Camera | $f$ (px) | $H$ (m) | $D_{\max}$, approximation | $D_{\max}$, `ground_sampling_distance` on the centre column |
 |---|---|---|---|---|
-| Public sample clip, automatic calibration | 2163 | 28.4 | 132.8 m | 133.5 m |
+| Public sample clip, automatic calibration | 2212 | 27.8 | 133.0 m | 133.9 m |
 | Pole, 1280×720, 70° HFOV, pitch 32° | 914 | 8.0 | 46.1 m | beyond the top image row (43.0 m, GSD 0.226) |
 
 The calibration preview, the bird's-eye canvas and `calib.preview.bev_extent` use the same 0.30 m per pixel bound to decide which ground is drawn.

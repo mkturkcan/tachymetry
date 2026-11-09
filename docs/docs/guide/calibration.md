@@ -76,16 +76,16 @@ import tachymetry as tm
 from tachymetry.data import sample_video
 
 clip = sample_video("intersection-day")            # public sample clip, downloaded once
-cal = tm.calibrate(clip, method="lines", scale="height=28.4")
+cal = tm.calibrate(clip, method="lines", scale="height=27.8")
 print(cal.summary())
 cal.save("camera.json")                            # camera.json + camera.report.json
 ```
 
 ```text
-[lines] f=1786.7px (hfov 56.5 deg), height=28.40 m, pitch=17.91 deg, roll=-3.05 deg, yaw=-52.1 deg, lens=identity; consistency 0.284
+[lines] f=1786.7px (hfov 56.5 deg), height=27.80 m, pitch=17.91 deg, roll=-3.05 deg, yaw=-52.1 deg, lens=identity; consistency 0.284
 ```
 
-The height of 28.4 m is the camera height that an automatic calibration of this clip (vehicle-size scale) reported; any known height can be used. The saved camera is used with `tm.track(clip, camera="camera.json")` or `tachymetry run clip.mp4 --camera camera.json`.
+The height of 27.8 m is the camera height that the automatic calibration of this clip (vehicle-size scale) reported; a measured height takes its place when one is known. The saved camera is used with `tm.track(clip, camera="camera.json")` or `tachymetry run clip.mp4 --camera camera.json`.
 
 `tm.calibrate(source, method, points=None, **kwargs)` forwards to `tachymetry.calib.calibrate_source`, which consumes `scale` (used by `lines` and `auto`), `lens` (`manual`, `lines`, `auto`), `detector`, `device`, `seconds` and `rate_hz` (`auto`, `cuboids`). Other keyword arguments are passed to the `manual`, `lines`, `cuboids`, `depth` and `geocalib` functions, e.g. `tm.calibrate("clip.mp4", method="depth", height=8.0)`. The methods are also available directly in `tachymetry.calib`:
 
@@ -116,15 +116,31 @@ Methods that recover the camera only up to scale return a camera of height 1 and
 | Camera height | `"height=8.5"`, `"h=8.5"`, `8.5` | `scale_to_height`: the world is scaled by $h_\mathrm{true} / h$. |
 | Known ground distance | `ScaleCue(distance=((u1, v1), (u2, v2), d))` | `scale_from_distance`: the two raw pixels are back-projected and the world is scaled so that they are $d$ metres apart. |
 | Lane width | `"lane_width=3.5"`, `"lane=3.5"` | `scale_from_lane_spacing`: lateral offsets of the longer half of the main-direction marking segments; the period that best explains all pairwise offset differences as integer multiples (searched over 0.4 to 2.0 times the expected width) is taken as one lane width. |
-| Vehicles | `"vehicles"` (default of `calibrate_auto`) | `scale_from_vehicle_sizes` on car footprints (below). |
+| Vehicles | `"vehicles"` (default of `calibrate_auto`) | `footprint_scale` on car footprints (below). |
 
-The vehicle-size cue uses the median passenger-car footprint, $L_0 = 4.6$ m by $W_0 = 1.85$ m (`calib/scale.py`, configurable as `calibration.car_length_m` and `calibration.car_width_m`). With $\tilde L$ and $\tilde W$ the medians of the back-projected footprint lengths and widths (one diversity-weighted vote per footprint, cars only), the two scale estimates $s_L = L_0 / \tilde L$ and $s_W = W_0 / \tilde W$ are combined in the log domain with inverse-variance weights for assumed relative dispersions of 12 % (length) and 6 % (width):
+The vehicle-size cue uses the median passenger-car footprint, $L_0 = 4.6$ m by $W_0 = 1.85$ m (`calib/scale.py`, configurable as `calibration.car_length_m` and `calibration.car_width_m`). `footprint_scale` (`calib/from_cuboids.py`) back-projects the trusted car footprints with the camera. Each footprint then contributes the dimension that lies across its viewing ray, because distances along the ray are far more sensitive to pitch and corner errors. With $\gamma$ the angle between the footprint axis and the ray to its centroid:
 
-$$
-\log s = \frac{w_L \log s_L + w_W \log s_W}{w_L + w_W}, \qquad w_L = 0.12^{-2}, \quad w_W = 0.06^{-2},
-$$
+- a footprint seen roughly head-on ($|\cos\gamma| > 0.5$) gives $s = W_0 / W$;
+- one seen roughly from the side ($|\cos\gamma| < 0.85$) gives $s = L_0 / L$;
+- oblique footprints give both.
 
-so the width estimate carries 80 % of the weight. At least 5 footprints are required by `scale_from_vehicle_sizes` and at least 10 by `calibrate_auto`. The prior is a population median: a fleet whose median car differs from 4.6 m by 1.85 m biases all distances and speeds by the same factor (see [Limitations](../limitations.md#metric-scale)).
+The scale is the weighted median of these estimates. Width estimates carry 4 times the footprint's diversity weight and length estimates once, because car widths vary about half as much as car lengths. At least 10 footprints are required by `calibrate_auto`. The older `scale_from_vehicle_sizes` (`calib/scale.py`), which combines the median length and width in the log domain with inverse-variance weights for assumed dispersions of 12 % and 6 %, remains available.
+
+The prior is a population median. A fleet whose median car differs from 4.6 m by 1.85 m biases all distances and speeds by the same factor, and so does a detector that maps smaller vehicles, such as three-wheelers, to `car` ([Limitations](../limitations.md#mixed-traffic-and-class-dependent-scale)).
+
+## Implausible automatic calibrations
+
+`Pipeline` checks each automatic calibration before using it:
+
+- **No metric scale.** A camera without one (the detector provides no cuboids and no scale cue was given) raises `CalibrationError` with instructions.
+- **Implausible height.** A camera placed more than `MAX_PLAUSIBLE_HEIGHT_M` = 250 m above the ground (`pipeline.py`) raises a `UserWarning`, and the note is stored in `camera.meta["warnings"]`, so it is also written to `camera.json`. The run continues with that camera.
+
+The known failure case is straight-down drone footage. There the cuboid solver mistakes the detector's footprint bias for perspective and returns a strongly tilted camera with a long focal length at a large height; on the straight-down sample, 1343 m. Supply the camera for such footage ([Drone footage](../examples/drone.md)). Heights below the threshold are not checked, so inspect the preview of each new viewpoint.
+
+Straight-down cameras (pitch 90°) are supported when given explicitly:
+
+- `Camera.below_horizon` accepts all finite pixels, since the image contains no horizon.
+- The bird's-eye view is oriented by `Camera.ground_up()`, the ground direction that appears as up in the image. It is defined for pitches from level to straight down.
 
 ## Verifying a calibration
 

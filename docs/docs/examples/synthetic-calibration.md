@@ -48,18 +48,18 @@ Output (Linux, NumPy 2.4, OpenCV 4.13):
 ```text
 manual   [manual      ] focal  -0.04 %   pitch  +0.03 deg   roll  -0.05 deg   height   7.99 m
 lines    [lines       ] focal  -2.67 %   pitch  +0.43 deg   roll  +0.33 deg   height   8.00 m
-cuboids  [cuboids     ] focal  -4.40 %   pitch  +0.53 deg   roll  +0.42 deg   height   7.59 m
-auto     [auto:lines  ] focal  -2.67 %   pitch  +0.43 deg   roll  +0.33 deg   height   7.82 m
+cuboids  [cuboids     ] focal  -4.96 %   pitch  +0.69 deg   roll  +0.32 deg   height   7.71 m
+auto     [auto:lines  ] focal  -2.67 %   pitch  +0.43 deg   roll  +0.33 deg   height   7.93 m
 ```
 
 How each estimate is obtained:
 
 - **manual** fits the physical camera to 12 correspondences, chooses the lens model by 10-fold cross-validation, and inherits its metric scale from the world coordinates ([Manual calibration](../guide/manual-calibration.md)).
 - **lines** recovers focal length, pitch and roll from the vanishing points of the painted markings and the vertical structures; its height is the scale cue (`scale="height=8"`), so its height error is zero by construction and its accuracy is visible in the focal length and angles.
-- **cuboids** uses the 351 trusted car footprints of the simulated traffic and the 4.6 m by 1.85 m car prior for scale. Simulated moving cars are drawn with lengths $\mathcal{N}(4.6, 0.35^2)$ m and widths $\mathcal{N}(1.85, 0.08^2)$ m and parked cars measure 4.5 m by 1.85 m, close to the prior; the height (7.59 m, −5.1 %) is the scale implied by the footprint sizes measured with the estimated camera.
-- **auto** evaluates `lines`, `cuboids` and `fused` on the same evidence. Here the `lines` candidate scored highest (0.348, against 0.283 for `cuboids` and 0.273 for `fused`; see [Ranking](../guide/auto-calibration.md#ranking)), and the vehicle-size scale gave a height of 7.82 m.
+- **cuboids** uses the 351 trusted car footprints of the simulated traffic and the 4.6 m by 1.85 m car prior for scale. Simulated moving cars are drawn with lengths $\mathcal{N}(4.6, 0.35^2)$ m and widths $\mathcal{N}(1.85, 0.08^2)$ m and parked cars measure 4.5 m by 1.85 m, close to the prior; the height (7.71 m, −3.6 %) is the scale implied by the footprint sizes measured with the estimated camera.
+- **auto** evaluates `lines`, `cuboids` and `fused` on the same evidence. Here the `lines` candidate scored highest (0.348, against 0.279 for `cuboids` and 0.270 for `fused`; see [Ranking](../guide/auto-calibration.md#ranking)), and the vehicle-size scale gave a height of 7.93 m.
 
-The automatic methods agree with each other to within 2 % in focal length and 0.1 degrees in pitch, and all underestimate the focal length, by 2.7 to 4.4 %. The table below measures the consequence of these errors on the ground plane directly.
+The automatic methods agree with each other to within 2.3 % in focal length and 0.3 degrees in pitch, and all underestimate the focal length, by 2.7 to 5.0 %. The table below measures the consequence of these errors on the ground plane directly.
 
 ## Measured errors
 

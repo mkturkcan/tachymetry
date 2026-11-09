@@ -1,6 +1,6 @@
 # Verdicts
 
-After per-track hygiene ([Association and track hygiene](tracking.md)), `track.builder.build_tracks` reasons across tracks (`track/verdicts.py`). It first joins fragments of one object, then assigns a verdict to every track. Only tracks with verdict `ok` appear in `tracks.csv`, `tracks.json`, the GeoJSON and MOT exports and the rendered video; `tracks_summary.csv` lists all tracks with `verdict` and `reason`. Defaults below are from `FilterConfig` (`config.py`); constants that are not configurable are marked *fixed*.
+After per-track hygiene ([Association and track hygiene](tracking.md)), `tracking.builder.build_tracks` reasons across tracks (`tracking/verdicts.py`). It first joins fragments of one object, then assigns a verdict to each track. Only tracks with verdict `ok` appear in `tracks.csv`, `tracks.json`, the GeoJSON and MOT exports and the rendered video; `tracks_summary.csv` lists all tracks with `verdict` and `reason`. Defaults below are from `FilterConfig` (`config.py`); constants that are not configurable are marked *fixed*.
 
 ## Order of application
 

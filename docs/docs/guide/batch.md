@@ -19,7 +19,7 @@ A worked example with two public clips is in [Examples: batch processing](../exa
 
 ## Inputs
 
-`io.find_videos` expands each input: a file is used as is; a directory is searched recursively for files with a video extension (`.mp4`, `.mov`, `.avi`, `.mkv`, `.m4v`, `.mpg`, `.mpeg`, `.ts`, `.mts`, `.webm`, `.wmv`, `.flv`, `.h264`, `.hevc`), and a directory that holds images but no videos becomes one image-sequence source (10 fps unless `VideoSource(path, fps=...)` is used directly); a pattern containing `*`, `?` or `[` is expanded with `pathlib` glob, where `**` matches any depth. Quote patterns on the command line so that the library, not the shell, expands them (this also makes `**` work in shells without recursive globbing, and on Windows, where shells do not expand patterns). Files are sorted in natural order and duplicates removed.
+`io.find_videos` expands each input: a file is used as is; a directory is searched recursively for files with a video extension (`.mp4`, `.mov`, `.avi`, `.mkv`, `.m4v`, `.mpg`, `.mpeg`, `.ts`, `.mts`, `.webm`, `.wmv`, `.flv`, `.h264`, `.hevc`), and a directory that holds images but no videos becomes one image-sequence source (10 fps unless `VideoSource(path, fps=...)` is used directly); a pattern containing `*`, `?` or `[` is expanded with Python's `glob` module in recursive mode, where `**` also matches nested folders. Quote patterns on the command line so that the library, not the shell, expands them (this also makes `**` work in shells without recursive globbing, and on Windows, where shells do not expand patterns). Files are sorted in natural order and duplicates removed.
 
 ## Devices and workers
 
@@ -31,18 +31,18 @@ A worked example with two public clips is in [Examples: batch processing](../exa
 | Apple MPS | 1 |
 | CPU | $\max(1, \lfloor \text{CPU threads} / 4 \rfloor)$ |
 
-Two workers per GPU overlap decoding, tracking and rendering in one process with inference in the other. When GPUs are used, the total number of workers is capped at $\max(\text{number of devices}, \min(\text{workers}, \lfloor\text{CPU threads}/2\rfloor))$ so that each worker keeps CPU threads for decoding and tracking, and it never exceeds the number of pending videos. An integer `--workers-per-device N` overrides the rule. `tachymetry devices` prints the devices with their free memory and the resulting plan.
+Slots are ordered round-robin across devices (`cuda:0`, `cuda:1`, ..., `cuda:0`, `cuda:1`, ...) before the list is truncated, so a batch with fewer videos than slots still spreads over all selected GPUs: two videos on two GPUs run on one GPU each. Two workers per GPU overlap decoding, tracking and rendering in one process with inference in the other. When GPUs are used, the total number of workers is capped at $\max(\text{number of devices}, \min(\text{workers}, \lfloor\text{CPU threads}/2\rfloor))$ so that each worker keeps CPU threads for decoding and tracking, and it never exceeds the number of pending videos. An integer `--workers-per-device N` overrides the rule. `tachymetry devices` prints the devices with their free memory and the resulting plan.
 
 ## Scheduling
 
 * **Processes.** Workers are started with the `spawn` method on every platform, which is the only method on Windows and the safe one with CUDA. Each worker takes one device slot; for a CUDA slot it sets `CUDA_VISIBLE_DEVICES` to that GPU before CUDA initialises and then uses `cuda:0` internally, and it sets `OMP_NUM_THREADS=4` unless already set. The pipeline and its detector are created once per worker and reused for all its videos.
 * **Order.** Pending videos are dispatched longest first by file size, which shortens the makespan when durations differ.
 * **Failures.** An exception in one video is recorded with its traceback (`status: failed`) and does not stop the batch. The command exits with status 1 if any video failed.
-* **Resume.** A video whose run directory already contains `summary.json` is skipped (`status: cached`) and its summary is read from disk, unless `--overwrite` (`overwrite=True`) is given. `--overwrite` repeats the pipeline but, like any re-run, reuses the cached detections and the automatic camera in the run directory ([Pipeline](pipeline.md#caching-and-re-runs)); delete the run directory to start from scratch. `summary.json` is written after export and before rendering, so a run interrupted during rendering counts as finished; re-run it with `--overwrite` or render it with `tachymetry render`.
+* **Resume.** A video whose run directory already contains `summary.json` is skipped (`status: cached`) and its summary is read from disk, unless `--overwrite` (`overwrite=True`) is given. `--overwrite` processes such videos again from scratch: the cached detections, background and automatic camera in the run directory are ignored and rewritten (`Pipeline.run(..., use_cache=False)`). `summary.json` is written after export and before rendering, so a run interrupted during rendering counts as finished; re-run it with `--overwrite` or render it with `tachymetry render`.
 * **Progress.** Per-video progress from all workers is aggregated in the parent process (a `rich` live display, or plain log lines).
 
-!!! warning "Select GPUs with `--devices`, not `CUDA_VISIBLE_DEVICES`"
-    Device names are resolved in the parent process and each worker then sets `CUDA_VISIBLE_DEVICES` to the parent's device index. In version 0.1.0 this assumes the parent sees all GPUs: if the parent itself runs with `CUDA_VISIBLE_DEVICES=2,3`, its `cuda:0` and `cuda:1` are physical GPUs 2 and 3, but the workers select physical GPUs 0 and 1. Leave `CUDA_VISIBLE_DEVICES` unset and use `--devices cuda:2,cuda:3`.
+!!! note "Device indices and `CUDA_VISIBLE_DEVICES`"
+    Device names are resolved in the parent process. Each worker translates the parent's logical index into the physical device id before CUDA initialises: if the parent runs with `CUDA_VISIBLE_DEVICES=2,3`, `--devices cuda:1` selects physical GPU 3 (`batch.scheduler._init_worker`).
 
 ## Cameras in batch mode
 

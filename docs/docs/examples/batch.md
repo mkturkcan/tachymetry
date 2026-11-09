@@ -22,16 +22,16 @@ tachymetry run videos/ --out runs --devices cuda:1
 ```
 
 ```text
-Tachymetry: 2 of 2 videos processed in 25 s
+Tachymetry: 2 of 2 videos processed in 29 s
 ┏━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━┓
 ┃ video                 ┃ status ┃ tracks ┃ moving vehicles ┃ parked ┃ pedestrians ┃ median km/h ┃ seconds ┃
 ┡━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━┩
-│ intersection-day.mp4  │ done   │     43 │              22 │     10 │           8 │       24.55 │   23.17 │
-│ intersection-turn.mp4 │ done   │     23 │              10 │     12 │           1 │       21.54 │   17.33 │
+│ intersection-day.mp4  │ done   │     45 │              22 │     12 │           8 │       24.79 │   27.26 │
+│ intersection-turn.mp4 │ done   │     23 │              10 │     12 │           1 │       21.14 │   21.16 │
 └───────────────────────┴────────┴────────┴─────────────────┴────────┴─────────────┴─────────────┴─────────┘
 ```
 
-With free memory well above 12 GB, `plan_workers` started two worker processes on the GPU, one per clip, so the batch took 25 s of wall time for 40.5 s of per-video processing (detection, calibration, tracking and export; no rendering). Without `--devices`, all available GPUs are used. The output root holds one directory per video, named after the file stem, plus the batch summaries:
+With free memory well above 12 GB, `plan_workers` started two worker processes on the GPU, one per clip, so the batch took 29 s of wall time for 48.4 s of per-video processing (detection, calibration, tracking and export; no rendering). Without `--devices`, all available GPUs are used. The output root holds one directory per video, named after the file stem, plus the batch summaries:
 
 ```text
 runs/
@@ -43,8 +43,8 @@ runs/
 
 ```text
 video,status,out_dir,tracks,vehicles_moving,pedestrians,median_speed_kmh,seconds,device,error
-videos/intersection-day.mp4,done,runs/intersection-day,43,22,8,24.55,23.17,cuda:1,
-videos/intersection-turn.mp4,done,runs/intersection-turn,23,10,1,21.54,17.33,cuda:1,
+videos/intersection-day.mp4,done,runs/intersection-day,45,22,8,24.79,27.26,cuda:1,
+videos/intersection-turn.mp4,done,runs/intersection-turn,23,10,1,21.14,21.16,cuda:1,
 ```
 
 Add `--render` for an `overlay.mp4` per video, `--formats csv,json,geojson` for more exports, and `--set KEY=VALUE` (repeatable) for any configuration field ([Configuration](../guide/configuration.md)).
@@ -65,11 +65,11 @@ Run after the command above, both videos already have a `summary.json`, so both 
 
 ```text
 BatchReport(2 done, 0 failed, 0 s, workers=['cuda:1'])
-cached runs/intersection-day  43 tracks
+cached runs/intersection-day  45 tracks
 cached runs/intersection-turn  23 tracks
 ```
 
-The `if __name__ == "__main__":` guard is required: workers are started with the `spawn` method and import the script again ([Windows](../guide/batch.md#windows)). Pass `overwrite=True` (or `--overwrite`) to process finished videos again; this re-runs tracking and export from the cached detections and camera in each run directory, which took 3.2 s and 1.0 s for the two clips.
+The `if __name__ == "__main__":` guard is required: workers are started with the `spawn` method and import the script again ([Windows](../guide/batch.md#windows)). Pass `overwrite=True` (or `--overwrite`) to process finished videos again from scratch, ignoring the cached detections, background and camera in each run directory; this took 26.9 s and 20.7 s for the two clips. To change only tracking or export settings, run the pipeline on the existing run directory instead, which reuses the caches ([Pipeline](../guide/pipeline.md#caching-and-re-runs)).
 
 ## Reading the results together
 
@@ -93,12 +93,12 @@ print(samples.groupby(["video", "class"]).track_id.nunique().unstack(fill_value=
 
 ```text
             video  tracks  camera_height_m  hfov_deg  median_kmh
- intersection-day      43          28.3806    46.547       24.55
-intersection-turn      23          25.8893    49.500       21.54
+ intersection-day      45          27.8266    46.923       24.79
+intersection-turn      23          25.0769    49.574       21.14
 class              bicycle  bus  car  person  truck
 video
-intersection-day         2    2   30       9      0
+intersection-day         2    2   32       9      0
 intersection-turn        0    0   20       1      2
 ```
 
-With `camera="auto"` each video is calibrated independently, so clips of different views or zoom settings get their own cameras (here 28.4 m and 25.9 m above the road, with 46.5° and 49.5° horizontal fields of view).
+With `camera="auto"` each video is calibrated independently, so clips of different views or zoom settings get their own cameras (here 27.8 m and 25.1 m above the road, with 46.9° and 49.6° horizontal fields of view).

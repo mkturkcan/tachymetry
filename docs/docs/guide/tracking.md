@@ -1,6 +1,6 @@
 # Association and track hygiene
 
-This page specifies how detections become metric trajectories: per-detection ground measurements (`track/measure.py`), online association (`track/associate.py`), and the offline per-track repair sequence (`track/hygiene.py`, `track/signal.py`). Cross-track reasoning (stitching and verdicts) follows in [Verdicts](verdicts.md). Every default below is the value in `config.py` (`TrackerConfig`, `HygieneConfig`); constants that are not configurable are marked *fixed*.
+This page specifies how detections become metric trajectories: per-detection ground measurements (`tracking/measure.py`), online association (`tracking/associate.py`), and the offline per-track repair sequence (`tracking/hygiene.py`, `tracking/signal.py`). Cross-track reasoning (stitching and verdicts) follows in [Verdicts](verdicts.md). The defaults below are the values in `config.py` (`TrackerConfig`, `HygieneConfig`); constants that are not configurable are marked *fixed*.
 
 ## Ground measurements
 
@@ -162,7 +162,7 @@ Invalid tracks are excluded from exports and renders but remain candidates for [
 
 ## Sample flags
 
-Each track sample carries bit flags (`track.model.Flags`), exported in `tracks.json` and partly in `tracks.csv` ([Outputs](outputs.md)):
+Each track sample carries bit flags (`tracking.model.Flags`), exported in `tracks.json` and partly in `tracks.csv` ([Outputs](outputs.md)):
 
 | Flag | Value | Meaning |
 |---|---|---|

@@ -99,12 +99,16 @@ The result (`CalibrationResult`) reports `rmse_m` (in-sample ground RMSE), `cv_r
 Latitude and longitude are converted to a local east-north frame about the origin $(\phi_0, \lambda_0)$ (`latlon_to_local`):
 
 $$
-x = R\,(\lambda - \lambda_0)\cos\phi_0, \qquad y = R\,(\phi - \phi_0), \qquad R = 6\,378\,137\ \mathrm{m},
+x = N(\phi_0)\,(\lambda - \lambda_0)\cos\phi_0, \qquad y = M(\phi_0)\,(\phi - \phi_0),
 $$
 
-with angles in radians. The camera then carries `meta["georef"] = {"type": "latlon", "origin": [lat0, lon0]}`, and `tracks.geojson` is written in WGS84 (`local_to_latlon` inverts the mapping). The sphere of equatorial radius differs from the WGS84 ellipsoid by the ratio of $R$ to the meridional and prime-vertical radii of curvature: at $30°$ latitude, north-south distances in the local frame are about 0.42 % longer and east-west distances 0.08 % shorter than geodesic distances; the deviation is anisotropic and ranges from +0.67 % (north-south, equator) to about −0.34 % (poles).
+$$
+N = \frac{a}{\sqrt{1 - e^2 \sin^2\phi_0}}, \qquad M = \frac{a\,(1 - e^2)}{(1 - e^2 \sin^2\phi_0)^{3/2}}, \qquad a = 6\,378\,137\ \mathrm{m},\ e^2 = 6.694\,379\,990\,14 \times 10^{-3},
+$$
 
-In Python, `Correspondences(image, world, names=None, lines=[], image_size=None)` takes metric coordinates directly; `Correspondences.from_reference(image_pts, reference_px, gsd)` and `Correspondences.from_latlon(image_pts, latlon, origin=None)` convert the other two forms. `Correspondences.save` writes YAML or JSON in metres with a `georef` block describing the source frame; `load` does not read that block back, so a saved latitude/longitude file reloads as a local metric frame.
+with angles in radians, $M$ and $N$ the meridional and prime-vertical radii of curvature of the WGS84 ellipsoid at the origin, and $a$, $e^2$ its semi-major axis and squared eccentricity. The camera then carries `meta["georef"] = {"type": "latlon", "origin": [lat0, lon0]}`, and `tracks.geojson` is written in WGS84 (`local_to_latlon` inverts the mapping).
+
+In Python, `Correspondences(image, world, names=None, lines=[], image_size=None)` takes metric coordinates directly; `Correspondences.from_reference(image_pts, reference_px, gsd)` and `Correspondences.from_latlon(image_pts, latlon, origin=None)` convert the other two forms. `Correspondences.save` writes YAML or JSON in metres with a `georef` block describing the source frame, and `load` reads that block back, so a saved latitude/longitude file keeps its georeference.
 
 A correspondence file can also be passed directly as the camera of a run (`tachymetry run clip.mp4 --camera points.yaml`); it is then calibrated with the defaults above at the video's resolution.
 

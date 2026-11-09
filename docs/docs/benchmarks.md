@@ -1,6 +1,6 @@
 # Benchmarks
 
-This page reports the synthetic ablation produced by `tools/benchmark_synthetic.py`. It measures what each stage of track hygiene and cross-track reasoning contributes to position, speed, identity and false-positive errors, against ground truth. Calibration is not part of this benchmark: every variant uses the true camera. Calibration and lens accuracy on synthetic scenes are reported in [Synthetic calibration](examples/synthetic-calibration.md) and [Lens rectification](examples/lens-rectification.md).
+This page reports the synthetic ablation produced by `tools/benchmark_synthetic.py`. It measures what each stage of track hygiene and cross-track reasoning contributes to position, speed, identity and false-positive errors, against ground truth. Calibration is not part of this benchmark: all variants use the true camera. Calibration and lens accuracy on synthetic scenes are reported in [Synthetic calibration](examples/synthetic-calibration.md) and [Lens rectification](examples/lens-rectification.md).
 
 ```bash
 python tools/benchmark_synthetic.py --out docs/media/benchmark.json   # writes benchmark.json and benchmark.md
@@ -84,9 +84,9 @@ Values are means over the three seeds.
 - **Zero-phase smoothing** removes most of the speed error. Frame differencing amplifies box jitter. The speed MAE falls from 11.93 km/h to 2.07 km/h on the pole camera and from 13.68 km/h to 1.48 km/h on the mast camera.
 - **Splitting, trimming, repair and the validity referees** reduce identity switches from hundreds to single digits per run and remove almost all false tracks.
 - **The parked and hold-still row alone raises ID switches and false tracks again.**
-    - Parked tracks are exempt from the validity referees: `_validity` runs only for tracks in state `moving` (`track/hygiene.py`). Static false positives therefore survive as parked tracks.
-    - The evaluation matches each sample to the nearest agent within 2.5 m. A static track on a traffic lane is matched to each vehicle that passes it, and every pass is counted as an identity switch.
-    - The ghost verdict in the full pipeline removes these tracks: static, low-confidence vehicles without a trusted 3D footprint (`track/verdicts.py`, `mark_ghosts`). With them, the full configuration has the lowest value, or a value tied for lowest, in every column for both cameras.
+    - Parked tracks are exempt from the validity referees: `_validity` runs only for tracks in state `moving` (`tracking/hygiene.py`). Static false positives therefore survive as parked tracks.
+    - The evaluation matches each sample to the nearest agent within 2.5 m. A static track on a traffic lane is matched to each vehicle that passes it, and each pass is counted as an identity switch.
+    - The ghost verdict in the full pipeline removes these tracks: static, low-confidence vehicles without a trusted 3D footprint (`tracking/verdicts.py`, `mark_ghosts`). With them, the full configuration has the lowest value, or a value tied for lowest, in all columns for both cameras.
 - **Parked phantom speed** is zero only with parked freezing. Parked tracks are frozen at their median position and get zero velocity. Without freezing, the 90th percentile of the speeds reported on parked cars stays between 1.1 and 42 km/h depending on the variant.
 
 The simulation draws its boxes from the true camera geometry with Gaussian noise. Real detectors make correlated errors that it does not model: boxes clipped by occluders, cuboids biased by unusual vehicle shapes, systematic far-field shrinkage. The absolute numbers are therefore a lower bound on the errors to expect on real footage. The relative effect of each stage is the result this benchmark supports. See [Limitations](limitations.md).

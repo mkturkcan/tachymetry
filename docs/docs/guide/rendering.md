@@ -36,6 +36,10 @@ In `side`, the camera view is scaled by $\min(1, (\texttt{max\_width} - 2)/(w + 
 * **Trails**: the recent ground path of moving objects (the last 40 % of `trail_s = 3.0` s in the camera view, the full window in the bird's-eye view), fading towards the oldest end.
 * **Speed labels** on moving objects whose image box is at least 22 px high (scaled with resolution), at most 14 per frame, largest boxes first. `show_ids = True` prefixes the track id.
 * **Parked vehicles** in a muted grey without speed (`show_parked = True`).
+* **Detections without a metric track** as corner brackets without a speed (`show_detections = True`).
+    - *What is bracketed.* Detections with a score of at least 0.4 whose rows belong to no track, or only to a track rejected as `invalid` by the kinematic validity checks. Typical cases are distant traffic beyond `hygiene.max_gsd_m` and short or truncated associations.
+    - *What is not.* Rows of ghost, duplicate, shadow, passenger and rider tracks stay hidden.
+    - *Drawing.* Each bracket is a corner mark a quarter of the box side long, in the class colour lightened towards white (55 % colour, 45 % white). Brackets are 2 px wide at 720p and 1080p and $\max(2, \mathrm{round}(h / 540))$ px for frame height $h$. They are drawn in the camera view only, at the processed frame nearest to the rendered time (`render.video.Renderer`).
 * **Header and dashboard strip**: cumulative counts of moving road users by class (a track is counted from its first sample on), the title (default: the video file stem) and the video time. The dashboard histogram shows the speeds of the moving vehicles in the current frame in 5 km/h bins from 0 to 80 km/h.
 
 Colour encodes class only (`render/style.py`): car `#6096f6`, bus `#56c48c`, truck `#e86e62`, motorcycle and bicycle `#a78bfa`, pedestrian `#f0b24a`, parked `#9698a0`. The bird's-eye canvas is described in [Bird's-eye view and speed](bev-speed.md#birds-eye-images).
@@ -51,6 +55,7 @@ Colour encodes class only (`render/style.py`): car `#6096f6`, bus `#56c48c`, tru
 | `units` | `km/h` | `km/h`, `mph` (km/h divided by 1.609344) or `m/s` |
 | `show_parked` | `True` | draw parked vehicles in the muted style |
 | `show_ids` | `False` | prefix speed labels with track ids |
+| `show_detections` | `True` | corner brackets, without speed, for detections that have no metric track |
 | `trail_s` | 3.0 | trail length in seconds |
 | `max_width` | 1920 | output width limit (pixels) |
 | `fps` | `None` | output frame rate; the source rate by default, otherwise every `round(fps_src / fps)`-th frame is rendered |
@@ -61,7 +66,7 @@ Colour encodes class only (`render/style.py`): car `#6096f6`, bus `#56c48c`, tru
 Videos are encoded with libx264 (`yuv420p`, preset `medium`, `+faststart`, BT.709 colour tags) through the FFmpeg binary bundled with `imageio-ffmpeg`, which plays in browsers and on all three operating systems; OpenCV's `mp4v` writer is the fallback (`io/writer.py`). Odd frame dimensions are padded to even ones.
 
 !!! note "Settings used by `track(render=True)`"
-    `Pipeline.run(..., render=True)` (and therefore `tachymetry run --render`, `tachymetry demo` and `tm.track(render=True)`) passes only `render.layout` from the configuration to the renderer in version 0.1.0; the other `render.*` fields take the defaults above. To render a finished run with other settings, use `tachymetry render` or `RunResult.render(cfg=...)` as shown below.
+    `Pipeline.run(..., render=True)`, and therefore `tachymetry run --render`, `tachymetry demo` and `tm.track(render=True)`, renders with the run's full `render` configuration, e.g. `--set render.units=mph`. To render a finished run with other settings, use `tachymetry render` or `RunResult.render(cfg=...)` as shown below.
 
 ## Command line
 

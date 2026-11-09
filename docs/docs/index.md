@@ -24,14 +24,16 @@ Tachymetry converts video from a fixed traffic camera into road-user trajectorie
 - [Installation](installation.md) for Linux, Windows, macOS and CPU-only machines.
 - [Quick start](quickstart.md): the demo on the public sample clip, then your own videos.
 - [Intersection clip, end to end](examples/intersection.md): the full pipeline in Python with the outputs read back.
+- [Sample clips](samples.md): the eight public clips, their licences and results with the default configuration.
+- [Drone footage](examples/drone.md): straight-down views with a camera from the flight altitude and the lens's field of view.
 - [Synthetic calibration](examples/synthetic-calibration.md) and [Lens rectification](examples/lens-rectification.md): calibration methods and lens models evaluated against known cameras.
 - [Benchmarks](benchmarks.md): an ablation of the track-hygiene stages on simulated traffic with ground truth.
 - [Limitations](limitations.md): the assumptions behind the metric output and what the filters cannot catch.
 
 ## Scope and assumptions
 
-Tachymetry assumes a static camera, a locally planar road and a constant frame rate. Positions are footprint centres on the plane $z = 0$; their accuracy degrades with the ground sampling distance, which grows roughly with the square of the range, and ground points imaged coarser than 0.30 m per pixel are discarded by default. These and other limits are discussed in [Limitations](limitations.md).
+Tachymetry assumes a static camera, a locally planar road and a constant frame rate. Automatic calibration assumes an oblique view; straight-down drone footage needs a known camera. Positions are footprint centres on the plane $z = 0$; their accuracy degrades with the ground sampling distance, which grows roughly with the square of the range, and ground points imaged coarser than 0.30 m per pixel are discarded by default. These and other limits are discussed in [Limitations](limitations.md).
 
 ## License and citation
 
-Tachymetry is released under the GNU Affero General Public License v3.0, matching its default detector [UrbanOmniDetect-2](https://huggingface.co/mehmetkeremturkcan/UrbanOmniDetect-2) and [Ultralytics](https://github.com/ultralytics/ultralytics). The demo footage is downloaded on demand from [svbrd-llm-roadside-video-av](https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av) (Ryan-xiangyu-ut, CC BY 4.0) and is not redistributed. To cite Tachymetry, see [Citation](citation.md).
+Tachymetry is released under the GNU Affero General Public License v3.0, matching its default detector [UrbanOmniDetect-2](https://huggingface.co/mehmetkeremturkcan/UrbanOmniDetect-2) and [Ultralytics](https://github.com/ultralytics/ultralytics). The sample clips are downloaded on demand from their hosts (CC BY 4.0, CC0 1.0 and MIT; see [Sample clips](samples.md)) and are not redistributed. To cite Tachymetry, see [Citation](citation.md).

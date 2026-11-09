@@ -171,6 +171,18 @@ pre .s { color: var(--cyan); }
 pre .n { color: var(--amber); }
 pre .c { color: var(--faint); }
 
+/* Scene gallery */
+.gallery { display: grid; grid-template-columns: repeat(4, 1fr); gap: clamp(14px, 1.6vw, 20px); }
+.gallery figure { grid-column: span 1; }
+.gallery figure.wide { grid-column: span 2; }
+.gallery .frame { aspect-ratio: 16 / 9; }
+.gallery img { width: 100%; height: 100%; object-fit: cover; transition: transform 1.2s cubic-bezier(.2, .7, .2, 1); }
+.gallery figure:hover img { transform: scale(1.03); }
+.gallery figcaption { margin-top: 10px; font-size: 13px; line-height: 1.5; }
+.gallery figcaption strong { display: block; color: var(--text); font-weight: 500; font-size: 14px; }
+.gallery figcaption a { color: var(--muted); text-decoration-color: rgba(155, 156, 163, 0.4); text-underline-offset: 2px; }
+.gallery figcaption a:hover { color: var(--text); }
+
 /* Calibration mosaic */
 .mosaic { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
 .mosaic figure { position: relative; border-radius: 12px; overflow: hidden; background: var(--surface); border: 1px solid var(--line); }
@@ -258,6 +270,7 @@ footer .links { display: flex; gap: 18px; flex-wrap: wrap; }
   .mosaic .a { grid-column: span 2; }
   .mosaic .b, .mosaic .c, .mosaic .d, .mosaic .e { grid-column: span 1; }
   .lens-grid { grid-template-columns: 1fr; }
+  .gallery { grid-template-columns: 1fr 1fr; }
   .facts { grid-template-columns: 1fr; }
   .hero-note { display: none; }
 }
@@ -267,6 +280,8 @@ footer .links { display: flex; gap: 18px; flex-wrap: wrap; }
   .hero { min-height: 560px; }
   .hero img { object-position: 42% 50%; }
   .mosaic { grid-template-columns: 1fr; }
+  .gallery { grid-template-columns: 1fr; }
+  .gallery figure.wide { grid-column: span 1; }
   .mosaic .a, .mosaic .b, .mosaic .c, .mosaic .d, .mosaic .e { grid-column: span 1; }
   .seg button { padding: 0 12px; font-size: 13px; }
   pre { font-size: 12px; padding: 18px; }
@@ -286,6 +301,7 @@ footer .links { display: flex; gap: 18px; flex-wrap: wrap; }
       Tachymetry
     </a>
     <nav aria-label="Primary">
+      <a class="hide-sm" href="#samples">Samples</a>
       <a class="hide-sm" href="#calibration">Calibration</a>
       <a class="hide-sm" href="#filtering">Filtering</a>
       <a href="docs/">Docs</a>
@@ -319,7 +335,7 @@ footer .links { display: flex; gap: 18px; flex-wrap: wrap; }
     <div class="wrap split">
       <div>
         <h2>Traffic cameras as metric sensors</h2>
-        <p class="lede">Tachymetry converts the video of a fixed traffic camera into road-user trajectories on the ground plane, in metres, with speeds, headings and counts per class. It detects road users with <a href="https://huggingface.co/mehmetkeremturkcan/UrbanOmniDetect-2">UrbanOmniDetect-2</a>, which also predicts the eight projected corners of a 3D cuboid for each one, calibrates the camera from those cuboids and from the road markings in the image, associates detections with gates in metres, and repairs, smooths and filters every track before export. On the 31&nbsp;s public sample clip, detection, calibration and tracking take <strong>28&nbsp;s on one GPU</strong> and produce <strong>44 tracks</strong>: 31 cars (11 of them parked), 2 buses, 2 cyclists and 9 pedestrians.</p>
+        <p class="lede">Tachymetry converts the video of a fixed traffic camera into road-user trajectories on the ground plane, in metres, with speeds, headings and counts per class. It detects road users with <a href="https://huggingface.co/mehmetkeremturkcan/UrbanOmniDetect-2">UrbanOmniDetect-2</a>, which also predicts the eight projected corners of a 3D cuboid for each one, calibrates the camera from those cuboids and from the road markings in the image, associates detections with gates in metres, and repairs, smooths and filters each track before export. On the 31&nbsp;s public sample clip, detection, calibration and tracking take <strong>27&nbsp;s on one GPU</strong> and produce <strong>45 tracks</strong>: 32 cars (12 of them parked), 2 buses, 2 cyclists and 9 pedestrians.</p>
       </div>
       <div class="try">
         <h3>Try it</h3>
@@ -357,6 +373,47 @@ tachymetry demo</code></pre>
           <small>Public sample clip at 13.5&nbsp;s, automatic calibration.</small>
         </div>
       </figure>
+    </div>
+  </section>
+
+  <section id="samples">
+    <div class="wrap">
+      <h2>Eight public sample clips</h2>
+      <p class="lede">Tachymetry registers eight public clips that <code>tachymetry demo --sample &lt;name&gt;</code> downloads and processes. Five are recordings of one signalised intersection. The other three are a roundabout seen from a hovering drone, a motorway seen from an overpass, and dense mixed traffic at a roundabout filmed straight down from a drone. Each still is the camera-view render of one run. The straight-down clip uses a camera derived from the flight altitude and the lens's field of view (<a href="docs/examples/drone/">drone footage</a>); the others are calibrated automatically. Licences, credits and per-clip results are listed on the <a href="docs/samples/">sample page</a>.</p>
+      <div class="gallery mt">
+        <figure class="wide">
+          <div class="frame"><img src="media/gallery/dhaka-roundabout.jpg" width="1280" height="720" alt="Straight-down drone view of dense mixed traffic at a roundabout with tracked road users" loading="lazy"></div>
+          <figcaption><strong>Mixed traffic at a roundabout</strong>Drone, straight down &middot; known camera from the flight altitude &middot; <a href="https://huggingface.co/datasets/hamimmahmud0/DRINF">DRINF</a>, Hamim Mahmud, CC&nbsp;BY&nbsp;4.0</figcaption>
+        </figure>
+        <figure class="wide">
+          <div class="frame"><img src="media/gallery/roundabout-aerial.jpg" width="1280" height="720" alt="A roundabout seen obliquely from a hovering drone with tracked vehicles and speeds" loading="lazy"></div>
+          <figcaption><strong>Roundabout</strong>Hovering drone, oblique &middot; automatic calibration &middot; <a href="https://commons.wikimedia.org/wiki/File:Roundabout_14_61.webm">Wikideas1, Wikimedia Commons</a>, CC0&nbsp;1.0</figcaption>
+        </figure>
+        <figure class="wide">
+          <div class="frame"><img src="media/gallery/motorway-overpass.jpg" width="1280" height="720" alt="A divided motorway seen from an overpass with tracked vehicles and speeds" loading="lazy"></div>
+          <figcaption><strong>Divided motorway</strong>Camera on an overpass &middot; automatic calibration &middot; <a href="https://huggingface.co/datasets/parsafaramarzi/Small-Crowd-and-Traffic-Video-Footages">parsafaramarzi</a>, MIT</figcaption>
+        </figure>
+        <figure class="wide">
+          <div class="frame"><img src="media/gallery/intersection-day.jpg" width="1280" height="720" alt="A signalised intersection from an elevated camera with tracked road users" loading="lazy"></div>
+          <figcaption><strong>Signalised intersection</strong>Elevated camera &middot; automatic calibration &middot; <a href="https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av">svbrd-llm-roadside-video-av</a>, CC&nbsp;BY&nbsp;4.0</figcaption>
+        </figure>
+        <figure>
+          <div class="frame"><img src="media/gallery/intersection-night.jpg" width="1280" height="720" alt="The intersection at night in infrared with tracked vehicles" loading="lazy"></div>
+          <figcaption><strong>Same intersection, infrared night view</strong>Automatic calibration &middot; CC&nbsp;BY&nbsp;4.0</figcaption>
+        </figure>
+        <figure>
+          <div class="frame"><img src="media/gallery/intersection-turn.jpg" width="1280" height="720" alt="The intersection with turning traffic" loading="lazy"></div>
+          <figcaption><strong>Same intersection, turning traffic</strong>Automatic calibration &middot; CC&nbsp;BY&nbsp;4.0</figcaption>
+        </figure>
+        <figure>
+          <div class="frame"><img src="media/gallery/intersection-day-2.jpg" width="1280" height="720" alt="The intersection at another time of day" loading="lazy"></div>
+          <figcaption><strong>Same intersection, another time of day</strong>Automatic calibration &middot; CC&nbsp;BY&nbsp;4.0</figcaption>
+        </figure>
+        <figure>
+          <div class="frame"><img src="media/gallery/intersection-day-3.jpg" width="1280" height="720" alt="The intersection in dense traffic" loading="lazy"></div>
+          <figcaption><strong>Same intersection, dense traffic</strong>Automatic calibration &middot; CC&nbsp;BY&nbsp;4.0</figcaption>
+        </figure>
+      </div>
     </div>
   </section>
 
@@ -435,7 +492,7 @@ tachymetry demo</code></pre>
   <section id="code">
     <div class="wrap">
       <h2>Command line and Python</h2>
-      <p class="lede">Every threshold is expressed in seconds or metres, so one configuration applies at any frame rate and resolution. Any setting can be overridden from the command line with <code>--set key=value</code> or in Python with keyword arguments.</p>
+      <p class="lede">Thresholds are expressed in seconds or metres, so one configuration applies across frame rates and resolutions. Settings can be overridden from the command line with <code>--set key=value</code> or in Python with keyword arguments.</p>
       <div class="code-grid mt">
         <div>
           <p class="label">Command line</p>
@@ -525,7 +582,7 @@ cal.save(<span class="s">"camera.json"</span>)</code></pre>
     <div>
       <p><a href="https://mehmetkeremturkcan.com/">Mehmet Kerem Turkcan</a>, Associate Research Scientist, Department of Civil Engineering, Columbia University.</p>
       <p>Tachymetry is released under the GNU Affero General Public License v3.0 (AGPL-3.0), matching its default detector UrbanOmniDetect-2 and Ultralytics.</p>
-      <p>Sample footage: <a href="https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av">svbrd-llm-roadside-video-av</a> by Ryan-xiangyu-ut on Hugging Face, licensed <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. Frames are shown with Tachymetry's overlays added.</p>
+      <p>Sample footage, shown with Tachymetry's overlays added: <a href="https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av">svbrd-llm-roadside-video-av</a> by Ryan-xiangyu-ut (<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>); <a href="https://commons.wikimedia.org/wiki/File:Roundabout_14_61.webm">Roundabout 14 61</a> by Wikideas1, Wikimedia Commons (<a href="https://creativecommons.org/publicdomain/zero/1.0/">CC0 1.0</a>); <a href="https://huggingface.co/datasets/parsafaramarzi/Small-Crowd-and-Traffic-Video-Footages">Small-Crowd-and-Traffic-Video-Footages</a> by parsafaramarzi (MIT); <a href="https://huggingface.co/datasets/hamimmahmud0/DRINF">DRINF: Dhaka Road Intersection Nadir Footage</a> by Hamim Mahmud, doi:10.57967/hf/10301 (<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>). Trailer credits: <a href="https://github.com/mkturkcan/tachymetry/blob/main/docs/media/CREDITS.md">CREDITS.md</a>.</p>
     </div>
     <div class="links">
       <a href="https://github.com/mkturkcan/tachymetry">GitHub</a>

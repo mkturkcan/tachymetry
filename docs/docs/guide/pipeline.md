@@ -79,15 +79,42 @@
 | Detection | `detect.backends.build_detector`, `detect.run.detect_video` | `DetectionSet`: boxes, scores, classes, cuboid corners | `detections.npz`, `detections.json` |
 | Background | `calib.lines.background_image` (temporal median of `calibration.background_frames = 41` frames spread evenly over the video) | traffic-free image | `background.jpg` |
 | Calibration | `pipeline.resolve_camera`, `calib.auto.calibrate_auto` | `Camera` (intrinsics, pose, lens) | `camera.json`, `camera.report.json`, `calibration_preview.jpg` |
-| Ground measurement | `track.measure.measure_ground` | contact point, footprint, ground sampling distance per detection | none |
-| Association | `track.builder.associate`, `track.associate.ByteTracker` | track id per detection | none |
-| Track hygiene | `track.hygiene.process_raw_track` | `Track` objects in metres | none |
-| Stitching | `track.verdicts.stitch_candidates`, then hygiene again on the joined rows | merged fragments | none |
-| Verdicts | `track.verdicts.mark_duplicates`, `mark_passengers_and_riders`, `mark_shadows`, `mark_ghosts` | `verdict` and `reason` per track | none |
+| Ground measurement | `tracking.measure.measure_ground` | contact point, footprint, ground sampling distance per detection | none |
+| Association | `tracking.builder.associate`, `tracking.associate.ByteTracker` | track id per detection | none |
+| Track hygiene | `tracking.hygiene.process_raw_track` | `Track` objects in metres | none |
+| Stitching | `tracking.verdicts.stitch_candidates`, then hygiene again on the joined rows | merged fragments | none |
+| Verdicts | `tracking.verdicts.mark_duplicates`, `mark_passengers_and_riders`, `mark_shadows`, `mark_ghosts` | `verdict` and `reason` per track | none |
 | Export | `results.TrackSet.export` | `tracks.csv`, `tracks_summary.csv`, `tracks.json` (default `exports = ("csv", "json")`) | |
 | Render | `render.video.render_video` | `overlay.mp4` | |
 
 The stages are documented in detail in [Detection](detection.md), [Calibration](calibration.md), [Association and track hygiene](tracking.md), [Verdicts](verdicts.md), [Bird's-eye view and speed](bev-speed.md), [Outputs](outputs.md) and [Rendering](rendering.md).
+
+## Video input
+
+`io.VideoSource` reads a video file or a folder of images, sorted in natural order. Image folders are read at 10 fps unless a rate is given: `VideoSource(path, fps=...)`, or `PipelineConfig.fps` (`--set fps=12.5`), which overrides the input frame rate of videos as well.
+
+**Backends.** Video files are opened with OpenCV first. A file is passed to the FFmpeg binary that `imageio-ffmpeg` installs (`backend = "ffmpeg"`) in two cases:
+
+- OpenCV opens it but cannot decode a frame, for example AV1 in OpenCV builds without that decoder;
+- OpenCV reports a frame rate outside 1 to 1000 fps.
+
+`VideoSource(path).backend` reports the reader in use (`opencv`, `ffmpeg` or `images`), and `backend="opencv"` or `backend="ffmpeg"` forces one.
+
+**File discovery.** Batch inputs are found by extension; `.ogv` and `.ogg` are recognised alongside `.mp4`, `.mov`, `.avi`, `.mkv`, `.webm` and the other common containers (`io.video.VIDEO_EXTENSIONS`).
+
+```python
+from tachymetry.data import sample_video
+from tachymetry.io import VideoSource
+
+with VideoSource(sample_video("roundabout-aerial")) as src:   # a WebM file
+    print(src.backend, src.size, round(src.fps, 3), src.frame_count)
+```
+
+```text
+opencv (1920, 1080) 23.976 872
+```
+
+**Frame times.** Frame times are `index / fps`, with `fps` taken from the container; the timestamps that OpenCV reports are not used. The FFmpeg reader seeks by time and estimates the frame count from the container duration.
 
 ## Caching and re-runs
 
@@ -96,6 +123,8 @@ The run directory doubles as a cache. `Pipeline.run` applies the following rules
 * **Detections** are reused when `detections.npz` and `detections.json` exist and the key stored in `detections.json` equals `_detector_key(config)`: the first 12 hexadecimal digits of the SHA-1 of the detector name, weights, `imgsz`, `conf`, `class_conf`, `classes`, `cuboid_conf`, the two nested-suppression thresholds and `rate_hz`. Changing any of these re-runs detection; changing tracker, hygiene, filter, export or render settings does not. Batch size, half precision and device are not part of the key. `keep_detections = False` disables writing the cache.
 * **Background** is reused when `background.jpg` exists and has the video's resolution.
 * **Camera**: an explicit camera (a `Camera`, a camera JSON, a correspondence file, or a directory of per-video cameras) is used as given, resized with `Camera.resized` if the video has a different resolution, and written to `camera.json`. With `camera="auto"`, an existing `camera.json` with the video's resolution whose `meta.calibration_method` starts with `auto` is reused; otherwise automatic calibration runs and writes `camera.json`, `camera.report.json` and `calibration_preview.jpg`.
+
+`Pipeline.run(..., use_cache=False)`, which `tachymetry run --overwrite` uses, ignores all three caches and rewrites them.
 
 A detector passed as an object (`Pipeline(detector=...)`, see [Custom detectors](../examples/custom-detector.md)) is not part of the cache key. Give such runs their own output directory or a distinct `detector.name`.
 
@@ -123,11 +152,11 @@ One run of `tm.track(sample_video("intersection-day"), out=..., render=True)` wi
 
 | Stage | Seconds |
 |---|---|
-| Detection (UrbanOmniDetect-2 X, `imgsz` 960, FP16, batch 8) | 6.95 |
-| Background and automatic calibration | 13.60 |
-| Ground measurement, association, hygiene, stitching, verdicts, export | 3.43 |
-| Rendering (`side` layout, 929 frames, H.264) | 28.73 |
-| Total | 52.84 |
+| Detection (UrbanOmniDetect-2 X, `imgsz` 960, FP16, batch 8) | 6.60 |
+| Background and automatic calibration | 16.90 |
+| Ground measurement, association, hygiene, stitching, verdicts, export | 3.25 |
+| Rendering (`side` layout, 929 frames, H.264) | 28.56 |
+| Total | 55.51 |
 
 The values are the `timings` block of `summary.json`. Detection time depends on the GPU, the detector size and `imgsz`; calibration time is dominated by line-segment detection and vanishing-point estimation on the background image and by the cuboid and fused least-squares fits.
 
@@ -147,5 +176,5 @@ print(len(run.tracks), run.camera.describe())
 ```
 
 ```text
-44 f=2163.0px (hfov 47.9 deg), height=28.40 m, pitch=18.22 deg, roll=-0.16 deg, yaw=133.7 deg, lens=identity
+45 f=2211.9px (hfov 46.9 deg), height=27.83 m, pitch=17.85 deg, roll=-0.08 deg, yaw=134.3 deg, lens=identity
 ```

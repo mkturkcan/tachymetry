@@ -6,7 +6,7 @@
 tachymetry demo
 ```
 
-The demo downloads the clip `intersection-day` from [svbrd-llm-roadside-video-av](https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av) (CC BY 4.0; an elevated camera over a signalised intersection, 1920 x 1080 at 30 fps, 31 s), runs detection, automatic calibration and tracking, renders `overlay.mp4` and writes everything to `demo_run/`. Other clips are selected with `--sample` (`intersection-day-2`, `intersection-day-3`, `intersection-turn`, `intersection-night`) and the output directory with `-o`.
+The demo downloads the clip `intersection-day` from [svbrd-llm-roadside-video-av](https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av) (CC BY 4.0; an elevated camera over a signalised intersection, 1920 x 1080 at 30 fps, 31 s), runs detection, automatic calibration and tracking, renders `overlay.mp4` and writes everything to `demo_run/`. Other clips are selected with `--sample` and the output directory with `-o`; the eight registered clips are a signalised intersection (five recordings), a roundabout seen from a hovering drone, a motorway seen from an overpass and a straight-down drone view of mixed traffic ([Sample clips](samples.md)). `tachymetry demo --sample dhaka-roundabout` uses that clip's known camera and detector input size ([Drone footage](examples/drone.md)).
 
 ## Your own videos
 

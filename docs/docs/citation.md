@@ -15,7 +15,14 @@ Results obtained with the default detector should also credit [UrbanOmniDetect-2
 
 ## Sample footage
 
-The demo and the figures in this documentation use clips from [svbrd-llm-roadside-video-av](https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av) by Ryan-xiangyu-ut on Hugging Face, licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The clips are downloaded on demand and not redistributed with Tachymetry; figures show frames with Tachymetry's overlays added.
+The demo, the examples and the figures of this documentation use public clips that are downloaded on demand from their hosts and not redistributed with Tachymetry. Figures show frames with Tachymetry's overlays added.
+
+- [svbrd-llm-roadside-video-av](https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av) by Ryan-xiangyu-ut (Hugging Face), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/): the five `intersection-*` clips.
+- [Roundabout 14 61](https://commons.wikimedia.org/wiki/File:Roundabout_14_61.webm) by Wikideas1 (Wikimedia Commons), [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/): `roundabout-aerial`.
+- [Small-Crowd-and-Traffic-Video-Footages](https://huggingface.co/datasets/parsafaramarzi/Small-Crowd-and-Traffic-Video-Footages) by parsafaramarzi (Hugging Face), MIT: `motorway-overpass`.
+- [DRINF: Dhaka Road Intersection Nadir Footage](https://huggingface.co/datasets/hamimmahmud0/DRINF) by Hamim Mahmud (Hugging Face, doi:10.57967/hf/10301), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/): `dhaka-roundabout`, a 30 s excerpt.
+
+`tachymetry.data.attribution(name)` returns the credit line of each clip ([Sample clips](samples.md)). The footage credits of the trailer are listed in [docs/media/CREDITS.md](https://github.com/mkturkcan/tachymetry/blob/main/docs/media/CREDITS.md).
 
 ## Author
 

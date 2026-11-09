@@ -13,8 +13,8 @@ Detection turns frames into per-frame road-user boxes, scores, classes and, for 
 
 `DetectorConfig.weights` points to a local checkpoint and overrides the download. `tachymetry download --detector uod2-l` fetches UrbanOmniDetect-2 weights ahead of time. Detectors that are not Ultralytics models are plugged in as Python objects; see [Custom detectors](../examples/custom-detector.md).
 
-!!! note "`precomputed:` detectors"
-    The comment on `DetectorConfig.name` lists `precomputed:<dir>`, but `build_detector` in version 0.1.0 does not implement it and raises `ValueError`. To reuse detections, keep `detections.npz` in the run directory (it is reused automatically) or wrap an external source in a `Detector` object.
+!!! note "Precomputed detections"
+    `detector.name = "precomputed:<path>"` makes the pipeline load detections instead of running a detector (`pipeline._load_precomputed`). The path is either an `.npz` file in the format of `detections.npz` (`DetectionSet.save`), or a folder that holds `<video stem>.npz` or `<video stem>/detections.npz`, for example the output root of an earlier batch. Example: `tachymetry run clip.mp4 --detector precomputed:runs/clip/detections.npz --out runs2`. Detections in other formats are passed through a `Detector` object ([Custom detectors](../examples/custom-detector.md)).
 
 ## Class taxonomy
 
@@ -24,7 +24,7 @@ Association and verdicts use three super-classes, `SUPER_CLASS`: `vehicle` (car,
 
 ## Cuboid corners
 
-For UrbanOmniDetect-2, `DetectionSet.cuboid` holds an `(N, 8, 3)` array of `x, y, confidence` per corner in raw image pixels (`detections.FrameDetections`). Corners 0 to 3 touch the ground and corners 4 to 7 are the roof above them; corners 0 and 3 form the front face, and the edges 0-1 and 3-2 are the long sides. In `track/measure.py` the ground corners are back-projected to the road plane; the front is the midpoint of corners 0 and 3, the rear the midpoint of corners 1 and 2, the length is the mean of the 0-1 and 3-2 edges and the width the mean of the 0-3 and 1-2 edges.
+For UrbanOmniDetect-2, `DetectionSet.cuboid` holds an `(N, 8, 3)` array of `x, y, confidence` per corner in raw image pixels (`detections.FrameDetections`). Corners 0 to 3 touch the ground and corners 4 to 7 are the roof above them; corners 0 and 3 form the front face, and the edges 0-1 and 3-2 are the long sides. In `tracking/measure.py` the ground corners are back-projected to the road plane; the front is the midpoint of corners 0 and 3, the rear the midpoint of corners 1 and 2, the length is the mean of the 0-1 and 3-2 edges and the width the mean of the 0-3 and 1-2 edges.
 
 ## Per-frame post-processing
 
