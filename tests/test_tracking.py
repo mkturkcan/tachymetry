@@ -96,3 +96,15 @@ def test_mask_store_round_trip(tmp_path):
     assert frames[0].masks[0] is not None and frames[1].masks == [None, None]
     sub = frames[0].subset(np.array([True]))
     assert np.array_equal(sub.masks[0][2], c[2])
+
+
+def test_inconsistent_gap_bridge_does_not_raise_speed():
+    """A 1.4 s gap whose end positions disagree by 3 m with the motion on both sides keeps the speeds of both sides."""
+    t = np.arange(0, 8, 1 / 12)
+    t = t[(t < 3.0) | (t > 4.4)]
+    x = 1.2 * t + np.where(t > 4.4, 3.0, 0.0)  # 4.3 km/h on both sides, 12 km/h chord across the gap
+    _, vel, _ = smooth_kinematics(t, np.column_stack([x, np.zeros_like(x)]), None, 0.4, 1.2, 2, 1.5)
+    assert np.max(np.abs(vel[:, 0] - 1.2)) < 0.05
+    # a consistent bridge is still differentiated across the gap
+    _, vel, _ = smooth_kinematics(t, np.column_stack([1.2 * t, np.zeros_like(t)]), None, 0.4, 1.2, 2, 1.5)
+    assert np.max(np.abs(vel[:, 0] - 1.2)) < 1e-6

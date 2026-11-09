@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import numpy as np
 
+BRIDGE_TOL_MPS = 1.5  #: chord-versus-motion disagreement (m/s) above which a gap bridge is not differentiated
+
 __all__ = ["odd", "running_median", "hampel", "smooth_kinematics", "segments_by_gap", "fill_angles", "wrap"]
 
 
@@ -94,6 +96,7 @@ def smooth_kinematics(
     order: int,
     max_interp_s: float,
     dt: float | None = None,
+    vel_gap_s: float | None = 0.5,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Zero-phase position and velocity at the sample times ``t``.
 
@@ -102,6 +105,20 @@ def smooth_kinematics(
     their neighbours. Each gap-free run is resampled to a uniform grid of step
     ``dt``, median-filtered over ``median_s`` (edges replicated), smoothed with a
     Savitzky-Golay filter over ``window_s`` and differentiated analytically.
+
+    Positions are bridged linearly across gaps up to ``max_interp_s``. The
+    slope of a bridge is the chord between the last measurement before and the
+    first after the gap, so an inconsistency between those two positions (a
+    re-acquired box of different extent, a partly visible object) appears as
+    speed on both sides of the gap. For every gap longer than ``vel_gap_s`` the
+    chord velocity is compared with the mean of the velocities measured on its
+    two sides (each stretch differentiated on its own; the mean is the chord of
+    a constant-acceleration motion). When they differ by more than
+    ``max(BRIDGE_TOL_MPS, 0.3 x |mean|)`` the bridge is not used for velocity: within
+    half a smoothing window of the gap each side keeps its own derivative, and
+    samples inside the gap take velocities interpolated in time between the two
+    sides. Consistent bridges are kept, since a one-sided derivative is noisier.
+    Stretches with fewer than ``order + 3`` grid points are not tested.
 
     Returns ``(xy_smooth, velocity, segment_id)``.
     """
@@ -135,17 +152,70 @@ def smooth_kinematics(
         grid = a + np.arange(m) * dt
         if grid[-1] < b - 1e-9:
             grid = np.append(grid, b)
-        xg = np.column_stack([np.interp(grid, ts, xs[:, 0]), np.interp(grid, ts, xs[:, 1])])
+        xg_raw = np.column_stack([np.interp(grid, ts, xs[:, 0]), np.interp(grid, ts, xs[:, 1])])
         wm = odd(median_s / dt)
-        if wm >= 3 and len(grid) >= wm:
-            xg = median_filter(xg, size=(wm, 1), mode="nearest")
+        xg = median_filter(xg_raw, size=(wm, 1), mode="nearest") if wm >= 3 and len(grid) >= wm else xg_raw
         ws = odd(window_s / dt, lo=order + 2 if order + 2 > 3 else 3)
         ps = _savgol(xg, ws, order)
         vs = _savgol(xg, ws, order, deriv=1, delta=dt)
+        cuts = np.flatnonzero(np.diff(ts) > vel_gap_s) if vel_gap_s is not None else np.zeros(0, np.int64)
+        if len(cuts):
+            vs = _unbridge_velocity(grid, ts, xg_raw, vs, cuts, wm, ws, order, dt)
         tt = t[sel]
         pos[sel] = np.column_stack([np.interp(tt, grid, ps[:, 0]), np.interp(tt, grid, ps[:, 1])])
         vel[sel] = np.column_stack([np.interp(tt, grid, vs[:, 0]), np.interp(tt, grid, vs[:, 1])])
     return pos, vel, seg_id
+
+
+def _unbridge_velocity(
+    grid: np.ndarray,
+    ts: np.ndarray,
+    xg_raw: np.ndarray,
+    vs: np.ndarray,
+    cuts: np.ndarray,
+    wm: int,
+    ws: int,
+    order: int,
+    dt: float,
+) -> np.ndarray:
+    """Velocities next to gaps whose chord contradicts the motion on both sides (see ``smooth_kinematics``)."""
+    from scipy.ndimage import median_filter
+
+    segs = np.split(np.arange(len(ts)), cuts + 1)
+    own: list[tuple[np.ndarray, np.ndarray, np.ndarray] | None] = []
+    for seg in segs:
+        gi = np.flatnonzero((grid >= ts[seg[0]] - 1e-9) & (grid <= ts[seg[-1]] + 1e-9))
+        if len(gi) < order + 3:
+            own.append(None)
+            continue
+        xseg = xg_raw[gi]
+        if wm >= 3 and len(xseg) >= wm:
+            xseg = median_filter(xseg, size=(wm, 1), mode="nearest")
+        own.append((gi, _savgol(xseg, ws, order), _savgol(xseg, ws, order, deriv=1, delta=dt)))
+    out = vs.copy()
+    half = (ws // 2) * dt
+    for k in range(len(segs) - 1):
+        a, b = own[k], own[k + 1]
+        if a is None or b is None:
+            continue
+        ga, pa, va = a
+        gb, pb, vb = b
+        ia, ib = ga[-1], gb[0]
+        if grid[ib] - grid[ia] <= 0:
+            continue
+        chord = (pb[0] - pa[-1]) / (grid[ib] - grid[ia])
+        mean = 0.5 * (va[-1] + vb[0])
+        if np.linalg.norm(chord - mean) <= max(BRIDGE_TOL_MPS, 0.3 * float(np.linalg.norm(mean))):
+            continue
+        sa = grid[ga] >= grid[ia] - half
+        sb = grid[gb] <= grid[ib] + half
+        out[ga[sa]] = va[sa]
+        out[gb[sb]] = vb[sb]
+        inner = np.arange(ia + 1, ib)
+        if len(inner):
+            w = ((grid[inner] - grid[ia]) / (grid[ib] - grid[ia]))[:, None]
+            out[inner] = (1 - w) * va[-1] + w * vb[0]
+    return out
 
 
 def fill_angles(theta: np.ndarray) -> np.ndarray:
