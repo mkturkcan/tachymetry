@@ -12,7 +12,96 @@ import numpy as np
 
 from .config import ROAD_CLASSES
 
-__all__ = ["FrameDetections", "DetectionSet"]
+__all__ = ["FrameDetections", "DetectionSet", "MaskStore", "crop_mask"]
+
+
+MaskCrop = tuple[int, int, np.ndarray]  # (x0, y0, bool mask of shape (h, w)) in full-resolution pixels
+
+
+def crop_mask(mask: np.ndarray, xyxy: np.ndarray, pad: int = 2) -> MaskCrop | None:
+    """Crop a full-frame boolean instance mask to its box (plus ``pad`` pixels)."""
+    h, w = mask.shape
+    x0 = int(max(0, np.floor(xyxy[0]) - pad))
+    y0 = int(max(0, np.floor(xyxy[1]) - pad))
+    x1 = int(min(w, np.ceil(xyxy[2]) + pad + 1))
+    y1 = int(min(h, np.ceil(xyxy[3]) + pad + 1))
+    if x1 <= x0 or y1 <= y0:
+        return None
+    m = np.ascontiguousarray(mask[y0:y1, x0:x1], dtype=bool)
+    return (x0, y0, m) if m.any() else None
+
+
+@dataclass
+class MaskStore:
+    """Instance masks of a :class:`DetectionSet`, cropped to their boxes and bit-packed.
+
+    Mask ``i`` covers the full-resolution image rectangle starting at
+    ``origin[i] = (x0, y0)`` with ``shape[i] = (h, w)``. Detections without a
+    mask (box-only detectors, or a mask that was empty) have ``offset[i] = -1``.
+    """
+
+    bits: np.ndarray  # (B,) uint8, np.packbits of each crop, concatenated
+    offset: np.ndarray  # (M,) int64 byte offset into ``bits``; -1 = no mask
+    origin: np.ndarray  # (M, 2) int32 (x0, y0)
+    shape: np.ndarray  # (M, 2) int32 (h, w)
+
+    def __len__(self) -> int:
+        return len(self.offset)
+
+    @classmethod
+    def from_crops(cls, crops: list[MaskCrop | None]) -> MaskStore:
+        chunks, offset, origin, shape = [], [], [], []
+        pos = 0
+        for c in crops:
+            if c is None:
+                offset.append(-1)
+                origin.append((0, 0))
+                shape.append((0, 0))
+                continue
+            x0, y0, m = c
+            b = np.packbits(np.asarray(m, bool).ravel())
+            chunks.append(b)
+            offset.append(pos)
+            origin.append((int(x0), int(y0)))
+            shape.append(m.shape)
+            pos += len(b)
+        return cls(
+            np.concatenate(chunks).astype(np.uint8) if chunks else np.zeros(0, np.uint8),
+            np.asarray(offset, np.int64),
+            np.asarray(origin, np.int32).reshape(-1, 2),
+            np.asarray(shape, np.int32).reshape(-1, 2),
+        )
+
+    def has(self, i: int) -> bool:
+        return bool(self.offset[i] >= 0)
+
+    def crop(self, i: int) -> MaskCrop | None:
+        """``(x0, y0, mask)`` of detection ``i``, or ``None``."""
+        o = int(self.offset[i])
+        if o < 0:
+            return None
+        h, w = (int(v) for v in self.shape[i])
+        n = h * w
+        m = np.unpackbits(self.bits[o : o + (n + 7) // 8], count=n).astype(bool).reshape(h, w)
+        return int(self.origin[i, 0]), int(self.origin[i, 1]), m
+
+    def full(self, i: int, image_size: tuple[int, int]) -> np.ndarray | None:
+        """Full-frame boolean mask of detection ``i`` (``image_size`` is ``(width, height)``)."""
+        c = self.crop(i)
+        if c is None:
+            return None
+        x0, y0, m = c
+        out = np.zeros((image_size[1], image_size[0]), bool)
+        h = min(m.shape[0], image_size[1] - y0)
+        w = min(m.shape[1], image_size[0] - x0)
+        out[y0 : y0 + h, x0 : x0 + w] = m[:h, :w]
+        return out
+
+    def crops(self, idx: np.ndarray) -> list[MaskCrop | None]:
+        return [self.crop(int(i)) for i in idx]
+
+    def subset(self, idx: np.ndarray) -> MaskStore:
+        return MaskStore.from_crops(self.crops(np.asarray(idx).reshape(-1)))
 
 
 @dataclass
@@ -22,7 +111,8 @@ class FrameDetections:
     ``cuboid`` holds the eight projected cuboid corners ``(N, 8, 3)`` as
     ``x, y, confidence`` when the detector provides them (UrbanOmniDetect-2):
     corners 0-3 touch the ground, 4-7 are the roof, and corners 0 and 3 form the
-    front face.
+    front face. ``masks`` holds one instance-mask crop per detection
+    (see :func:`crop_mask`) when the detector segments, else ``None``.
     """
 
     frame: int
@@ -31,6 +121,7 @@ class FrameDetections:
     score: np.ndarray
     cls: np.ndarray
     cuboid: np.ndarray | None = None
+    masks: list[MaskCrop | None] | None = None
 
     def __len__(self) -> int:
         return len(self.score)
@@ -47,13 +138,16 @@ class FrameDetections:
         )
 
     def subset(self, keep: np.ndarray) -> FrameDetections:
+        keep = np.asarray(keep)
+        idx = np.flatnonzero(keep) if keep.dtype == bool else keep.reshape(-1).astype(np.int64)
         return FrameDetections(
             self.frame,
             self.time,
-            self.xyxy[keep],
-            self.score[keep],
-            self.cls[keep],
-            None if self.cuboid is None else self.cuboid[keep],
+            self.xyxy[idx],
+            self.score[idx],
+            self.cls[idx],
+            None if self.cuboid is None else self.cuboid[idx],
+            None if self.masks is None else [self.masks[int(i)] for i in idx],
         )
 
 
@@ -72,6 +166,7 @@ class DetectionSet:
     fps: float = 0.0
     processed_frames: np.ndarray = field(default_factory=lambda: np.zeros(0, np.int64))
     meta: dict[str, Any] = field(default_factory=dict)
+    masks: MaskStore | None = None  #: instance masks when the detector segments
 
     def __len__(self) -> int:
         return len(self.score)
@@ -86,6 +181,7 @@ class DetectionSet:
         meta: dict[str, Any] | None = None,
     ) -> DetectionSet:
         has_cub = any(f.cuboid is not None for f in frames)
+        has_masks = any(f.masks is not None for f in frames)
         rows = [f for f in frames if len(f)]
         if rows:
             frame = np.concatenate([np.full(len(f), f.frame, np.int64) for f in rows])
@@ -108,6 +204,12 @@ class DetectionSet:
             clsv = np.zeros(0, np.int16)
             cub = np.zeros((0, 8, 3), np.float32) if has_cub else None
         processed = np.array(sorted({f.frame for f in frames}), np.int64)
+        masks = None
+        if has_masks:
+            crops: list[MaskCrop | None] = []
+            for f in rows:
+                crops.extend(f.masks if f.masks is not None else [None] * len(f))
+            masks = MaskStore.from_crops(crops)
         return cls(
             frame,
             time,
@@ -120,6 +222,7 @@ class DetectionSet:
             float(fps),
             processed,
             dict(meta or {}),
+            masks,
         )
 
     def frames(self) -> Iterator[FrameDetections]:
@@ -141,6 +244,7 @@ class DetectionSet:
                 self.score[idx],
                 self.cls[idx],
                 None if self.cuboid is None else self.cuboid[idx],
+                None if self.masks is None else self.masks.crops(idx),
             )
 
     def save(self, path: str | Path) -> Path:
@@ -160,6 +264,13 @@ class DetectionSet:
         )
         if self.cuboid is not None:
             arrays["cuboid"] = self.cuboid
+        if self.masks is not None:
+            arrays.update(
+                mask_bits=self.masks.bits,
+                mask_offset=self.masks.offset,
+                mask_origin=self.masks.origin,
+                mask_shape=self.masks.shape,
+            )
         np.savez_compressed(path, **arrays)
         return path
 
@@ -178,4 +289,7 @@ class DetectionSet:
             float(z["fps"]),
             z["processed_frames"],
             json.loads(str(z["meta"])) if "meta" in z else {},
+            MaskStore(z["mask_bits"], z["mask_offset"], z["mask_origin"], z["mask_shape"])
+            if "mask_bits" in z
+            else None,
         )

@@ -63,3 +63,36 @@ def test_low_confidence_track_ends_are_trimmed():
     stats = HygieneStats()
     kept = _trim_ends(np.arange(n), SimpleNamespace(dets=dets, obs=obs, cfg=HygieneConfig()), stats)
     assert kept[0] == 2 and kept[-1] == n - 9 and stats.trimmed_samples == 10
+
+
+def test_mask_store_round_trip(tmp_path):
+    """Instance masks are stored cropped and bit-packed, and survive save/load and frame iteration."""
+    from tachymetry.detections import DetectionSet, FrameDetections, crop_mask
+
+    full = np.zeros((60, 80), bool)
+    full[10:30, 20:50] = True
+    full[12, 21] = False
+    box = np.array([20.0, 10.0, 49.0, 29.0])
+    c = crop_mask(full, box)
+    fr = [
+        FrameDetections(
+            0, 0.0, box[None].astype(np.float32), np.array([0.9], np.float32), np.array([2], np.int16), masks=[c]
+        ),
+        FrameDetections(
+            1,
+            0.1,
+            np.zeros((2, 4), np.float32),
+            np.array([0.5, 0.4], np.float32),
+            np.array([0, 2], np.int16),
+            masks=[None, None],
+        ),
+    ]
+    ds = DetectionSet.from_frames(fr, ("person", "bicycle", "car"), (80, 60), 10.0)
+    assert ds.masks is not None and ds.masks.has(0) and not ds.masks.has(1)
+    assert np.array_equal(ds.masks.full(0, (80, 60)), full)
+    back = DetectionSet.load(ds.save(tmp_path / "d.npz"))
+    assert np.array_equal(back.masks.full(0, (80, 60)), full)
+    frames = list(back.frames())
+    assert frames[0].masks[0] is not None and frames[1].masks == [None, None]
+    sub = frames[0].subset(np.array([True]))
+    assert np.array_equal(sub.masks[0][2], c[2])
