@@ -69,12 +69,12 @@ Summaries of one run per clip: the default configuration with `camera="auto"`, e
 
 | Name | Calibration | Camera | Tracks | Median speed (km/h) | p85 speed (km/h) |
 |---|---|---|---|---|---|
-| `intersection-day` | `auto:fused` | f = 2212 px, height 27.8 m, pitch 17.9° | 45 | 24.8 | 35.7 |
+| `intersection-day` | `auto:fused` | f = 2212 px, height 27.8 m, pitch 17.9° | 44 | 25.0 | 36.0 |
 | `intersection-day-2` | `auto:fused` | f = 2298 px, height 29.1 m, pitch 17.4° | 41 | 32.6 | 45.2 |
-| `intersection-day-3` | `auto:fused` | f = 2314 px, height 29.2 m, pitch 17.4° | 92 | 25.8 | 43.5 |
-| `intersection-turn` | `auto:fused` | f = 2079 px, height 25.1 m, pitch 17.2° | 23 | 21.1 | 28.5 |
-| `intersection-night` | `auto:lines` | f = 2108 px, height 32.7 m, pitch 21.3° | 8 | 47.6 | 62.1 |
-| `roundabout-aerial` | `auto:fused` | f = 1518 px, height 75.9 m, pitch 34.7° | 18 | 36.8 | 51.7 |
+| `intersection-day-3` | `auto:fused` | f = 2314 px, height 29.2 m, pitch 17.4° | 91 | 25.9 | 43.5 |
+| `intersection-turn` | `auto:fused` | f = 2079 px, height 25.1 m, pitch 17.2° | 23 | 21.2 | 28.4 |
+| `intersection-night` | `auto:lines` | f = 2108 px, height 32.7 m, pitch 21.3° | 7 | 47.8 | 62.1 |
+| `roundabout-aerial` | `auto:fused` | f = 1518 px, height 75.9 m, pitch 34.7° | 18 | 36.7 | 51.7 |
 | `motorway-overpass` | `auto:fused` | f = 2072 px, height 15.3 m, pitch 9.8° | 45 | 94.4 | 122.5 |
 | `dhaka-roundabout` | known | f = 2825 px, height 111.7 m, pitch 90° | 286 | 11.8 | 15.9 |
 

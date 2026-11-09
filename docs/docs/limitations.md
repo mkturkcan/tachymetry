@@ -43,8 +43,8 @@ Detection recall and calibration evidence both degrade at night. Runs on two pub
 
 | Clip | Duration | Detections | Tracks kept | Tracks by class | Calibration |
 |---|---|---|---|---|---|
-| `intersection-day` | 31.0 s | 23,575 | 45 | 32 car, 2 bus, 2 bicycle, 9 person | `auto:fused` |
-| `intersection-night` | 18.5 s | 3,412 | 8 | 8 car | `auto:lines` |
+| `intersection-day` | 31.0 s | 23,575 | 44 | 31 car, 2 bus, 2 bicycle, 9 person | `auto:fused` |
+| `intersection-night` | 18.5 s | 3,412 | 7 | 7 car | `auto:lines` |
 
 Traffic volumes differ between the recordings, so the comparison is indicative only. At night no pedestrian or cyclist track was kept, and the calibration candidates disagreed more: the `lines`, `fused` and `cuboids` cameras of the night clip had pitches of 21.25, 19.74 and 19.79 degrees (`camera.report.json`). Headlight glare can displace the bottom edges of vehicle boxes, and road markings are visible mainly where they are lit. For cameras that record in both conditions, calibrate on daytime footage and pass the camera file to the night runs.
 

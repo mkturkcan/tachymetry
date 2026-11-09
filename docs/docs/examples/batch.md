@@ -26,7 +26,7 @@ Tachymetry: 2 of 2 videos processed in 29 s
 ┏━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━┓
 ┃ video                 ┃ status ┃ tracks ┃ moving vehicles ┃ parked ┃ pedestrians ┃ median km/h ┃ seconds ┃
 ┡━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━┩
-│ intersection-day.mp4  │ done   │     45 │              22 │     12 │           8 │       24.79 │   27.26 │
+│ intersection-day.mp4  │ done   │     44 │              20 │     13 │           8 │       25.01 │   27.26 │
 │ intersection-turn.mp4 │ done   │     23 │              10 │     12 │           1 │       21.14 │   21.16 │
 └───────────────────────┴────────┴────────┴─────────────────┴────────┴─────────────┴─────────────┴─────────┘
 ```
@@ -43,7 +43,7 @@ runs/
 
 ```text
 video,status,out_dir,tracks,vehicles_moving,pedestrians,median_speed_kmh,seconds,device,error
-videos/intersection-day.mp4,done,runs/intersection-day,45,22,8,24.79,27.26,cuda:1,
+videos/intersection-day.mp4,done,runs/intersection-day,44,20,8,25.01,27.26,cuda:1,
 videos/intersection-turn.mp4,done,runs/intersection-turn,23,10,1,21.14,21.16,cuda:1,
 ```
 
@@ -65,7 +65,7 @@ Run after the command above, both videos already have a `summary.json`, so both 
 
 ```text
 BatchReport(2 done, 0 failed, 0 s, workers=['cuda:1'])
-cached runs/intersection-day  45 tracks
+cached runs/intersection-day  44 tracks
 cached runs/intersection-turn  23 tracks
 ```
 
@@ -93,11 +93,11 @@ print(samples.groupby(["video", "class"]).track_id.nunique().unstack(fill_value=
 
 ```text
             video  tracks  camera_height_m  hfov_deg  median_kmh
- intersection-day      45          27.8266    46.923       24.79
+ intersection-day      44          27.8266    46.923       25.01
 intersection-turn      23          25.0769    49.574       21.14
 class              bicycle  bus  car  person  truck
 video
-intersection-day         2    2   32       9      0
+intersection-day         2    2   31       9      0
 intersection-turn        0    0   20       1      2
 ```
 
