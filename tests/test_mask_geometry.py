@@ -109,3 +109,42 @@ def test_occluded_bus_keeps_its_footprint(mast_camera):
     err0 = np.linalg.norm(tr0.xy[k0] - bus.xy[j0], axis=1)
     hd0 = np.degrees(np.abs((tr0.heading[k0] - bus.heading[j0] + np.pi / 2) % np.pi - np.pi / 2))
     assert err0.max() > 0.6 or hd0.max() > 3.0
+
+
+def test_straight_down_view_places_small_road_users_on_their_masks():
+    """Seen from straight above, persons and two-wheelers are located at their silhouette centroids.
+
+    The lowest point of a mask is the side of the object that faces image-down,
+    not the side facing the camera, so contact plus ray offset puts the centre
+    beside small objects. With the steep-view blend every track stays valid and
+    within 0.3 m of the truth.
+    """
+    cam = Camera.from_pose((1920, 1080), focal=1400.0, height=60.0, pitch=90.0, yaw=90.0)
+    agents = []
+    for aid, (cls, dims, start, direction, v) in enumerate(
+        [
+            ("motorcycle", (2.0, 0.8, 1.4), (-15.0, -6.0), 0.0, 3.4),
+            ("motorcycle", (2.0, 0.8, 1.4), (12.0, 8.0), math.pi, 3.6),
+            ("motorcycle", (2.0, 0.8, 1.4), (-4.0, -14.0), math.pi / 2, 3.2),
+            ("person", (0.5, 0.5, 1.7), (6.0, -10.0), math.pi / 2, 1.3),
+            ("person", (0.5, 0.5, 1.7), (-10.0, 9.0), -math.pi / 2, 1.2),
+        ]
+    ):
+        n = int(6.0 * RATE)
+        t = np.arange(n) / RATE
+        u = np.array([math.cos(direction), math.sin(direction)])
+        xy = np.asarray(start) + (v * t)[:, None] * u
+        agents.append(Agent(aid, cls, *dims, t, xy, np.full(n, direction), np.full(n, v)))
+    spec = TrafficSpec(duration_s=6.0, rate_hz=RATE, masks=True, ghost_rate=0.0, miss_prob=0.0, seed=2)
+    tracks, _ = build_tracks(render_detections(cam, agents, spec), cam, PipelineConfig())
+    assert not [tr for tr in tracks if tr.verdict == "invalid"]
+    for ag in agents:
+        errs = []
+        for tr in tracks:
+            j = np.round((tr.t - ag.t[0]) * RATE).astype(int)
+            k = (j >= 0) & (j < len(ag.t))
+            e = np.linalg.norm(tr.xy[k] - ag.xy[j[k]], axis=1) if k.any() else np.zeros(0)
+            if len(e) and np.median(e) < 1.5:
+                errs.append(e)
+        assert errs, f"agent {ag.aid} not tracked"
+        assert np.median(np.concatenate(errs)) < 0.3

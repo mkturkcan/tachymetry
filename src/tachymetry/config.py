@@ -156,6 +156,8 @@ class HygieneConfig:
     boxfit_dim_frames: int = 6  #: evidence frames for the shared box dimensions
     boxfit_max_hz: float = 7.5  #: pose-fit rate of moving vehicles (other frames interpolate the fit residual)
     boxfit_slow_hz: float = 3.0  #: pose-fit rate inside stopped stretches (offsets are frozen there)
+    steep_view_deg: tuple[float, float] = (60.0, 80.0)  #: depression angles over which ground points without a
+    #: footprint or box fit move from contact plus ray offset to the silhouette centroid (see tracking/hygiene.py)
 
 
 @dataclass

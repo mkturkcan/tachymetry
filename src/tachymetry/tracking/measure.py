@@ -25,7 +25,14 @@ from ..config import HygieneConfig
 from ..detections import DetectionSet
 from ..geometry.camera import Camera
 
-__all__ = ["GroundObservations", "measure_ground", "DIM_PRIORS", "CLEARANCE_PRIORS", "dims_for"]
+__all__ = [
+    "GroundObservations",
+    "measure_ground",
+    "DIM_PRIORS",
+    "CLEARANCE_PRIORS",
+    "CENTROID_HEIGHTS",
+    "dims_for",
+]
 
 #: (length, width, height) priors in metres per class
 DIM_PRIORS = {
@@ -47,6 +54,8 @@ DIM_BOUNDS = {
 }
 #: height of the lowest visible edge (bumper or wheel bottom) used for parallax
 CLEARANCE_PRIORS = {"car": 0.08, "bus": 0.25, "truck": 0.25, "motorcycle": 0.05, "bicycle": 0.05, "person": 0.0}
+#: height (m) of the centroid of an object's silhouette seen from above, at which steep views place the mask centroid
+CENTROID_HEIGHTS = {"car": 0.75, "bus": 1.6, "truck": 1.6, "motorcycle": 0.55, "bicycle": 0.55, "person": 0.9}
 
 
 def dims_for(cls_name: str) -> tuple[float, float, float]:
@@ -68,6 +77,7 @@ class GroundObservations:
     length: np.ndarray  # (M,)
     width: np.ndarray  # (M,)
     has_mask: np.ndarray | None = None  # (M,) bool: contact from the instance mask
+    centroid_px: np.ndarray | None = None  # (M, 2) mask centroid (box centre without a mask), raw pixels
 
     @property
     def has_footprint(self) -> np.ndarray:
@@ -83,8 +93,9 @@ def measure_ground(dets: DetectionSet, camera: Camera, cfg: HygieneConfig) -> Gr
     xyxy = dets.xyxy.astype(np.float64)
     bottom = np.column_stack([(xyxy[:, 0] + xyxy[:, 2]) / 2, xyxy[:, 3]])
     has_mask = None
+    centroid = np.column_stack([(xyxy[:, 0] + xyxy[:, 2]) / 2, (xyxy[:, 1] + xyxy[:, 3]) / 2])
     if dets.masks is not None and cfg.mask_geometry and m:
-        from .envelope import mask_contact_px
+        from .envelope import mask_centroid_px, mask_contact_px
 
         has_mask = np.zeros(m, bool)
         for i in range(m):
@@ -92,6 +103,7 @@ def measure_ground(dets: DetectionSet, camera: Camera, cfg: HygieneConfig) -> Gr
             p = mask_contact_px(crop) if crop is not None else None
             if p is not None:
                 bottom[i] = p
+                centroid[i] = mask_centroid_px(crop)
                 has_mask[i] = True
     contact = camera.image_to_ground(bottom) if m else np.zeros((0, 2))
     gsd = camera.ground_sampling_distance(bottom) if m else np.zeros(0)
@@ -144,4 +156,6 @@ def measure_ground(dets: DetectionSet, camera: Camera, cfg: HygieneConfig) -> Gr
             heading[idx] = np.arctan2(ax[good, 1], ax[good, 0])
             length[idx] = L[good]
             width[idx] = W[good]
-    return GroundObservations(contact, gsd, valid, truncated, big, quad, center, heading, length, width, has_mask)
+    return GroundObservations(
+        contact, gsd, valid, truncated, big, quad, center, heading, length, width, has_mask, centroid
+    )

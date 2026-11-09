@@ -41,7 +41,7 @@ from ..detections import DetectionSet
 from ..geometry.camera import Camera
 from .boxfit import StreetAxes
 from .maskgeom import vehicle_geometry
-from .measure import CLEARANCE_PRIORS, DIM_BOUNDS, GroundObservations, dims_for
+from .measure import CENTROID_HEIGHTS, CLEARANCE_PRIORS, DIM_BOUNDS, GroundObservations, dims_for
 from .model import Flags, Track
 from .signal import fill_angles, hampel, running_median, segments_by_gap, smooth_kinematics, wrap
 
@@ -303,7 +303,23 @@ def _centres(
     L: float,
     W: float,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Footprint centres, the motion/footprint heading used, and a footprint flag per sample."""
+    """Footprint centres, the motion/footprint heading used, and a footprint flag per sample.
+
+    The model centre is the ground contact pushed along the viewing ray by half
+    the footprint's ray extent, less the parallax of the lowest visible edge.
+    It assumes that the lowest point of the object in the image is its side
+    facing the camera, which holds while the camera's nadir lies well below the
+    image. In steep views it does not: the lowest image point is merely one side
+    of the object. There, the centroid of the object's silhouette, intersected
+    with the horizontal plane at the class's centroid height
+    (``CENTROID_HEIGHTS``), lies above the footprint centre, with an error of
+    the height mismatch times the cotangent of the depression angle. The model
+    therefore moves from the ray offset to the centroid as the depression angle
+    of the sample rises through ``steep_view_deg`` (60 to 80 degrees), with a
+    smoothstep weight so that a track crossing the band has continuous position
+    and velocity. Oblique cameras, whose samples stay below 60 degrees, are
+    unaffected.
+    """
     cfg, o, cam = ctx.cfg, ctx.obs, ctx.camera
     t = ctx.dets.time[rows]
     contact = o.contact[rows]
@@ -330,6 +346,14 @@ def _centres(
     overshoot = dist * clearance / max(cam.height, 0.5)
     rho = np.maximum(0.5 * ext - overshoot, 0.0)
     model = contact + rhat * rho[:, None]
+    lo, hi = (float(v) for v in cfg.steep_view_deg)
+    dep = np.degrees(np.arctan2(max(cam.height, 1e-6), dist))
+    x = np.clip((dep - lo) / max(hi - lo, 1e-6), 0.0, 1.0)
+    w = x * x * (3.0 - 2.0 * x)
+    if np.any(w > 0) and o.centroid_px is not None:
+        g_c = cam.image_to_ground(o.centroid_px[rows], z=CENTROID_HEIGHTS.get(cls, 0.5 * dims_for(cls)[2]))
+        sel = (w > 0) & np.all(np.isfinite(g_c), axis=1)
+        model[sel] = (1.0 - w[sel, None]) * model[sel] + w[sel, None] * g_c[sel]
     centre = model.copy()
     if has_fp.any():
         fp = o.center[rows]

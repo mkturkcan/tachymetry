@@ -70,6 +70,7 @@ from ..geometry.camera import Camera
 
 __all__ = [
     "mask_contact_px",
+    "mask_centroid_px",
     "mask_envelope_px",
     "gap_prior",
     "stable_heading",
@@ -119,6 +120,17 @@ def mask_contact_px(crop: tuple[int, int, np.ndarray]) -> np.ndarray | None:
     ymax = int(rows[-1])
     ys, xs = np.nonzero(m[max(ymax - 2, 0) : ymax + 1])
     return np.array([x0 + float(xs.mean()), y0 + ymax + 0.5])
+
+
+def mask_centroid_px(crop: tuple[int, int, np.ndarray]) -> np.ndarray | None:
+    """Pixel centroid ``(u, v)`` of a mask crop in full-resolution pixels, or ``None`` for an empty mask."""
+    x0, y0, m = crop
+    n = float(m.sum())
+    if n <= 0:
+        return None
+    cols = m.sum(axis=0, dtype=np.float64)
+    rows = m.sum(axis=1, dtype=np.float64)
+    return np.array([x0 + float(cols @ np.arange(len(cols))) / n, y0 + float(rows @ np.arange(len(rows))) / n])
 
 
 def mask_envelope_px(
