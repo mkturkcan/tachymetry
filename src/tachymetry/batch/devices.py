@@ -86,8 +86,8 @@ def plan_workers(
     and renders while the other occupies the GPU), one on MPS, and on CPU a
     worker per four threads. Never more workers than jobs.
     """
-    slots: list[str] = []
     cpu_threads = os.cpu_count() or 1
+    per_device: list[int] = []
     for d in devices:
         if isinstance(workers_per_device, int) or (
             isinstance(workers_per_device, str) and workers_per_device.isdigit()
@@ -100,7 +100,9 @@ def plan_workers(
             k = 1
         else:
             k = max(1, cpu_threads // 4)
-        slots.extend([d.name] * k)
+        per_device.append(k)
+    # Round-robin order, so that truncating the list below still spreads workers over all devices.
+    slots = [d.name for i in range(max(per_device, default=0)) for d, k in zip(devices, per_device) if i < k]
     gpu_slots = sum(1 for s in slots if s.startswith("cuda"))
     if gpu_slots:  # keep enough CPU threads per worker for decoding and tracking
         cap = max(1, cpu_threads // 2)

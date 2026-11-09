@@ -33,6 +33,8 @@ def test_worker_plan():
     slots = plan_workers(gpus, "auto", n_jobs=100)
     assert len(slots) >= 4 and set(slots) == {f"cuda:{i}" for i in range(4)}
     assert plan_workers(gpus, 1, n_jobs=2) == ["cuda:0", "cuda:1"]
+    # fewer jobs than slots: the jobs still go to different GPUs
+    assert plan_workers(gpus[:2], "auto", n_jobs=2) == ["cuda:0", "cuda:1"]
     assert plan_workers([Device("cpu", "cpu", "cpu")], "auto", n_jobs=3)
 
 
