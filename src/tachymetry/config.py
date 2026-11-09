@@ -104,6 +104,10 @@ class HygieneConfig:
     edge_margin_frac: float = 0.004  #: boxes this close to the border are truncated
     big_box_frac: float = 0.45  #: boxes larger than this fraction of the frame are degenerate
     far_shrink: float = 0.5  #: far-field collapse: box height below this fraction of its running median
+    partial_footprint_ratio: float = 0.7  #: occlusion: a 3D footprint shorter than this fraction of the vehicle,
+    #: with a smaller-than-usual box, marks the sample as partly visible (interpolated)
+    end_shrink: float = 0.9  #: occlusion at track ends: box height or width below this fraction of the track's
+    #: usual box-to-model ratio, contiguous with the end, is trimmed
     end_score_ratio: float = 0.5  #: confidence collapse: trim end samples scored below this fraction of the
     end_score_max: float = 0.35  #: ... track's median score and below this absolute score
     fold_deg: float = 45.0  #: end hooks: a turn this sharp ...

@@ -198,7 +198,7 @@ def _dims(rows: np.ndarray, ctx: TrackContext, cls: str, use: np.ndarray) -> tup
     return L, W, H0
 
 
-def _partial_visibility(
+def _box_ratios(
     rows: np.ndarray,
     ctx: TrackContext,
     centre: np.ndarray,
@@ -206,18 +206,16 @@ def _partial_visibility(
     L: float,
     W: float,
     H: float,
-    min_ratio: float = 0.55,
-) -> np.ndarray:
-    """Samples whose detector box is much smaller than the projection of the track's own 3D box.
+) -> tuple[np.ndarray, np.ndarray]:
+    """Width and height of each detector box over those of the projection of the track's own 3D box.
 
     The expected box is the image bounding box of an upright ``L x W x H`` box at
-    the sample's centre and heading. A detector box covering less than
-    ``min_ratio`` of it in width or height means the object is partly occluded
-    or outside the frame, so its bottom edge does not locate the vehicle.
+    the sample's centre and heading. Ratios are NaN where the projection fails.
     """
     cam = ctx.camera
     b = ctx.dets.xyxy[rows].astype(np.float64)
-    out = np.zeros(len(rows), bool)
+    rw = np.full(len(rows), np.nan)
+    rh = np.full(len(rows), np.nan)
     c, s = np.cos(heading), np.sin(heading)
     for i in range(len(rows)):
         f = np.array([c[i], s[i]]) * L / 2
@@ -228,8 +226,64 @@ def _partial_visibility(
         if not np.all(np.isfinite(uv)):
             continue
         ew, eh = np.ptp(uv[:, 0]), np.ptp(uv[:, 1])
-        ow, oh = b[i, 2] - b[i, 0], b[i, 3] - b[i, 1]
-        out[i] = ow < min_ratio * ew or oh < min_ratio * eh
+        if ew > 0 and eh > 0:
+            rw[i] = (b[i, 2] - b[i, 0]) / ew
+            rh[i] = (b[i, 3] - b[i, 1]) / eh
+    return rw, rh
+
+
+def _partial_visibility(
+    rows: np.ndarray,
+    ctx: TrackContext,
+    centre: np.ndarray,
+    heading: np.ndarray,
+    L: float,
+    W: float,
+    H: float,
+    has_fp: np.ndarray,
+) -> np.ndarray:
+    """Samples at which the vehicle is partly hidden (occluded or outside the frame).
+
+    Three tests, with the box ratios of :func:`_box_ratios`:
+
+    * a sample without a 3D footprint whose detector box covers less than
+      ``min_ratio`` = 0.55 of the expected box in width or height;
+    * a sample whose 3D footprint is shorter than ``partial_footprint_ratio``
+      times the vehicle's length while its box is also smaller than usual, so
+      the footprint is a guess at hidden corners;
+    * occlusion onset or exit at either end of the track: the run of samples,
+      contiguous with the end, whose box height or width ratio falls below
+      ``end_shrink`` times the track's median ratio (a vehicle passing behind
+      a tree or a building keeps moving while its box stops growing or shrinks);
+      applied to vehicles that move more than 3 m, and to at most a quarter of
+      the track at each end.
+    """
+    cfg = ctx.cfg
+    rw, rh = _box_ratios(rows, ctx, centre, heading, L, W, H)
+    out = ((rw < 0.55) | (rh < 0.55)) & ~has_fp
+
+    def rel(x: np.ndarray) -> np.ndarray:
+        m = np.nanmedian(x) if np.isfinite(x).any() else np.nan
+        return x / m if np.isfinite(m) and m > 0 else np.ones_like(x)
+
+    qw, qh = rel(rw), rel(rh)
+    smaller = (qw < cfg.end_shrink) | (qh < cfg.end_shrink)
+    fl = ctx.obs.length[rows] / max(L, 1e-6)
+    out |= has_fp & np.isfinite(fl) & (fl < cfg.partial_footprint_ratio) & smaller
+    # end runs only for vehicles that move (a parked vehicle's box shrinks only when something passes in
+    # front of it), and never more than half of the track
+    contact = ctx.obs.contact[rows]
+    k = max(1, min(5, len(rows) // 4))
+    moved = float(np.linalg.norm(np.nanmedian(contact[-k:], axis=0) - np.nanmedian(contact[:k], axis=0)))
+    if np.isfinite(moved) and moved > 3.0:
+        n = len(rows)
+        a, b = 0, n
+        while a < n // 4 and smaller[a]:
+            a += 1
+        while b > max(a, n - n // 4) and smaller[b - 1]:
+            b -= 1
+        out[:a] = True
+        out[b:] = True
     return out
 
 
@@ -405,7 +459,7 @@ def _build(rows: np.ndarray, ctx: TrackContext, cls: str, stats: HygieneStats) -
     if cfg.footprints:
         centre, hd_model, has_fp = _centres(rows, ctx, cls, use, L, W)
         if sup == "vehicle" and cfg.trim:
-            partial = _partial_visibility(rows, ctx, centre, hd_model, L, W, H) & ~has_fp
+            partial = _partial_visibility(rows, ctx, centre, hd_model, L, W, H, has_fp)
             if partial.any():
                 # partly visible ends are trimmed; partly visible samples inside the track are interpolated
                 a, b = 0, len(rows)
