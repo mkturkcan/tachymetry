@@ -2,7 +2,7 @@
 
 Outputs, written to ``--out`` (``docs/media`` by default):
 
-* ``trailer.mp4``: 1920x1080, 30 fps, H.264 (``yuv420p``, ``+faststart``), silent, 42 s;
+* ``trailer.mp4``: 1920x1080, 30 fps, H.264 (``yuv420p``, ``+faststart``), silent, 34 s;
 * ``trailer_poster.jpg``: a 1920x1080 still used as the poster of the video;
 * ``readme_hero.gif``: a 7 s looping camera and bird's-eye-view render, 1000 px wide;
 * ``CREDITS.md``: the footage sources and licences of the three files above.
@@ -15,36 +15,38 @@ processed by :class:`tachymetry.pipeline.Pipeline` with the configuration overri
 :func:`tachymetry.data.sample_overrides` and either the known camera of
 :func:`tachymetry.data.sample_camera` (the straight-down drone clip) or automatic calibration.
 Detections are cached in the run directories under ``--runs``, so only the first invocation needs
-a GPU; later invocations take a few minutes on the CPU. Camera frames come from the library's
-renderer (:class:`tachymetry.render.video.Renderer`: 3D boxes, speeds, corner brackets for traffic
-beyond the metric range), bird's-eye views from :class:`tachymetry.render.bev.BEVCanvas`, the ground
-grid from :func:`tachymetry.calib.preview.draw_ground_grid`, and text uses the bundled Geist typefaces.
+a GPU; later invocations re-track from the cached detections in a few minutes on the CPU. Camera
+frames come from the library's renderer (:class:`tachymetry.render.video.Renderer`: 3D boxes, speeds,
+corner brackets for traffic beyond the metric range), bird's-eye views from
+:class:`tachymetry.render.bev.BEVCanvas`, the ground grid from :func:`tachymetry.calib.preview.draw_ground_grid`,
+and text uses the bundled Geist typefaces. Tracking output is on screen from the first frame.
 
 Scenes:
 
-1. title;
-2. montage of the raw sample clips;
-3. the straight-down drone clip with 3D boxes and speeds, pulling back from a 2x view;
-4. its bird's-eye view next to the camera view, on the same ground area, with accumulating trajectories;
-5. the metric ground grid of the automatic calibration of the intersection, revealed from near to far;
-6. 3D boxes and speeds on the motorway and at the roundabout;
-7. raw tracker output (ByteTrack identities, frame-difference speeds) wiped away to the filtered
-   tracks, with rejected and parked tracks tagged;
-8. the eight sample clips processed in parallel, labelled with the worker plan of
+1. the straight-down drone clip with 3D boxes and speeds, under the title, pulling back from a 2x view;
+2. its bird's-eye view next to the camera view, on the same ground area, with accumulating trajectories;
+3. the hovering-drone roundabout with its tracks, as the metric ground grid of its automatic calibration
+   sweeps from near to far;
+4. 3D boxes and speeds on the motorway;
+5. raw tracker output (ByteTrack identities, frame-difference speeds) wiped away to the filtered tracks of
+   the intersection; rejected tracks are tagged only where no kept track overlaps them, parked vehicles
+   only when parked;
+6. the eight sample clips processed in parallel, labelled with the worker plan of
    :func:`tachymetry.batch.devices.plan_workers`;
-9. end card with the footage credits.
+7. end card with the footage credits, over the dimmed drone clip.
 
 Usage::
 
     python tools/make_trailer.py
     python tools/make_trailer.py --device cuda:0 --runs runs/trailer --out docs/media
     python tools/make_trailer.py --only gif
-    python tools/make_trailer.py --only stills --stills 2,6,11,16,20,24,30,35,40
+    python tools/make_trailer.py --only stills --stills 0,3,8,12,16,20,26,32
 """
 
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import math
 import subprocess
@@ -58,6 +60,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from tachymetry.batch.devices import Device, plan_workers
+from tachymetry.calib.from_cuboids import collect_footprints
 from tachymetry.calib.preview import draw_ground_grid
 from tachymetry.config import PipelineConfig
 from tachymetry.data import SAMPLES, attribution, sample_camera, sample_overrides, sample_video
@@ -76,7 +79,6 @@ from tachymetry.render.style import (
     INK,
     MUTED,
     PARKED,
-    PLURALS,
     TEXT,
     color_for,
     polyline_aa,
@@ -89,7 +91,7 @@ from tachymetry.tracking.measure import measure_ground
 
 ROOT = Path(__file__).resolve().parents[1]
 W, H, FPS = 1920, 1080, 30
-DURATION = 42.0
+DURATION = 34.0
 
 DAY, DHAKA, ROUND, MOTOR, NIGHT = (
     "intersection-day",
@@ -99,15 +101,17 @@ DAY, DHAKA, ROUND, MOTOR, NIGHT = (
     "intersection-night",
 )
 CLIPS = [DAY, DHAKA, ROUND, MOTOR, "intersection-day-2", "intersection-day-3", "intersection-turn", NIGHT]
+END_TILE = 1  # the tile that fills the frame behind the end card
 GIF_SCENE = ROUND
 GIF_CROP = {ROUND: (180.0, 60.0, 1280.0, 720.0)}  # camera-view crop of the GIF (source pixels), per scene
-POSTER_TIME = 17.2
+POSTER_TIME = 9.4
 
 TAGLINE = "Metric trajectories and speeds from traffic video"
 INSTALL = "pip install git+https://github.com/mkturkcan/tachymetry"
 REPO = "github.com/mkturkcan/tachymetry"
 AUTHOR = "Mehmet Kerem Turkcan"
 AFFILIATION = "Associate Research Scientist, Department of Civil Engineering, Columbia University"
+DRONE_LABEL = "Doyel Chattor, Dhaka · straight-down drone · 3840×2160"
 
 # layout (pixels of the 1920x1080 frame); rectangles are (x, y, w, h)
 STAGE = (160.0, 36.0, 1600.0, 900.0)
@@ -117,43 +121,35 @@ TILE = (388.0, 218.0)
 TILE_RENDER = (640, 360)  # tiles draw their overlay at this size, so lines stay visible when small
 CAPTION_X, CAPTION_Y, SUB_Y = 160.0, 994.0, 1030.0
 
-# source-pixel regions of the 3840x2160 drone clip
-DHAKA_CLOSE = (700.0, 150.0, 1920.0, 1080.0)  # 2x view of the north-west approach
+# source-pixel regions
+DHAKA_CLOSE = (700.0, 150.0, 1920.0, 1080.0)  # 2x view of the north-west approach of the drone clip
 DHAKA_HALF = (729.6, 0.0, 1900.8, 2160.0)  # the roundabout at the scale of the full view, half the width
+FILTER_CROP = (320.0, 0.0, 1600.0, 900.0)  # one intersection pixel per stage pixel
+FILTER_START = 18.6  # clip time of the intersection when the filtering shot begins
 
-# timeline (seconds)
-T_TITLE_OUT = (2.55, 3.25)
-T_STAGE_IN = (2.75, 3.45)
+# timeline (seconds); tracking output is on screen in each shot
+T_TITLE = (0.05, 1.9, 2.4)  # letters start; fade-out start and end
+T_SETTLE = (2.2, 3.4)  # the full-frame opening shot settles into the stage
+T_PULL = (2.4, 6.0)  # pull back from the 2x view to the full view
+T_SPLIT = (6.3, 7.3)  # the camera view narrows to the left half
+T_BEV_IN = (7.1, 7.8)  # then the bird's-eye view slides in beside it
 XF = 0.3  # dissolve between shots
-MONTAGE = [  # sample, first second on screen, label
-    (DHAKA, 2.75, "Doyel Chattor, Dhaka · straight-down drone · 3840×2160"),
-    (ROUND, 3.95, "Roundabout · hovering drone · 1920×1080"),
-    (MOTOR, 5.05, "Motorway · overpass camera · 1280×720"),
-    (DAY, 6.15, "Signalised intersection · elevated camera · 1920×1080"),
-    (NIGHT, 7.25, "The same intersection at night · infrared"),
-]
-T_DHAKA = 8.35  # the drone clip with overlays dissolves in
-T_PULL = (9.0, 12.8)  # pull back from DHAKA_CLOSE to the full view
-T_SPLIT = (13.0, 14.0)  # the camera view narrows to the left half
-T_BEV_IN = (13.8, 14.5)  # then the bird's-eye view slides in beside it
-T_CALIB = 18.3
-T_SWEEP = (18.9, 21.0)
-T_MOTOR = 22.6
-T_ROUND = 25.0
-T_FILTER = 27.4
-T_RAW = (27.9, 28.7)  # zoom to 1:1 pixels and cross to the raw tracker output
-T_WIPE = (28.9, 30.9)
-T_TILES = (32.4, 33.5)
-T_END = (37.0, 37.8)
+T_CALIB = 10.8
+T_SWEEP = (11.3, 13.4)
+T_MOTOR = 15.4
+T_FILTER = 18.6
+T_RAW = (18.9, 19.6)  # zoom to 1:1 pixels and cross to the raw tracker output
+T_WIPE = (19.8, 21.8)
+T_TILES = (24.0, 25.1)
+T_END = (29.0, 29.9)
 
 CAPTIONS = [  # (in, out, key); the text is filled in from the runs
-    (3.4, 8.2, "montage"),
-    (8.9, 13.0, "drone"),
-    (13.8, 18.2, "bev"),
-    (18.8, 22.4, "calibration"),
-    (23.0, 27.2, "speeds"),
-    (28.0, 32.2, "filtering"),
-    (33.4, 36.9, "batch"),
+    (3.4, 6.2, "drone"),
+    (7.0, 10.7, "bev"),
+    (11.2, 15.3, "calibration"),
+    (15.8, 18.5, "speeds"),
+    (19.0, 23.9, "filtering"),
+    (25.0, 28.9, "batch"),
 ]
 
 
@@ -207,10 +203,6 @@ def blend(a: np.ndarray, b: np.ndarray, w: float) -> np.ndarray:
     if w >= 1.0:
         return b
     return cv2.addWeighted(b, float(w), a, float(1 - w), 0)
-
-
-def plural(n: int, cls: str) -> str:
-    return f"{n} {PLURALS.get(cls, cls) if n != 1 else cls}"
 
 
 # --------------------------------------------------------------------- type
@@ -494,14 +486,29 @@ def bbox_at(tr, tau: float) -> np.ndarray | None:
     return np.array([np.interp(tau, tr.t, tr.bbox[:, j]) for j in range(4)])
 
 
-def busiest_start(run, length: float, lo: float = 0.0) -> float:
-    """Start (clip time) of the window of ``length`` seconds that maximises the count of moving road users."""
+def boxes_overlap(a: np.ndarray, b: np.ndarray, iou: float = 0.1, containment: float = 0.5) -> bool:
+    """Image boxes overlap: IoU above ``iou`` or the smaller box inside the larger by more than ``containment``."""
+    iw = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+    ih = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+    inter = iw * ih
+    aa, bb = (a[2] - a[0]) * (a[3] - a[1]), (b[2] - b[0]) * (b[3] - b[1])
+    return inter / max(aa + bb - inter, 1e-9) > iou or inter / max(min(aa, bb), 1e-9) > containment
+
+
+def busiest_start(run, length: float, lo: float = 0.0, flowing: bool = False) -> float:
+    """Start (clip time) of the window of ``length`` seconds that maximises the count of moving road users.
+
+    With ``flowing`` only road users travelling faster than 3 km/h at each instant count, so that windows with
+    traffic held at a red light are passed over.
+    """
     dur = float(run.tracks.meta.get("duration_s") or 0.0)
     moving = [tr for tr in run.tracks.ok if tr.state == "moving"]
     pick, pick_score = lo, -1.0
     for s in np.arange(lo, max(lo, dur - length - 0.2) + 1e-6, 0.5):
-        ts = np.linspace(s, s + length, 9)
-        score = sum(sum(1 for tr in moving if tr.t[0] <= t <= tr.t[-1]) for t in ts)
+        score = 0
+        for t in np.linspace(s, s + length, 9):
+            live = [tr for tr in moving if tr.t[0] <= t <= tr.t[-1]]
+            score += sum(1 for tr in live if not flowing or np.interp(t, tr.t, tr.speed_kmh) > 3.0)
         if score > pick_score:
             pick, pick_score = float(s), score
     return pick
@@ -533,13 +540,45 @@ class Footage:
     def overlay(self, tau: float) -> np.ndarray:
         """The library's annotated camera frame at clip time ``tau`` (source resolution)."""
         f = self.frame_index(tau)
-        return self.renderer.frame(self.clip.get(f), f / self.fps)[self.renderer.header_h :]
+        return self.overlay_on(self.clip.get(f), f)
+
+    def overlay_on(self, img: np.ndarray, f: int) -> np.ndarray:
+        """The library's annotations of source frame ``f`` drawn on ``img`` (for example the frame with a grid)."""
+        return self.renderer.frame(img, f / self.fps)[self.renderer.header_h :]
 
     def tile(self, tau: float) -> np.ndarray:
+        """The camera overlay drawn at :data:`TILE_RENDER`, so that its lines stay visible in a small tile."""
         f = self.frame_index(tau)
+        k = TILE_RENDER[0] / self.size[0]
         img = cv2.resize(self.clip.get(f), TILE_RENDER, interpolation=cv2.INTER_AREA)
-        states = scaled_states(self.index.at(f / self.fps), TILE_RENDER[0] / self.size[0])
-        return draw_camera_overlay(img, self._tile_cam, states, max_labels=0)
+        self._brackets(img, f / self.fps, k)
+        return draw_camera_overlay(img, self._tile_cam, scaled_states(self.index.at(f / self.fps), k), max_labels=0)
+
+    def _brackets(self, img: np.ndarray, t: float, k: float) -> None:
+        """Corner brackets for detections without a metric track, as ``Renderer._draw_outlines`` draws them.
+
+        The detections are the renderer's own selection; only the drawing is repeated here, at the tile scale ``k``.
+        """
+        r = self.renderer
+        frames = getattr(r, "_det_frames", None)
+        if frames is None or not len(frames):
+            return
+        f = int(round(t * r._fps))
+        j = int(np.searchsorted(frames, f))
+        near = [int(frames[i]) for i in (j - 1, j) if 0 <= i < len(frames) and abs(frames[i] - f) <= max(r._stride, 1)]
+        if not near:
+            return
+        dets = self.run.detections
+        over = img.copy()
+        for row in r._det_rows[min(near, key=lambda g: abs(g - f))]:
+            x1, y1, x2, y2 = (int(round(v * k)) for v in dets.xyxy[row])
+            base = np.asarray(CLASS_COLORS.get(dets.class_names[int(dets.cls[row])], (200, 200, 200)), np.float64)
+            col = tuple(int(c) for c in 0.55 * base + 0.45 * 255)
+            dx, dy = max(2, (x2 - x1) // 4), max(2, (y2 - y1) // 4)
+            for cx, cy, sx, sy in ((x1, y1, 1, 1), (x2, y1, -1, 1), (x1, y2, 1, -1), (x2, y2, -1, -1)):
+                cv2.line(over, (cx, cy), (cx + sx * dx, cy), col, 1, cv2.LINE_AA)
+                cv2.line(over, (cx, cy), (cx, cy + sy * dy), col, 1, cv2.LINE_AA)
+        cv2.addWeighted(over, 0.8, img, 0.2, 0, dst=img)
 
     def median_speed(self, cls: str) -> float:
         """Median over the moving tracks of a class of their median moving speed (km/h)."""
@@ -711,24 +750,28 @@ def sources(names: list[str]) -> list[str]:
 
 # ------------------------------------------------------------------ trailer
 class Trailer:
+    """The trailer timeline. ``frame(t)`` draws second ``t``; ``shown`` and ``tags`` record what it drew (for QA)."""
+
     def __init__(self, footage: dict[str, Footage]):
         self.fo = footage
         day, dhaka, motor, rnd = footage[DAY], footage[DHAKA], footage[MOTOR], footage[ROUND]
-        # clip time at the first second of each shot
-        self.montage = []
-        for k, (name, t_in, text) in enumerate(MONTAGE):
-            t_out = MONTAGE[k + 1][1] + XF if k + 1 < len(MONTAGE) else T_DHAKA + XF
-            self.montage.append((name, t_in, t_out, busiest_start(footage[name].run, t_out - t_in), text))
-        self.dhaka_start = busiest_start(dhaka.run, T_CALIB + XF - T_DHAKA)
-        self.calib_start = busiest_start(day.run, T_MOTOR + XF - T_CALIB)
-        self.motor_start = busiest_start(motor.run, T_ROUND + XF - T_MOTOR)
-        self.round_start = busiest_start(rnd.run, T_FILTER + XF - T_ROUND)
-        self.filter_start = 18.6  # the wipe passes over the clip around 20 s, where a rider and a ghost are visible
-        self.grid = GridSweep(day.cam)
+        # clip time at the start of each shot: the busiest window of the shot's length
+        self.dhaka_start = busiest_start(dhaka.run, T_CALIB + XF)
+        self.round_start = busiest_start(rnd.run, T_MOTOR + XF - T_CALIB)
+        self.motor_start = busiest_start(motor.run, T_FILTER + XF - T_MOTOR)
+        self.filter_start = FILTER_START
+        self.grid = GridSweep(rnd.cam)
         self.raw = RawTracker(day.run, day.cfg)
         self.half_bev = HalfBEV(dhaka, DHAKA_HALF, (int(HALF_R[2]), int(HALF_R[3])))
-        self.rejected = [tr for tr in day.run.tracks.tracks if not tr.is_ok]
+        self.kept = list(day.run.tracks.ok)
+        # rejected tracks that can be tagged; tracks rejected for implausible motion are real vehicles
+        self.rejected = [tr for tr in day.run.tracks.tracks if not tr.is_ok and tr.verdict != "invalid"]
         self.parked_tags = self._parked_tags(day)
+        self.shown: list[tuple[str, float]] = []
+        self.tags: list[tuple[int, str]] = []
+        # tags that would appear while the divider sweeps, to word the caption after what is shown
+        window = np.arange(T_WIPE[0], T_TILES[0], 0.1)
+        self.tag_kinds = {kind for t in window for _, _, kind, _ in self.tag_items(self.filter_start + t - T_FILTER)}
         self.captions = self._captions()
         # worker labels: the library's worker plan for these jobs on a four-GPU machine (two workers per GPU);
         # jobs beyond the number of workers queue for the first free worker
@@ -743,18 +786,20 @@ class Trailer:
         cost = [footage[n].duration * footage[n].size[0] * footage[n].size[1] for n in CLIPS]
         self.tile_dur = [1.2 + 2.4 * math.sqrt(c / max(cost)) for c in cost]
         self.tile_start = [0.0] + [
-            busiest_start(footage[n].run, 6.0) - self.tile_in(k) for k, n in enumerate(CLIPS) if k
+            busiest_start(footage[n].run, 6.0, flowing=True) - self.tile_in(k) for k, n in enumerate(CLIPS) if k
         ]
-        self.title = Wordmark("Tachymetry", 136)
+        self.title = Wordmark("Tachymetry", 128)
         self.end_title = Wordmark("Tachymetry", 112)
         self.credits = [credit_line(n) for n in sources([DHAKA, ROUND, MOTOR, DAY])]
         self._wipe_t = np.linspace(T_WIPE[0], T_WIPE[1], 400)
         self._wipe_x = np.array([self.wipe_x(t) for t in self._wipe_t])
+        x = np.arange(W, dtype=np.float32)
+        self._title_shade = np.repeat((np.clip(1.0 - x / 1150.0, 0.0, 1.0) ** 1.6 * 0.82)[None, :], H, axis=0)
 
     @staticmethod
     def _parked_tags(fo: Footage) -> list:
         """One "parked" tag per curb: the largest parked vehicle on each side of the middle of the row."""
-        parked = [tr for tr in fo.run.tracks.ok if tr.state == "parked"]
+        parked = [tr for tr in fo.run.tracks.ok if tr.state == "parked" and tr.super_cls == "vehicle"]
         tags = []
         if parked:
             xs = np.array([np.median((tr.bbox[:, 0] + tr.bbox[:, 2]) / 2) for tr in parked])
@@ -766,24 +811,40 @@ class Trailer:
                     tags.append(group[int(np.argmax(area))])
         return tags
 
+    def tag_items(self, tau: float) -> list[tuple]:
+        """``(track, box, label, colour)`` of the tags at clip time ``tau`` of the filtering shot.
+
+        A rejected track is tagged only while its box overlaps no kept track's box, so that tags mark phantoms
+        and never a real vehicle; "parked" goes only on parked tracks.
+        """
+        kept = [b for b in (bbox_at(tr, tau) for tr in self.kept) if b is not None]
+        items = []
+        for tr in self.rejected:
+            b = bbox_at(tr, tau)
+            if b is not None and not any(boxes_overlap(b, k) for k in kept):
+                items.append((tr, b, tr.verdict, AMBER))
+        for tr in self.parked_tags:
+            b = bbox_at(tr, tau)
+            if b is not None and tr.state == "parked":
+                items.append((tr, b, "parked", PARKED))
+        return items
+
     def _captions(self) -> list[tuple]:
         day, dhaka, motor, rnd = self.fo[DAY], self.fo[DHAKA], self.fo[MOTOR], self.fo[ROUND]
-        sizes = sorted({fo.size for fo in self.fo.values()}, key=lambda s: s[0] * s[1])
-        rates = sorted(fo.fps for fo in self.fo.values())
-        report = day.run.out_dir / "camera.report.json" if day.run.out_dir is not None else None
+        cap = inspect.signature(collect_footprints).parameters["max_n"].default
         n_fp = None
+        report = rnd.run.out_dir / "camera.report.json" if rnd.run.out_dir is not None else None
         if report is not None and report.exists():
             n_fp = json.loads(report.read_text(encoding="utf-8")).get("details", {}).get("n_footprints")
-        cam = day.cam
-        found = f"{n_fp} sampled vehicle footprints · " if n_fp else ""
+        found = ""
+        if n_fp:
+            found = f"{n_fp} {'sampled ' if n_fp >= cap else ''}vehicle footprints · "
+        cam, dc = rnd.cam, dhaka.cam
         s = day.run.tracks.summary()
-        dc = dhaka.cam
+        n_parked = sum(s["parked_by_class"].values())
+        phantoms = sorted(k for k in self.tag_kinds if k != "parked")
+        tagged = f" · {' and '.join(f'{k}s' for k in phantoms)} tagged" if phantoms else ""
         text = {
-            "montage": (
-                "Roadside, overpass and drone video",
-                f"public sample clips · {sizes[0][0]}×{sizes[0][1]} to {sizes[-1][0]}×{sizes[-1][1]}"
-                f" · {rates[0]:.0f} to {rates[-1]:.0f} fps",
-            ),
             "drone": (
                 "Straight-down drone view; camera from flight altitude",
                 f"altitude {dc.height:.1f} m · field of view {dc.fov[0]:.1f}° · median speed: cars"
@@ -799,15 +860,14 @@ class Trailer:
                 f"{found}focal {cam.focal:.0f} px · height {cam.height:.1f} m · pitch {cam.pitch:.1f}°",
             ),
             "speeds": (
-                "Speeds from an overpass and a hovering drone",
-                f"median {motor.vehicle_speed():.0f} km/h and"
-                f" {rnd.vehicle_speed():.0f} km/h · traffic beyond the metric range"
-                " is bracketed, without a speed",
+                "Speeds from an overpass camera",
+                f"median {motor.vehicle_speed():.0f} km/h · traffic beyond the metric range is bracketed,"
+                " without a speed",
             ),
             "filtering": (
-                "Track filtering: ghosts and parked vehicles",
-                f"{self.raw.n_ids} raw tracker IDs → {s['tracks']} tracks ({sum(s['parked_by_class'].values())}"
-                " parked)",
+                "Raw tracker output vs. filtered tracks",
+                f"{self.raw.n_ids} raw tracker IDs → {s['tracks']} tracks · parked ({n_parked}) and far-field traffic"
+                f" shown without speed{tagged}",
             ),
             "batch": ("Batch processing on multiple GPUs", "tachymetry run videos/ --devices auto"),
         }
@@ -829,36 +889,41 @@ class Trailer:
     # ------------------------------------------------------------- frames
     def frame(self, t: float, poster: bool = False) -> np.ndarray:
         canvas = np.full((H, W, 3), INK, np.uint8)
-        if t < 3.4:
-            self.draw_title(canvas, t)
-        if T_STAGE_IN[0] <= t < T_DHAKA + XF:
-            self.draw_montage(canvas, t)
-        if T_DHAKA <= t < T_CALIB + XF:
-            self.draw_dhaka(canvas, t)
+        self.shown, self.tags = [], []
+        if t < T_CALIB + XF:
+            self.draw_drone(canvas, t, poster)
         if T_CALIB <= t < T_MOTOR + XF:
             self.draw_calibration(canvas, t)
         if T_MOTOR <= t < T_FILTER + XF:
             self.draw_speeds(canvas, t)
         if T_FILTER <= t < T_TILES[0]:
             self.draw_filter(canvas, t)
-        if T_TILES[0] <= t < T_END[1] + 0.4:
+        if T_TILES[0] <= t:
             self.draw_tiles(canvas, t)
+        if t >= T_END[0]:
+            self.draw_end_background(canvas, t)
         if poster:
             self.draw_poster_text(canvas)
         else:
             for c in self.captions:
                 self.draw_caption(canvas, t, *c)
+            if t < T_TITLE[2]:
+                self.draw_title(canvas, t)
         if t >= T_END[0] + 0.3:
             self.draw_end(canvas, t)
         return canvas
 
     def draw_title(self, canvas: np.ndarray, t: float) -> None:
-        out = ramp(t, *T_TITLE_OUT)
-        lift = -26 * out
-        self.title.draw(canvas, W / 2, 548 + lift, t, 0.35, alpha=1 - out)
-        a = ramp(t, 1.25, 2.05) * (1 - out)
-        y = 632 + 10 * (1 - ramp(t, 1.25, 2.05)) + lift
-        put_text(canvas, TAGLINE, W / 2, y, 32, "regular", MUTED, a, align="center")
+        """The name and tagline over a left-hand shade, on the opening shot."""
+        a = ramp(t, 0.0, 0.35) * (1 - ramp(t, T_TITLE[1], T_TITLE[2]))
+        if a <= 0.002:
+            return
+        blend_mask(canvas, self._title_shade, 0, 0, INK, a)
+        out = 1 - ramp(t, T_TITLE[1], T_TITLE[2])
+        x = 160 + round(self.title.width / 2)
+        self.title.draw(canvas, x, 548, t, T_TITLE[0], stagger=0.035, dur=0.65, alpha=out, settle=0.3)
+        e = ramp(t, 0.5, 1.1)
+        put_text(canvas, TAGLINE, 164, 610 + 8 * (1 - e), 32, "regular", TEXT, 0.82 * e * out)
 
     def draw_caption(self, canvas: np.ndarray, t: float, t_in: float, t_out: float, main: str, sub: str) -> None:
         if t < t_in or t > t_out:
@@ -882,75 +947,66 @@ class Trailer:
         put_text(canvas, REPO, STAGE[0] + STAGE[2], CAPTION_Y, 20, "medium", CYAN, align="right")
 
     # ------------------------------------------------------------- shots
-    def draw_montage(self, canvas: np.ndarray, t: float) -> None:
-        stage_in = ramp(t, *T_STAGE_IN)
-        for k, (name, t_in, t_out, start, text) in enumerate(self.montage):
-            if not t_in <= t < t_out:
-                continue
-            fo = self.fo[name]
-            a = stage_in if k == 0 else ramp(t, t_in, t_in + XF)
-            u = (t - t_in) / (t_out - t_in)
-            crop = zoom_about(fo.full, fo.size[0] / 2, fo.size[1] / 2, 1.0 + 0.05 * u)  # a slow push-in
-            rect = scale_rect(STAGE, lerp(0.965, 1.0, stage_in)) if k == 0 else STAGE
-            content = view(fo.raw(start + t - t_in), crop, rect[2:])
-            label(content, text, ramp(t, t_in + 0.1, t_in + 0.45))
-            place(canvas, content, rect, a)
-
-    def draw_dhaka(self, canvas: np.ndarray, t: float) -> None:
+    def draw_drone(self, canvas: np.ndarray, t: float, poster: bool = False) -> None:
+        """The straight-down drone clip: full frame at 2x, settling into the stage, then beside its bird's-eye view."""
         fo = self.fo[DHAKA]
-        tau = self.dhaka_start + t - T_DHAKA
+        tau = self.dhaka_start + t
+        f = fo.frame_index(tau)
+        self.shown.append((DHAKA, f / fo.fps))
         img = fo.overlay(tau)
-        a = ramp(t, T_DHAKA, T_DHAKA + XF)
         split = ramp(t, *T_SPLIT)
+        chip = ramp(t, T_SETTLE[1] - 0.2, T_SETTLE[1] + 0.3) * (1 - ramp(t, T_CALIB - 0.3, T_CALIB))
         if split <= 0.0:
-            crop = zoom_rect(DHAKA_CLOSE, fo.full, ramp(t, *T_PULL))
-            place(canvas, view(img, crop, STAGE[2:]), STAGE, a)
+            settle = ramp(t, *T_SETTLE)
+            rect = lerp_rect((0.0, 0.0, float(W), float(H)), STAGE, settle)
+            content = view(img, zoom_rect(DHAKA_CLOSE, fo.full, ramp(t, *T_PULL)), rect[2:])
+            label(content, DRONE_LABEL, chip)
+            place(canvas, content, rect, 1.0, radius=max(1, round(12 * settle)), border=0.07 * settle)
             return
         # the left panel keeps the scale of the full view while it narrows to the roundabout
         rect = lerp_rect(STAGE, HALF_L, split)
-        place(canvas, view(img, lerp_rect(fo.full, DHAKA_HALF, split), rect[2:]), rect, 1.0)
+        content = view(img, lerp_rect(fo.full, DHAKA_HALF, split), rect[2:])
+        label(content, DRONE_LABEL, chip)
+        place(canvas, content, rect, 1.0)
         b = ramp(t, *T_BEV_IN)
         if b > 0.002:
-            bev = self.half_bev.render(fo.frame_index(tau) / fo.fps, self.dhaka_start)
+            bev = self.half_bev.render(f / fo.fps, self.dhaka_start)
             x, y, w, h = HALF_R
             x = max(x + 40 * (1 - b), rect[0] + rect[2] + 16)  # never over the narrowing camera view
             place(canvas, bev, (x, y, w, h), b)
 
     def draw_calibration(self, canvas: np.ndarray, t: float) -> None:
-        fo = self.fo[DAY]
-        tau = self.calib_start + t - T_CALIB
-        img = fo.raw(tau)
-        grid_a = (1 - 0.12 * ramp(t, T_SWEEP[1], T_SWEEP[1] + 0.8)) * (1 - ramp(t, T_MOTOR - 0.9, T_MOTOR - 0.1))
-        content = img
-        if t >= T_SWEEP[0] and grid_a > 0.002:
+        """The hovering-drone roundabout: tracks drawn over the metric ground grid as it sweeps from near to far."""
+        fo = self.fo[ROUND]
+        f = fo.frame_index(self.round_start + t - T_CALIB)
+        self.shown.append((ROUND, f / fo.fps))
+        img = fo.clip.get(f)
+        if t >= T_SWEEP[0]:
+            grid_a = 1 - 0.15 * ramp(t, T_SWEEP[1], T_SWEEP[1] + 0.8)
             glow = 1 - ramp(t, T_SWEEP[1] - 0.4, T_SWEEP[1] + 0.4)
-            content = self.grid.apply(img.copy(), ramp(t, *T_SWEEP), grid_a, glow)
-        place(canvas, view(content, fo.full, STAGE[2:]), STAGE, ramp(t, T_CALIB, T_CALIB + XF))
+            img = self.grid.apply(img.copy(), ramp(t, *T_SWEEP), grid_a, glow)
+        content = view(fo.overlay_on(img, f), fo.full, STAGE[2:])
+        label(content, "Roundabout · hovering drone · 1920×1080", ramp(t, T_CALIB + 0.1, T_CALIB + 0.45))
+        place(canvas, content, STAGE, ramp(t, T_CALIB, T_CALIB + XF))
 
     def draw_speeds(self, canvas: np.ndarray, t: float) -> None:
-        shots = [
-            (MOTOR, T_MOTOR, T_ROUND + XF, self.motor_start, (0.62, 0.55), 1.06, "Motorway · overpass camera"),
-            (ROUND, T_ROUND, T_FILTER + XF, self.round_start, (0.33, 0.33), 1.30, "Roundabout · hovering drone"),
-        ]
-        for name, t_in, t_out, start, (fx, fy), z, text in shots:
-            if not t_in <= t < t_out:
-                continue
-            fo = self.fo[name]
-            u = ease((t - t_in) / (t_out - t_in))
-            crop = zoom_about(fo.full, fx * fo.size[0], fy * fo.size[1], 1.0 + (z - 1.0) * u)
-            content = view(fo.overlay(start + t - t_in), crop, STAGE[2:])
-            label(content, text, ramp(t, t_in + 0.1, t_in + 0.45))
-            place(canvas, content, STAGE, ramp(t, t_in, t_in + XF))
+        fo = self.fo[MOTOR]
+        tau = self.motor_start + t - T_MOTOR
+        self.shown.append((MOTOR, fo.frame_index(tau) / fo.fps))
+        u = ease((t - T_MOTOR) / (T_FILTER + XF - T_MOTOR))
+        crop = zoom_about(fo.full, 0.62 * fo.size[0], 0.55 * fo.size[1], 1.0 + 0.06 * u)
+        content = view(fo.overlay(tau), crop, STAGE[2:])
+        label(content, "Motorway · overpass camera · 1280×720", ramp(t, T_MOTOR + 0.1, T_MOTOR + 0.45))
+        place(canvas, content, STAGE, ramp(t, T_MOTOR, T_MOTOR + XF))
 
     def draw_filter(self, canvas: np.ndarray, t: float) -> None:
         """Raw tracker output wiped away to the filtered tracks, at one source pixel per stage pixel."""
         fo = self.fo[DAY]
-        tau = self.filter_start + t - T_FILTER
-        f = fo.frame_index(tau)
+        f = fo.frame_index(self.filter_start + t - T_FILTER)
         tau = f / fo.fps
+        self.shown.append((DAY, tau))
         size = (int(STAGE[2]), int(STAGE[3]))
-        zoom = ramp(t, *T_RAW)
-        crop = lerp_rect(fo.full, (320.0, 0.0, 1600.0, 900.0), zoom)
+        crop = lerp_rect(fo.full, FILTER_CROP, ramp(t, *T_RAW))
         clean = view(fo.overlay(tau), crop, size)
         raw_a = ramp(t, T_RAW[0] + 0.1, T_RAW[1])
         x_div = self.wipe_x(t)
@@ -975,13 +1031,9 @@ class Trailer:
         place(canvas, content, STAGE, ramp(t, T_FILTER, T_FILTER + XF))
 
     def draw_tags(self, img: np.ndarray, t: float, tau: float, crop: tuple, size: tuple) -> None:
-        """Verdict tags on the filtered side, shown as the divider passes them."""
+        """Tags on the filtered side (see :meth:`tag_items`), shown as the divider passes them."""
         s = size[0] / crop[2]
-        items = [(tr, tr.verdict, AMBER) for tr in self.rejected] + [(tr, "parked", PARKED) for tr in self.parked_tags]
-        for tr, text, col in items:
-            b = bbox_at(tr, tau)
-            if b is None:
-                continue
+        for tr, b, text, col in self.tag_items(tau):
             b = np.array([(b[0] - crop[0]) * s, (b[1] - crop[1]) * s, (b[2] - crop[0]) * s, (b[3] - crop[1]) * s])
             tp = self.passed((b[0] + b[2]) / 2)
             if tp is None or t < tp:
@@ -991,6 +1043,7 @@ class Trailer:
             a *= 1 - ramp(t, T_TILES[0] - 0.6, T_TILES[0] - 0.2)
             if a <= 0.002:
                 continue
+            self.tags.append((tr.id, text))
             layer = img.copy()
             polyline_aa(layer, np.array([[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]]]), col, 2, closed=True)
             draw_chip(layer, text, (int(b[0]), int(b[1]) - 5), size=14, fg=(20, 16, 14), bg=col)
@@ -1000,10 +1053,13 @@ class Trailer:
     def draw_tiles(self, canvas: np.ndarray, t: float) -> None:
         grow = ramp(t, *T_TILES)
         for k, name in enumerate(CLIPS):
+            if k == END_TILE and t >= T_END[0]:
+                continue  # drawn by draw_end_background
             fo = self.fo[name]
             rect = self.rects[k]
             out = ramp(t, T_END[0] + 0.04 * k, T_END[0] + 0.5 + 0.04 * k)
-            size = (int(round(rect[2])), int(round(rect[3])))
+            if out >= 1.0:
+                continue
             if k == 0:  # the filtered intersection shrinks into the first tile and keeps playing
                 rect = lerp_rect(STAGE, rect, grow)
                 size = (int(round(rect[2])), int(round(rect[3])))
@@ -1012,8 +1068,7 @@ class Trailer:
                 small = ramp(t, T_TILES[0] + 0.5, T_TILES[1])
                 content = None
                 if small < 1:
-                    crop = lerp_rect((320.0, 0.0, 1600.0, 900.0), fo.full, grow)
-                    content = view(fo.overlay(tau), crop, size)
+                    content = view(fo.overlay(tau), lerp_rect(FILTER_CROP, fo.full, grow), size)
                 if small > 0:
                     tile = cv2.resize(fo.tile(tau), size, interpolation=cv2.INTER_AREA)
                     content = tile if content is None else blend(content, tile, small)
@@ -1024,17 +1079,22 @@ class Trailer:
                 a = ramp(t, t_in, t_in + 0.6)
                 rect = scale_rect(rect, lerp(0.94, 1.0, a))
                 size = (int(round(rect[2])), int(round(rect[3])))
-                content = cv2.resize(fo.tile(self.tile_start[k] + t), size, interpolation=cv2.INTER_AREA)
+                tau = self.tile_start[k] + t
+                content = cv2.resize(fo.tile(tau), size, interpolation=cv2.INTER_AREA)
+            self.shown.append((name, fo.frame_index(tau) / fo.fps))
             if out > 0:
                 rect = scale_rect(rect, lerp(1.0, 0.97, out))
                 a *= 1 - out
-            shown = max(self.tile_in(k), T_TILES[1] - 0.2 if k == 0 else 0.0)
-            label_a = ramp(t, shown + 0.25, shown + 0.7)
-            if label_a > 0:
-                self.tile_labels(content, k, t, shown + 0.35, label_a)
+            self.tile_labels(content, k, t, self.label_alpha(k, t))
             place(canvas, content, rect, a, radius=9)
 
-    def tile_labels(self, img: np.ndarray, k: int, t: float, t0: float, a: float) -> None:
+    def label_alpha(self, k: int, t: float) -> float:
+        shown = max(self.tile_in(k), T_TILES[1] - 0.2 if k == 0 else 0.0)
+        return ramp(t, shown + 0.25, shown + 0.7)
+
+    def tile_labels(self, img: np.ndarray, k: int, t: float, a: float) -> None:
+        if a <= 0.002:
+            return
         h, w = img.shape[:2]
         band = 36
         g = np.linspace(0, 0.72, band, dtype=np.float32)[:, None, None] * a
@@ -1044,6 +1104,7 @@ class Trailer:
         panel(img, 8, 8, text_width(worker, 12, "mono") + 14, 21, INK, 0.75 * a, 5, (255, 255, 255), 0.10)
         put_text(img, worker, 15, 23, 12, "mono", TEXT, a)
         put_text(img, CLIPS[k], 10, h - 11, 12, "medium", TEXT, a)
+        t0 = max(self.tile_in(k), T_TILES[1] - 0.2 if k == 0 else 0.0) + 0.35
         p = ramp(t, t0, t0 + self.tile_dur[k])
         status = "done" if p >= 1 else f"{int(p * 100):d}%"
         sw = text_width("100%", 12, "mono")
@@ -1052,6 +1113,24 @@ class Trailer:
         fill_rect(img, 0, h - 3, w * p, 3, CYAN, a)
 
     # ------------------------------------------------------------ end card
+    def draw_end_background(self, canvas: np.ndarray, t: float) -> None:
+        """The drone tile fills the frame and dims behind the end card; its tracks keep playing."""
+        fo = self.fo[CLIPS[END_TILE]]
+        u = ramp(t, *T_END)
+        rect = lerp_rect(self.rects[END_TILE], (0.0, 0.0, float(W), float(H)), u)
+        size = (int(round(rect[2])), int(round(rect[3])))
+        tau = self.tile_start[END_TILE] + t
+        self.shown.append((fo.name, fo.frame_index(tau) / fo.fps))
+        content = cv2.resize(fo.tile(tau), size, interpolation=cv2.INTER_AREA if size[0] < 640 else cv2.INTER_LINEAR)
+        if u > 0:
+            content = blend(content, view(fo.overlay(tau), fo.full, size), u)
+        self.tile_labels(content, END_TILE, t, self.label_alpha(END_TILE, t) * (1 - ramp(t, T_END[0], T_END[0] + 0.25)))
+        dim = ramp(t, T_END[0] + 0.2, T_END[1] + 0.4)
+        if dim > 0:
+            soft = cv2.GaussianBlur(content, (0, 0), 0.5 + 2.0 * dim)
+            content = cv2.addWeighted(soft, 1.0 - 0.8 * dim, np.full_like(soft, INK), 0.8 * dim, 0)
+        place(canvas, content, rect, 1.0, radius=max(1, round(9 * (1 - u))), border=0.07 * (1 - u))
+
     def draw_end(self, canvas: np.ndarray, t: float) -> None:
         t0 = T_END[0] + 0.45
         self.end_title.draw(canvas, W / 2, 330, t, t0, stagger=0.045, dur=0.8)
@@ -1073,16 +1152,16 @@ class Trailer:
         a, dy = item(2)
         put_text(canvas, REPO, W / 2, 572 + dy, 26, "medium", CYAN, a, align="center")
         a, dy = item(3)
-        fill_rect(canvas, W / 2 - 20, 626 + dy, 40, 1, FAINT, a)
+        fill_rect(canvas, W / 2 - 20, 626 + dy, 40, 1, MUTED, a)
         put_text(canvas, AUTHOR, W / 2, 680 + dy, 26, "medium", TEXT, a, align="center")
         put_text(canvas, AFFILIATION, W / 2, 716 + dy, 21, "regular", MUTED, a, align="center")
         a, dy = item(5)
         y = 836 + dy
-        put_text(canvas, "Footage", W / 2, y, 14, "medium", MUTED, a, align="center")
+        put_text(canvas, "Footage", W / 2, y, 14, "medium", TEXT, a, align="center")
         for line in self.credits:
             y += 26
-            put_text(canvas, line, W / 2, y, 15, "regular", FAINT, a, align="center")
-        put_text(canvas, "This video is licensed CC BY 4.0.", W / 2, y + 36, 14, "regular", FAINT, a, align="center")
+            put_text(canvas, line, W / 2, y, 15, "regular", MUTED, a, align="center")
+        put_text(canvas, "This video is licensed CC BY 4.0.", W / 2, y + 36, 14, "regular", MUTED, a, align="center")
 
 
 # ---------------------------------------------------------------------- gif
@@ -1254,7 +1333,7 @@ def main() -> None:
     ap.add_argument(
         "--only", default="video,poster,gif,credits", help="comma-separated: video, poster, gif, credits, stills"
     )
-    ap.add_argument("--stills", default="2,6,11,16,20,24,30,35,40", help="times (s) for --only stills")
+    ap.add_argument("--stills", default="0,3,8,12,16,20,26,32", help="times (s) for --only stills")
     ap.add_argument("--stills-dir", type=Path, default=None)
     ap.add_argument("--poster-time", type=float, default=POSTER_TIME)
     ap.add_argument("--gif-scene", default=GIF_SCENE, choices=CLIPS)
