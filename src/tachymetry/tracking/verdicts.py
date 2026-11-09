@@ -1,6 +1,6 @@
 """Cross-track reasoning: stitching, duplicates and false-positive verdicts.
 
-Run on the output of :mod:`tachymetry.track.hygiene`, in this order:
+Run on the output of :mod:`tachymetry.tracking.hygiene`, in this order:
 
 1. **Stitching** re-joins fragments of one object (occlusion, missed detections):
    kinematic prediction from the end of one track must reach the start of the

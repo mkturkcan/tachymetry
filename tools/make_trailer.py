@@ -71,16 +71,21 @@ from tachymetry.render.style import (
 )
 from tachymetry.render.text import draw_chip, font
 from tachymetry.synthetic.traffic import naive_speeds
-from tachymetry.track.builder import associate
-from tachymetry.track.measure import measure_ground
+from tachymetry.tracking.builder import associate
+from tachymetry.tracking.measure import measure_ground
 
 ROOT = Path(__file__).resolve().parents[1]
 W, H, FPS = 1920, 1080, 30
 DURATION = 37.0
 
 # clips: run directory name, sample name
-CLIPS = [("day1", "intersection-day"), ("day2", "intersection-day-2"), ("day3", "intersection-day-3"),
-         ("turn", "intersection-turn"), ("night", "intersection-night")]
+CLIPS = [
+    ("day1", "intersection-day"),
+    ("day2", "intersection-day-2"),
+    ("day3", "intersection-day-3"),
+    ("turn", "intersection-turn"),
+    ("night", "intersection-night"),
+]
 TAGLINE = "Metric trajectories and speeds from traffic video"
 INSTALL = "pip install git+https://github.com/mkturkcan/tachymetry"
 REPO = "github.com/mkturkcan/tachymetry"
@@ -114,7 +119,7 @@ T_END = (31.8, 32.6)
 def ease(x: float) -> float:
     """Cubic ease-in-out on [0, 1]."""
     x = min(max(float(x), 0.0), 1.0)
-    return 4.0 * x ** 3 if x < 0.5 else 1.0 - (-2.0 * x + 2.0) ** 3 / 2.0
+    return 4.0 * x**3 if x < 0.5 else 1.0 - (-2.0 * x + 2.0) ** 3 / 2.0
 
 
 def ramp(t: float, a: float, b: float) -> float:
@@ -166,20 +171,31 @@ def blend_mask(canvas: np.ndarray, mask: np.ndarray, x: float, y: float, color: 
     xi, yi = math.floor(x), math.floor(y)
     fx, fy = x - xi, y - yi
     if fx > 0.01 or fy > 0.01:
-        mask = cv2.warpAffine(mask, np.float32([[1, 0, fx], [0, 1, fy]]), (mask.shape[1] + 1, mask.shape[0] + 1),
-                              flags=cv2.INTER_LINEAR)
+        mask = cv2.warpAffine(
+            mask, np.float32([[1, 0, fx], [0, 1, fy]]), (mask.shape[1] + 1, mask.shape[0] + 1), flags=cv2.INTER_LINEAR
+        )
     h, w = mask.shape[:2]
     x0, y0 = max(xi, 0), max(yi, 0)
     x1, y1 = min(xi + w, canvas.shape[1]), min(yi + h, canvas.shape[0])
     if x1 <= x0 or y1 <= y0:
         return
-    m = mask[y0 - yi:y1 - yi, x0 - xi:x1 - xi, None] * float(alpha)
+    m = mask[y0 - yi : y1 - yi, x0 - xi : x1 - xi, None] * float(alpha)
     roi = canvas[y0:y1, x0:x1].astype(np.float32)
     canvas[y0:y1, x0:x1] = np.clip(roi + (np.asarray(color, np.float32) - roi) * m + 0.5, 0, 255).astype(np.uint8)
 
 
-def put_text(canvas: np.ndarray, text: str, x: float, y: float, size: int, weight: str = "regular",
-             color: tuple = TEXT, alpha: float = 1.0, align: str = "left", blur: float = 0.0) -> None:
+def put_text(
+    canvas: np.ndarray,
+    text: str,
+    x: float,
+    y: float,
+    size: int,
+    weight: str = "regular",
+    color: tuple = TEXT,
+    alpha: float = 1.0,
+    align: str = "left",
+    blur: float = 0.0,
+) -> None:
     """Draw ``text`` with its baseline at ``y``; ``x`` is its left edge, centre or right edge."""
     if alpha <= 0.002 or not text:
         return
@@ -228,8 +244,9 @@ def ring_mask(w: int, h: int, r: int) -> np.ndarray:
     return np.clip(rounded_mask(w, h, r) - inner, 0, 1)
 
 
-def place(canvas: np.ndarray, img: np.ndarray, rect: tuple, alpha: float = 1.0, radius: int = 12,
-          border: float = 0.07) -> None:
+def place(
+    canvas: np.ndarray, img: np.ndarray, rect: tuple, alpha: float = 1.0, radius: int = 12, border: float = 0.07
+) -> None:
     """Composite ``img`` into ``rect`` as a rounded panel with a hairline border."""
     x, y, w, h = rect
     X, Y, Wd, Hd = int(round(x)), int(round(y)), int(round(w)), int(round(h))
@@ -251,8 +268,18 @@ def place(canvas: np.ndarray, img: np.ndarray, rect: tuple, alpha: float = 1.0, 
     canvas[y0:y1, x0:x1] = np.clip(out + 0.5, 0, 255).astype(np.uint8)
 
 
-def panel(canvas: np.ndarray, x: float, y: float, w: float, h: float, fill: tuple, alpha: float, radius: int = 8,
-          edge: tuple | None = None, edge_alpha: float = 0.0) -> None:
+def panel(
+    canvas: np.ndarray,
+    x: float,
+    y: float,
+    w: float,
+    h: float,
+    fill: tuple,
+    alpha: float,
+    radius: int = 8,
+    edge: tuple | None = None,
+    edge_alpha: float = 0.0,
+) -> None:
     """Flat rounded rectangle (label backgrounds, the install line)."""
     Wd, Hd = int(round(w)), int(round(h))
     if Wd < 4 or Hd < 4:
@@ -285,12 +312,26 @@ class Wordmark:
         f = font(size, weight)
         self.word, self.wox, self.woy = _mask(text, size, weight)
         self.width = f.getlength(text)
-        self.glyphs = [(f.getlength(text[:i + 1]) - f.getlength(ch), *_mask(ch, size, weight))
-                       for i, ch in enumerate(text)]
+        self.glyphs = [
+            (f.getlength(text[: i + 1]) - f.getlength(ch), *_mask(ch, size, weight)) for i, ch in enumerate(text)
+        ]
 
-    def draw(self, canvas: np.ndarray, cx: float, baseline: float, t: float, t0: float, stagger: float = 0.055,
-             dur: float = 0.9, alpha: float = 1.0, rise: float = 16.0, blur: float = 7.0, spread: float = 9.0,
-             color: tuple = TEXT, settle: float = 0.35) -> None:
+    def draw(
+        self,
+        canvas: np.ndarray,
+        cx: float,
+        baseline: float,
+        t: float,
+        t0: float,
+        stagger: float = 0.055,
+        dur: float = 0.9,
+        alpha: float = 1.0,
+        rise: float = 16.0,
+        blur: float = 7.0,
+        spread: float = 9.0,
+        color: tuple = TEXT,
+        settle: float = 0.35,
+    ) -> None:
         if alpha <= 0.002 or t < t0:
             return
         n = len(self.glyphs)
@@ -320,7 +361,7 @@ class Wordmark:
             word = np.zeros_like(cov)
             fx = x0 + self.wox - (X0 + pad)
             fy = baseline + self.woy - (Y0 + pad)
-            word[pad:pad + wh, pad:pad + ww] = self.word
+            word[pad : pad + wh, pad : pad + ww] = self.word
             if fx > 0.01 or fy > 0.01:
                 word = cv2.warpAffine(word, np.float32([[1, 0, fx], [0, 1, fy]]), size, flags=cv2.INTER_LINEAR)
             cov = cov * (1 - done) + word * done
@@ -385,8 +426,16 @@ class GridSweep:
 
     def __init__(self, cam, spacing: float = 5.0, major: float = 25.0):
         small = cam.resized((1280, 720))  # 1 px minor and 2 px major lines, upscaled: a light grid
-        lines = draw_ground_grid(np.zeros((720, 1280, 3), np.uint8), small, spacing=spacing, major=major,
-                                 color=(255, 255, 255), alpha=1.0, horizon=False, max_gsd=0.45)
+        lines = draw_ground_grid(
+            np.zeros((720, 1280, 3), np.uint8),
+            small,
+            spacing=spacing,
+            major=major,
+            color=(255, 255, 255),
+            alpha=1.0,
+            horizon=False,
+            max_gsd=0.45,
+        )
         self.mask = cv2.resize(lines[..., 0], (W, H), interpolation=cv2.INTER_LINEAR).astype(np.float32) / 255.0
         step = 4
         uu, vv = np.meshgrid(np.arange(0, W, step) + step / 2, np.arange(0, H, step) + step / 2)
@@ -442,7 +491,7 @@ class RawTracker:
         order = assoc[np.argsort(dets.frame[assoc], kind="stable")]
         fr = dets.frame[order]
         for f in np.unique(fr):
-            r = order[np.searchsorted(fr, f, "left"):np.searchsorted(fr, f, "right")]
+            r = order[np.searchsorted(fr, f, "left") : np.searchsorted(fr, f, "right")]
             self.rows[int(f)] = r[np.argsort(dets.xyxy[r, 3])]  # far (high in the image) first
         self.n_ids = int(len(np.unique(self.ids[self.ids >= 0])))
 
@@ -476,8 +525,9 @@ class Day:
         self.raw = RawTracker(run, cfg)
         self.moving = [tr for tr in run.tracks.ok if tr.state == "moving"]
         self.fit = np.vstack([tr.xy for tr in self.moving])
-        self.bev = BEVCanvas(self.cam, run.background, (int(SPLIT_BEV[2]), int(SPLIT_BEV[3])), np.zeros(2), 50.0,
-                             fit_points=self.fit)
+        self.bev = BEVCanvas(
+            self.cam, run.background, (int(SPLIT_BEV[2]), int(SPLIT_BEV[3])), np.zeros(2), 50.0, fit_points=self.fit
+        )
         self.bev_base = self.bev.base.copy()
         self.rejected = [tr for tr in run.tracks.tracks if not tr.is_ok]
         parked = [tr for tr in run.tracks.ok if tr.state == "parked"]
@@ -562,12 +612,20 @@ class Trailer:
         n_parked = sum(s["parked_by_class"].values())
         self.captions = [
             (3.5, 6.7, "Roadside camera, 1080p", "Signalised intersection · public sample clip · 30 fps"),
-            (7.1, 11.3, "Automatic camera calibration",
-             f"focal {cam.focal:.0f} px · height {cam.height:.1f} m · pitch {cam.pitch:.1f}°"),
+            (
+                7.1,
+                11.3,
+                "Automatic camera calibration",
+                f"focal {cam.focal:.0f} px · height {cam.height:.1f} m · pitch {cam.pitch:.1f}°",
+            ),
             (11.7, 15.6, "Tracking with metric 3D boxes and speeds", counts),
             (16.7, 21.0, "Bird’s-eye view and trajectories", "tracks.csv: positions in metres, speeds and headings"),
-            (22.3, 26.3, "Track filtering: ghosts and parked vehicles",
-             f"{self.day.raw.n_ids} raw tracker IDs → {n_ok} tracks ({n_parked} parked)"),
+            (
+                22.3,
+                26.3,
+                "Track filtering: ghosts and parked vehicles",
+                f"{self.day.raw.n_ids} raw tracker IDs → {n_ok} tracks ({n_parked} parked)",
+            ),
             (27.7, 31.7, "Batch processing on multiple GPUs", "tachymetry run videos/ --devices auto"),
         ]
         # worker labels: the library's worker plan for these jobs on a four-GPU machine (two workers per GPU);
@@ -632,8 +690,9 @@ class Trailer:
         lift = -26 * out
         self.title.draw(canvas, W / 2, 548 + lift, t, 0.35, alpha=1 - out)
         a = ramp(t, 1.25, 2.05) * (1 - out)
-        put_text(canvas, TAGLINE, W / 2, 632 + 10 * (1 - ramp(t, 1.25, 2.05)) + lift, 32, "regular", MUTED, a,
-                 align="center")
+        put_text(
+            canvas, TAGLINE, W / 2, 632 + 10 * (1 - ramp(t, 1.25, 2.05)) + lift, 32, "regular", MUTED, a, align="center"
+        )
 
     def draw_caption(self, canvas: np.ndarray, t: float, t_in: float, t_out: float, main: str, sub: str) -> None:
         if t < t_in or t > t_out:
@@ -742,8 +801,9 @@ class Trailer:
         def to_stage(b: np.ndarray) -> np.ndarray:
             return np.array([(b[0] - crop[0]) * s, (b[1] - crop[1]) * s, (b[2] - crop[0]) * s, (b[3] - crop[1]) * s])
 
-        items = [(tr, tr.verdict, AMBER) for tr in self.day.rejected] + \
-                [(tr, "parked", PARKED) for tr in self.day.parked_tags]
+        items = [(tr, tr.verdict, AMBER) for tr in self.day.rejected] + [
+            (tr, "parked", PARKED) for tr in self.day.parked_tags
+        ]
         for tr, label, col in items:
             b = bbox_at(tr, tau)
             if b is None:
@@ -778,8 +838,9 @@ class Trailer:
                 crop = lerp_rect(ZOOM_CROP, FULL_CROP, grow)
                 content = view(d.overlay(d.clip.get(f), tau), crop, rect[2:]) if w_small < 1 else None
                 if w_small > 0:
-                    small = cv2.resize(tile.content(tau), (int(round(rect[2])), int(round(rect[3]))),
-                                       interpolation=cv2.INTER_AREA)
+                    small = cv2.resize(
+                        tile.content(tau), (int(round(rect[2])), int(round(rect[3]))), interpolation=cv2.INTER_AREA
+                    )
                     content = small if content is None else blend(content, small, w_small)
             else:
                 t_in = self.tile_in(k)
@@ -788,13 +849,17 @@ class Trailer:
                 a = ramp(t, t_in, t_in + 0.7)
                 rect = scale_rect(rect, lerp(0.94, 1.0, a))
                 tau = tile.offset + t
-                content = cv2.resize(tile.content(tau), (int(round(rect[2])), int(round(rect[3]))),
-                                     interpolation=cv2.INTER_AREA)
+                content = cv2.resize(
+                    tile.content(tau), (int(round(rect[2])), int(round(rect[3]))), interpolation=cv2.INTER_AREA
+                )
             if out > 0:
                 rect = scale_rect(rect, lerp(1.0, 0.97, out))
                 a *= 1 - out
-            label_a = ramp(t, max(self.tile_in(k), T_TILES[1] - 0.2 if k == 0 else 0) + 0.3,
-                           max(self.tile_in(k), T_TILES[1] - 0.2 if k == 0 else 0) + 0.8)
+            label_a = ramp(
+                t,
+                max(self.tile_in(k), T_TILES[1] - 0.2 if k == 0 else 0) + 0.3,
+                max(self.tile_in(k), T_TILES[1] - 0.2 if k == 0 else 0) + 0.8,
+            )
             if label_a > 0:
                 self.tile_labels(content, tile, k, t, label_a)
             place(canvas, content, rect, a, radius=10)
@@ -804,8 +869,8 @@ class Trailer:
         # soft dark band at the bottom for the name and status
         band = 46
         g = np.linspace(0, 0.62, band, dtype=np.float32)[:, None, None] * a
-        roi = img[h - band:].astype(np.float32)
-        img[h - band:] = (roi * (1 - g) + np.asarray(INK, np.float32) * g + 0.5).astype(np.uint8)
+        roi = img[h - band :].astype(np.float32)
+        img[h - band :] = (roi * (1 - g) + np.asarray(INK, np.float32) * g + 0.5).astype(np.uint8)
         lw = text_width(tile.worker, 13, "mono")
         panel(img, 10, 10, lw + 18, 24, INK, 0.75 * a, radius=6, edge=(255, 255, 255), edge_alpha=0.10)
         put_text(img, tile.worker, 19, 27, 13, "mono", TEXT, a)
@@ -836,8 +901,9 @@ class Trailer:
         size = 23
         tw = text_width("$  " + INSTALL, size, "mono")
         pw, ph = tw + 56, 58
-        panel(canvas, W / 2 - pw / 2, 516 + dy, pw, ph, (22, 19, 18), a, radius=10, edge=(255, 255, 255),
-              edge_alpha=0.10)
+        panel(
+            canvas, W / 2 - pw / 2, 516 + dy, pw, ph, (22, 19, 18), a, radius=10, edge=(255, 255, 255), edge_alpha=0.10
+        )
         x = round(W / 2 - tw / 2)
         put_text(canvas, "$", x, 553 + dy, size, "mono", AMBER, a)
         put_text(canvas, INSTALL, x + round(text_width("$  ", size, "mono")), 553 + dy, size, "mono", TEXT, a)
@@ -893,15 +959,40 @@ def write_gif(frames: list[np.ndarray], path: Path, delay_cs: int = 7, max_mb: f
     if exe is None:
         raise RuntimeError("FFmpeg is required for the GIF (pip install imageio-ffmpeg)")
     h, w = frames[0].shape[:2]
-    for threshold, dither in ((7, "bayer:bayer_scale=4"), (10, "bayer:bayer_scale=3"), (14, "bayer:bayer_scale=2"),
-                              (20, "none")):
+    for threshold, dither in (
+        (7, "bayer:bayer_scale=4"),
+        (10, "bayer:bayer_scale=3"),
+        (14, "bayer:bayer_scale=2"),
+        (20, "none"),
+    ):
         data = b"".join(f.tobytes() for f in stabilise(frames, threshold))
-        graph = ("[0:v]split[a][b];[a]palettegen=max_colors=256:stats_mode=full[p];"
-                 f"[b][p]paletteuse=dither={dither}:diff_mode=rectangle")
-        cmd = [exe, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{w}x{h}",
-               "-r", f"100/{delay_cs}", "-i", "-", "-filter_complex", graph, "-loop", "0", str(path)]
+        graph = (
+            "[0:v]split[a][b];[a]palettegen=max_colors=256:stats_mode=full[p];"
+            f"[b][p]paletteuse=dither={dither}:diff_mode=rectangle"
+        )
+        cmd = [
+            exe,
+            "-y",
+            "-loglevel",
+            "error",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "bgr24",
+            "-s",
+            f"{w}x{h}",
+            "-r",
+            f"100/{delay_cs}",
+            "-i",
+            "-",
+            "-filter_complex",
+            graph,
+            "-loop",
+            "0",
+            str(path),
+        ]
         subprocess.run(cmd, input=data, check=True)
-        mb = path.stat().st_size / 2 ** 20
+        mb = path.stat().st_size / 2**20
         print(f"  gif: threshold {threshold}, dither {dither}: {mb:.2f} MB")
         if mb <= max_mb:
             break
@@ -942,8 +1033,12 @@ def load_runs(runs_dir: Path, device: str) -> tuple[dict, object]:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--out", type=Path, default=ROOT / "docs" / "media")
-    ap.add_argument("--runs", type=Path, default=ROOT / "runs" / "trailer",
-                    help="pipeline run directories (detections are cached here)")
+    ap.add_argument(
+        "--runs",
+        type=Path,
+        default=ROOT / "runs" / "trailer",
+        help="pipeline run directories (detections are cached here)",
+    )
     ap.add_argument("--device", default="auto", help="device for detection when no cached detections exist")
     ap.add_argument("--crf", type=int, default=25)
     ap.add_argument("--only", default="video,poster,gif", help="comma-separated: video, poster, gif, stills")
@@ -974,14 +1069,14 @@ def main() -> None:
                 wr.write(trailer.frame(i / FPS))
                 if i % 150 == 0:
                     print(f"  frame {i}/{n} ({time.time() - t0:.0f} s)")
-        print(f"{path}: {path.stat().st_size / 2 ** 20:.1f} MB, {n / FPS:.1f} s")
+        print(f"{path}: {path.stat().st_size / 2**20:.1f} MB, {n / FPS:.1f} s")
     if "poster" in jobs:
         path = args.out / "trailer_poster.jpg"
         cv2.imwrite(str(path), trailer.frame(args.poster_time, poster=True), [cv2.IMWRITE_JPEG_QUALITY, 92])
-        print(f"{path}: {path.stat().st_size / 2 ** 10:.0f} KB")
+        print(f"{path}: {path.stat().st_size / 2**10:.0f} KB")
     if "gif" in jobs:
         path = make_gif(trailer.day, args.out / "readme_hero.gif")
-        print(f"{path}: {path.stat().st_size / 2 ** 20:.2f} MB")
+        print(f"{path}: {path.stat().st_size / 2**20:.2f} MB")
     print(f"done in {time.time() - t_start:.0f} s")
 
 

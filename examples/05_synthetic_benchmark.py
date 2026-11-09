@@ -3,7 +3,7 @@
 from tachymetry.config import PipelineConfig
 from tachymetry.geometry import Camera
 from tachymetry.synthetic.traffic import TrafficSpec, evaluate, simulate
-from tachymetry.track import build_tracks
+from tachymetry.tracking import build_tracks
 
 if __name__ == "__main__":
     cam = Camera.from_pose((1280, 720), focal=914, height=8.0, pitch=32, yaw=45, position=(-14, -14))

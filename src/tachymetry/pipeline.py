@@ -84,6 +84,17 @@ def resolve_camera(spec: Any, video: Path | None = None) -> Camera | str | None:
     return calibrate_manual(corr, size).camera
 
 
+def _load_precomputed(location: str, video: Path) -> DetectionSet:
+    """Detections produced elsewhere: an ``.npz`` file, or a folder with ``<video stem>.npz``."""
+    p = Path(location)
+    if p.is_dir():
+        for cand in (p / f"{video.stem}.npz", p / video.stem / "detections.npz"):
+            if cand.exists():
+                return DetectionSet.load(cand)
+        raise FileNotFoundError(f"no precomputed detections for {video.name} in {p}")
+    return DetectionSet.load(p)
+
+
 class Pipeline:
     """Detection, calibration, tracking and export for single videos.
 
@@ -128,11 +139,14 @@ class Pipeline:
         out_dir: Path | None = None,
         progress: ProgressFn | None = None,
         max_frames: int | None = None,
+        use_cache: bool = True,
     ) -> DetectionSet:
         cfg = self.config
+        if cfg.detector.name.startswith("precomputed:"):
+            return _load_precomputed(cfg.detector.name.split(":", 1)[1], src.path)
         cache = out_dir / "detections.npz" if out_dir is not None else None
         key = _detector_key(cfg)
-        if cache is not None and cache.exists():
+        if use_cache and cache is not None and cache.exists():
             meta_p = cache.with_suffix(".json")
             if meta_p.exists() and json.loads(meta_p.read_text(encoding="utf-8")).get("key") == key:
                 return DetectionSet.load(cache)
@@ -147,13 +161,13 @@ class Pipeline:
             )
         return dets
 
-    def background(self, src: VideoSource, out_dir: Path | None = None) -> np.ndarray:
+    def background(self, src: VideoSource, out_dir: Path | None = None, use_cache: bool = True) -> np.ndarray:
         import cv2
 
         from .calib.lines import background_image
 
         cache = out_dir / "background.jpg" if out_dir is not None else None
-        if cache is not None and cache.exists():
+        if use_cache and cache is not None and cache.exists():
             img = cv2.imread(str(cache))
             if img is not None and (img.shape[1], img.shape[0]) == src.size:
                 return img
@@ -162,14 +176,16 @@ class Pipeline:
             cv2.imwrite(str(cache), bg, [cv2.IMWRITE_JPEG_QUALITY, 95])
         return bg
 
-    def calibrate(self, src: VideoSource, dets: DetectionSet, bg: np.ndarray, out_dir: Path | None) -> Camera:
+    def calibrate(
+        self, src: VideoSource, dets: DetectionSet, bg: np.ndarray, out_dir: Path | None, use_cache: bool = True
+    ) -> Camera:
         spec = resolve_camera(self.camera_spec, src.path)
         if isinstance(spec, Camera):
             cam = spec if spec.image_size == src.size else spec.resized(src.size)
             if out_dir is not None:
                 cam.save(out_dir / "camera.json")
             return cam
-        if out_dir is not None and (out_dir / "camera.json").exists():
+        if use_cache and out_dir is not None and (out_dir / "camera.json").exists():
             cached = Camera.load(out_dir / "camera.json")
             if cached.image_size == src.size and str(cached.meta.get("calibration_method", "")).startswith("auto"):
                 return cached
@@ -205,9 +221,14 @@ class Pipeline:
         render: bool | str | Path = False,
         progress: ProgressFn | None = None,
         max_frames: int | None = None,
+        use_cache: bool = True,
     ) -> RunResult:
-        """Process one video. Returns a :class:`~tachymetry.results.RunResult`."""
-        from .track.builder import build_tracks
+        """Process one video. Returns a :class:`~tachymetry.results.RunResult`.
+
+        With ``use_cache=False`` cached detections, background and camera in
+        ``out_dir`` are recomputed.
+        """
+        from .tracking.builder import build_tracks
 
         t0 = time.time()
         timings: dict[str, float] = {}
@@ -215,13 +236,13 @@ class Pipeline:
         if out is not None:
             out.mkdir(parents=True, exist_ok=True)
             self.config.save(out / "config.yaml")
-        with VideoSource(source) as src:
+        with VideoSource(source, fps=self.config.fps) as src:
             t = time.time()
-            dets = self.detect(src, out, progress, max_frames=max_frames)
+            dets = self.detect(src, out, progress, max_frames=max_frames, use_cache=use_cache)
             timings["detect_s"] = round(time.time() - t, 2)
             t = time.time()
-            bg = self.background(src, out)
-            camera = self.calibrate(src, dets, bg, out)
+            bg = self.background(src, out, use_cache=use_cache)
+            camera = self.calibrate(src, dets, bg, out, use_cache=use_cache)
             timings["calibrate_s"] = round(time.time() - t, 2)
             t = time.time()
             if progress:
@@ -257,7 +278,7 @@ class Pipeline:
             if render:
                 t = time.time()
                 path = Path(render) if isinstance(render, (str, Path)) and not isinstance(render, bool) else None
-                result.render(path, layout=self.config.render.layout, progress=progress)
+                result.render(path, layout=self.config.render.layout, cfg=self.config.render, progress=progress)
                 timings["render_s"] = round(time.time() - t, 2)
         timings["total_s"] = round(time.time() - t0, 2)
         result.report["timings"] = timings

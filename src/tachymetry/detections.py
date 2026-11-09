@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -155,6 +156,7 @@ class DetectionSet:
             class_names=np.array(self.class_names),
             image_size=np.array(self.image_size),
             fps=np.array(self.fps),
+            meta=np.array(json.dumps(self.meta, default=str)),
         )
         if self.cuboid is not None:
             arrays["cuboid"] = self.cuboid
@@ -175,4 +177,5 @@ class DetectionSet:
             tuple(int(v) for v in z["image_size"]),
             float(z["fps"]),
             z["processed_frames"],
+            json.loads(str(z["meta"])) if "meta" in z else {},
         )

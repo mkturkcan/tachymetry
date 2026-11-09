@@ -23,7 +23,7 @@ class Flags:
 
 #: Track-level verdicts. Only ``ok`` tracks appear in default exports and renders.
 VERDICTS = ("ok", "ghost", "passenger", "rider", "duplicate", "shadow", "invalid")
-STATES = ("moving", "parked")
+STATES = ("moving", "parked", "stationary")
 
 
 @dataclass

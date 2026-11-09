@@ -36,23 +36,34 @@ import numpy as np
 
 __all__ = ["Correspondences", "latlon_to_local", "local_to_latlon"]
 
-_EARTH_R = 6378137.0
+_WGS84_A = 6378137.0
+_WGS84_E2 = 6.69437999014e-3
+
+
+def _radii(lat0: float) -> tuple[float, float]:
+    """Meridional (M) and prime-vertical (N) radii of curvature of the WGS84 ellipsoid at ``lat0`` (radians)."""
+    s2 = math.sin(lat0) ** 2
+    n = _WGS84_A / math.sqrt(1 - _WGS84_E2 * s2)
+    m = _WGS84_A * (1 - _WGS84_E2) / (1 - _WGS84_E2 * s2) ** 1.5
+    return m, n
 
 
 def latlon_to_local(
     latlon: np.ndarray, origin: tuple[float, float] | None = None
 ) -> tuple[np.ndarray, tuple[float, float]]:
-    """WGS84 ``(lat, lon)`` degrees to local east-north metres (local tangent plane).
+    """WGS84 ``(lat, lon)`` degrees to local east-north metres (tangent plane at ``origin``).
 
-    Accurate to millimetres over the few hundred metres a camera observes.
+    Uses the ellipsoid's radii of curvature at the origin; the planar error is
+    below a millimetre over the few hundred metres a camera observes.
     """
     ll = np.asarray(latlon, dtype=np.float64).reshape(-1, 2)
     if origin is None:
         origin = (float(ll[:, 0].mean()), float(ll[:, 1].mean()))
     lat0, lon0 = map(math.radians, origin)
     lat, lon = np.radians(ll[:, 0]), np.radians(ll[:, 1])
-    x = (lon - lon0) * math.cos(lat0) * _EARTH_R
-    y = (lat - lat0) * _EARTH_R
+    m, n = _radii(lat0)
+    x = (lon - lon0) * math.cos(lat0) * n
+    y = (lat - lat0) * m
     return np.column_stack([x, y]), origin
 
 
@@ -60,8 +71,9 @@ def local_to_latlon(xy: np.ndarray, origin: tuple[float, float]) -> np.ndarray:
     """Inverse of :func:`latlon_to_local`."""
     xy = np.asarray(xy, dtype=np.float64).reshape(-1, 2)
     lat0, lon0 = map(math.radians, origin)
-    lat = lat0 + xy[:, 1] / _EARTH_R
-    lon = lon0 + xy[:, 0] / (_EARTH_R * math.cos(lat0))
+    m, n = _radii(lat0)
+    lat = lat0 + xy[:, 1] / m
+    lon = lon0 + xy[:, 0] / (n * math.cos(lat0))
     return np.column_stack([np.degrees(lat), np.degrees(lon)])
 
 
@@ -128,7 +140,7 @@ class Correspondences:
         size = tuple(data["image_size"]) if data.get("image_size") else None
         common = dict(names=names, lines=lines, image_size=size)
         if units in ("metres", "meters", "m"):
-            return cls(img, wld, **common)
+            return cls(img, wld, georef=dict(data.get("georef") or {}), **common)
         if units in ("reference_px", "pixels", "px"):
             return cls.from_reference(img, wld, float(data["gsd"]), **common)
         if units in ("latlon", "wgs84"):

@@ -22,8 +22,8 @@ import numpy as np
 from tachymetry.config import PipelineConfig
 from tachymetry.geometry import Camera
 from tachymetry.synthetic.traffic import TrafficSpec, evaluate, naive_speeds, simulate
-from tachymetry.track.builder import associate, build_tracks
-from tachymetry.track.measure import measure_ground
+from tachymetry.tracking.builder import associate, build_tracks
+from tachymetry.tracking.measure import measure_ground
 
 
 @dataclass

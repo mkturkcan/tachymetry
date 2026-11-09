@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ..track.model import Flags, Track
+from ..tracking.model import Flags, Track
 
 __all__ = ["TrackState", "StateIndex"]
 

@@ -2,9 +2,8 @@
 
 Each model maps between *raw* pixel coordinates (as recorded by the camera) and
 *rectified* pixel coordinates (an ideal pinhole image of the same size). All
-models are radially symmetric about a distortion centre ``center`` (pixels) and
-use a radial unit ``scale`` (pixels), so parameters are comparable across image
-resolutions.
+models are radially symmetric about a distortion centre ``center`` (pixels; the
+image centre by default).
 
 Models
 ------
@@ -20,9 +19,10 @@ Models
 ``brown``         Brown–Conrady radial-tangential (OpenCV ``k1 k2 p1 p2 k3``).
 ``fisheye``       Kannala–Brandt equidistant polynomial (OpenCV fisheye ``k1..k4``).
 
-The radial unit for ``division`` and ``brown``/``fisheye`` is ``scale``, which
-defaults to half the image diagonal (``division``) or the focal length
-(``brown``, ``fisheye``, OpenCV convention).
+Radii are measured in pixels for the ``equidistant`` model. For the other models
+they are normalised so that parameters are comparable across resolutions: by
+``scale`` (default half the image diagonal) for ``division``, and by ``focal``
+for ``brown`` and ``fisheye`` (OpenCV convention).
 """
 
 from __future__ import annotations

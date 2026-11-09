@@ -53,13 +53,11 @@ def find_videos(inputs: Sequence[str | Path], recursive: bool = True) -> list[Pa
         s = str(item)
         p = Path(s)
         if any(ch in s for ch in "*?["):
-            base = Path(s.split("*")[0]).parent if "*" in s else p.parent
-            pattern = s[len(str(base)) + 1 :] if str(base) not in (".", "") else s
+            import glob
+
+            hits = [Path(q) for q in glob.glob(s, recursive=True)]
             out.extend(
-                sorted(
-                    (q for q in base.glob(pattern) if q.is_file() and q.suffix.lower() in VIDEO_EXTENSIONS),
-                    key=_natural_key,
-                )
+                sorted((q for q in hits if q.is_file() and q.suffix.lower() in VIDEO_EXTENSIONS), key=_natural_key)
             )
         elif p.is_dir():
             vids = sorted(

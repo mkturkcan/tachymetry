@@ -12,8 +12,9 @@ The estimator follows three stages:
    ``sqrt(2 / n_vertices)`` so a densely clicked line counts as one line.
    Staying on the camera manifold (7 DoF instead of a free 8-DoF homography)
    is what keeps extrapolation sane away from the annotated area.
-3. **Model selection.** Leave-one-out cross-validation in ground metres picks
-   the lens model; a more complex model must beat a simpler one by 3 %.
+3. **Model selection.** Cross-validation in ground metres (10-fold by default,
+   leave-one-out on request) picks the lens model; a more complex model must
+   beat a simpler one by 3 %.
 """
 
 from __future__ import annotations
@@ -222,7 +223,7 @@ def fit_camera(
 def _cross_validate(
     corr: Correspondences,
     size: tuple[int, int],
-    lens: str,
+    lens: str | Lens,
     pp: tuple[float, float] | None,
     base: Camera,
     robust_px: float,
@@ -298,9 +299,7 @@ def calibrate_manual(
         if base is None:
             base = cam
         cv_err = (
-            _cross_validate(
-                corr, size, m if isinstance(m, str) else "identity", principal_point, cam, robust_px, cv_folds
-            )
+            _cross_validate(corr, size, m, principal_point, cam, robust_px, cv_folds)
             if len(models) > 1 or cv_folds
             else np.full(len(corr), np.nan)
         )

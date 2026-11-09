@@ -264,4 +264,7 @@ def build_detector(cfg: DetectorConfig, device: str = "auto") -> Detector:
     if low.startswith("yolo:") or low.endswith((".pt", ".engine", ".onnx")):
         weights = cfg.weights or (name.split(":", 1)[1] if ":" in name else name)
         return UltralyticsDetector(weights, cfg, device, cuboids=False)
-    raise ValueError(f"unknown detector {cfg.name!r}; use 'uod2-x', 'yolo:<weights>' or 'precomputed:<path>'")
+    raise ValueError(
+        f"unknown detector {cfg.name!r}; use 'uod2-x' or 'yolo:<weights>' "
+        "(precomputed detections are loaded by the pipeline)"
+    )

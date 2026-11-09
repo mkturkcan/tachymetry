@@ -27,7 +27,7 @@ class CalibrationResult:
     rmse_m:
         In-sample ground-plane residual (metres), when correspondences exist.
     cv_rmse_m:
-        Leave-one-out ground-plane residual (metres): the honest accuracy figure.
+        Cross-validated ground-plane residual (metres), the out-of-sample accuracy.
     score:
         Method-independent self-consistency score in ``[0, 1]`` (higher is better),
         used by :func:`tachymetry.calib.auto` to rank candidates.
@@ -48,7 +48,7 @@ class CalibrationResult:
         if self.rmse_m is not None:
             parts.append(f"fit RMSE {self.rmse_m:.3f} m")
         if self.cv_rmse_m is not None:
-            parts.append(f"leave-one-out RMSE {self.cv_rmse_m:.3f} m")
+            parts.append(f"cross-validated RMSE {self.cv_rmse_m:.3f} m")
         if self.score is not None:
             parts.append(f"consistency {self.score:.3f}")
         return "; ".join(parts)

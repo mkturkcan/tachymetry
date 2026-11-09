@@ -139,8 +139,13 @@ def calibrate_from_lines(
         lens_obj: Lens = est if (info["gain"] > 0.08 and ratio > 1.2) else IdentityLens(size)
     elif lens is None or lens in ("none", "identity"):
         lens_obj = IdentityLens(size)
+    elif isinstance(lens, str):
+        raise ValueError(
+            f"lens {lens!r} cannot be estimated from straight lines; use 'auto', 'tan', 'division' or 'none', "
+            "or calibrate manually for Brown-Conrady and Kannala-Brandt models"
+        )
     else:
-        lens_obj = lens  # type: ignore[assignment]
+        lens_obj = lens
     rect = lens_obj.rectify_image(image) if not lens_obj.is_identity else image
 
     mask = marking_mask(rect, region=region)

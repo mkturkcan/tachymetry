@@ -14,7 +14,7 @@ import numpy as np
 
 from .detections import DetectionSet
 from .geometry.camera import Camera, _json_default
-from .track.model import Flags, Track
+from .tracking.model import Flags, Track
 
 __all__ = ["TrackSet", "RunResult"]
 
@@ -104,7 +104,7 @@ class TrackSet:
         ok = self.ok
         moving = [tr for tr in ok if tr.state == "moving"]
         speeds = (
-            np.concatenate([tr.speed_kmh[tr.moving_mask()] for tr in moving if tr.super_cls != "person"])
+            np.concatenate([tr.speed_kmh[tr.moving_mask()] for tr in moving if tr.super_cls == "vehicle"])
             if moving
             else np.zeros(0)
         )

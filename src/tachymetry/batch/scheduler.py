@@ -114,16 +114,22 @@ class BatchReport:
 
 
 # ------------------------------------------------------------------- worker side
-def _init_worker(slots: Any, cfg_dict: dict[str, Any], camera: Any, render: bool, progress_q: Any) -> None:
+def _init_worker(
+    slots: Any, cfg_dict: dict[str, Any], camera: Any, render: bool, progress_q: Any, overwrite: bool = False
+) -> None:
     device = slots.get()
     if device.startswith("cuda:"):
-        os.environ["CUDA_VISIBLE_DEVICES"] = device.split(":", 1)[1]
+        idx = int(device.split(":", 1)[1])
+        parent = [v.strip() for v in os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",") if v.strip()]
+        # logical index in the parent process -> physical device id
+        os.environ["CUDA_VISIBLE_DEVICES"] = parent[idx] if idx < len(parent) else str(idx)
         local = "cuda:0"
     else:
         local = device
         if device == "cpu":
             os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
     os.environ.setdefault("OMP_NUM_THREADS", "4")
+    _WORKER.update(overwrite=overwrite)
     _WORKER.update(device=device, local=local, cfg=cfg_dict, camera=camera, render=render, q=progress_q, pipeline=None)
 
 
@@ -145,7 +151,9 @@ def _job(video: str, out_dir: str, job_id: int) -> dict[str, Any]:
                 pass
 
         q.put_nowait((job_id, "start", 0, 1))
-        res = pipe.run(video, out_dir, render=_WORKER["render"], progress=progress)
+        res = pipe.run(
+            video, out_dir, render=_WORKER["render"], progress=progress, use_cache=not _WORKER.get("overwrite")
+        )
         q.put_nowait((job_id, "done", 1, 1))
         return {
             "status": "done",
@@ -233,7 +241,7 @@ def run_batch(
             max_workers=len(slots),
             mp_context=ctx,
             initializer=_init_worker,
-            initargs=(slot_q, cfg.to_dict(), cam_spec, render, progress_q),
+            initargs=(slot_q, cfg.to_dict(), cam_spec, render, progress_q, overwrite),
         ) as pool:
             futs = {pool.submit(_job, j["video"], j["out_dir"], k): (k, j) for k, j in enumerate(pending)}
             remaining = set(futs)

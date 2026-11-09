@@ -52,7 +52,7 @@ SUPER_CLASS = {
 class DetectorConfig:
     """Object detector and detection-level post-processing."""
 
-    name: str = "uod2-x"  #: ``uod2-{n,s,m,l,x}``, ``yolo:<weights>``, ``precomputed:<dir>``
+    name: str = "uod2-x"  #: ``uod2-{n,s,m,l,x}``, ``yolo:<weights>``, ``precomputed:<.npz file or folder>``
     weights: str | None = None  #: explicit checkpoint path (overrides the download)
     imgsz: int = 960  #: inference size; 960 recovers small, distant traffic
     conf: float = 0.10  #: model threshold; low-score detections only extend existing tracks
@@ -189,6 +189,7 @@ class PipelineConfig:
 
     rate_hz: float = 15.0  #: processing rate (frames per second analysed); 0 = every frame
     device: str = "auto"
+    fps: float | None = None  #: override the input frame rate (image folders default to 10 fps)
     detector: DetectorConfig = field(default_factory=DetectorConfig)
     tracker: TrackerConfig = field(default_factory=TrackerConfig)
     hygiene: HygieneConfig = field(default_factory=HygieneConfig)

@@ -3,8 +3,8 @@ import numpy as np
 from tachymetry.config import PipelineConfig
 from tachymetry.results import TrackSet
 from tachymetry.synthetic.traffic import TrafficSpec, evaluate, simulate
-from tachymetry.track.builder import build_tracks
-from tachymetry.track.signal import smooth_kinematics
+from tachymetry.tracking.builder import build_tracks
+from tachymetry.tracking.signal import smooth_kinematics
 
 
 def test_constant_velocity_has_no_edge_artifacts():
