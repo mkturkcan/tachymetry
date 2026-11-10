@@ -23,25 +23,25 @@
   ],
   "R": [
     [
-      0.7213097313431979,
-      0.6926058627844504,
-      -0.00306436065279892
+      0.7213162297925345,
+      0.6925990949544139,
+      0.00306436065279892
     ],
     [
-      0.21069452569604397,
-      -0.2236367739987594,
+      0.2148993693525889,
+      -0.21959929620723448,
       -0.9516272432823404
     ],
     [
-      -0.6597879116135142,
-      0.68577234717655,
+      -0.6584232359886331,
+      0.6870827044640362,
       -0.30723964512517377
     ]
   ],
   "t": [
-    0.08338272505774813,
-    25.894234319840354,
-    8.360138299293562
+    -0.08491184158802474,
+    26.369096489551183,
+    8.513450938812056
   ],
   "lens": {
     "model": "identity",
@@ -56,32 +56,32 @@
   },
   "summary": {
     "focal_px": 2181.766,
-    "height_m": 27.2105,
-    "yaw_deg": 133.8937,
+    "height_m": 27.7095,
+    "yaw_deg": 133.7798,
     "pitch_deg": 17.893,
-    "roll_deg": 0.1845,
+    "roll_deg": -0.1845,
     "hfov_deg": 47.5
   },
   "H_image_to_ground": [
     [
-      0.1274642717853122,
-      0.03723230551317764,
-      -396.7665902368963
+      0.12502817030273028,
+      0.037249231113367434,
+      -389.0582740463725
     ],
     [
-      0.12239194634136048,
-      -0.03951935944228286,
-      168.28157832330584
+      0.12005053264971412,
+      -0.038063885256616005,
+      165.18299703300661
     ],
     [
-      1.990079142128923e-05,
-      0.006180126109529755,
+      -1.9168744381677124e-05,
+      0.005952791280118393,
       1.0
     ]
   ],
   "meta": {
     "calibration_method": "auto:fov+vp",
     "metric": true,
-    "source": "automatic calibration of the sample intersection-day: 47.5 deg field of view, main ground vanishing point, vehicle-silhouette scale; shared by the samples of the same camera, whose backgrounds register to it within 4 px"
+    "source": "automatic calibration of the sample intersection-day: 47.5 deg field of view, main ground vanishing point, vehicle-silhouette scale; shared by the samples of the same camera, whose backgrounds register to it within a few pixels"
   }
 }
