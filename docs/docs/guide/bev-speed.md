@@ -4,7 +4,7 @@ Positions and speeds are measured on a ground plane in metres. This page describ
 
 ## Projection to the ground plane
 
-A calibrated `Camera` holds intrinsics $K$, rotation $R$, translation $t$ (world to camera, $X_c = R X_w + t$), a lens model and the image size. The world frame is right-handed with $z$ up and the road at $z = 0$; with automatic calibration $x$ points along the main road and the origin is the median vehicle position, with manual calibration the frame is that of the correspondences ([Calibration](calibration.md)).
+A calibrated `Camera` holds intrinsics $K$, rotation $R$, translation $t$ (world to camera, $X_c = R X_w + t$), a lens model and the image size. The world frame is right-handed with $z$ up and the road at $z = 0$; with automatic calibration $x$ points along the main road and the origin is the median vehicle position when cuboid footprints exist, otherwise the point below the camera; with manual calibration the frame is that of the correspondences ([Calibration](calibration.md)).
 
 `Camera.image_to_ground` maps a raw pixel $u$ by removing lens distortion, $\tilde u = \text{lens.rectify}(u)$, forming the viewing ray $d = R^\top K^{-1} (\tilde u, 1)^\top$ from the camera centre $C = -R^\top t$, and intersecting it with the plane:
 
@@ -35,7 +35,7 @@ The along-ray term grows quadratically with range. Detections whose contact poin
 
 | Camera | $f$ (px) | $H$ (m) | $D_{\max}$, approximation | $D_{\max}$, `ground_sampling_distance` on the centre column |
 |---|---|---|---|---|
-| Public sample clip, automatic calibration | 2212 | 27.8 | 133.0 m | 133.9 m |
+| Shared camera of the intersection samples (`assets/cameras/svbrd-intersection.json`) | 2182 | 27.7 | 131.8 m | 132.7 m |
 | Pole, 1280×720, 70° HFOV, pitch 32° | 914 | 8.0 | 46.1 m | beyond the top image row (43.0 m, GSD 0.226) |
 
 The calibration preview, the bird's-eye canvas and `calib.preview.bev_extent` use the same 0.30 m per pixel bound to decide which ground is drawn.
@@ -47,7 +47,7 @@ The common shortcut of projecting the bottom-centre of the image box has two sys
 1. The box bottom images the footprint edge nearest the camera, not the footprint centre. The offset is half the footprint extent along the viewing ray, up to $L/2 = 2.3$ m for a car seen end-on and $W/2 \approx 0.9$ m side-on.
 2. That edge (bumper, wheel bottom) is above the road at a height $h_c$, so its ray meets the ground behind the object: the back-projection overshoots by $d\,h_c/H$ at contact range $d$, which grows with range.
 
-Both offsets depend on the heading relative to the viewing ray and on range, so they change along a track and add a spurious velocity component, most visibly while vehicles turn or approach. Tachymetry estimates the footprint centre instead: directly from trusted cuboid footprints, and elsewhere with the ray-extent and parallax model of [Centre estimation](tracking.md#centre-estimation). On the synthetic benchmark the median position error drops from 1.10 m to 0.07 m (pole camera) and from 2.17 m to 0.08 m (mast camera) when footprint centres replace bottom-centres with the same smoothing (rows "+ zero-phase smoothing (bottom-centre)" and "+ footprint centres" of the [benchmarks](../benchmarks.md)).
+Both offsets depend on the heading relative to the viewing ray and on range, so they change along a track and add a spurious velocity component, most visibly while vehicles turn or approach. Tachymetry estimates the footprint centre instead. For vehicles with instance masks it comes from a calibrated 3D box fitted to the mask silhouettes, whose bottom face is placed at the fitted clearance, so both offsets are part of the model ([Vehicle footprints from masks](footprints.md)). For cuboid detectors it comes from trusted cuboid footprints, and elsewhere from the ray-extent and parallax model of [Centre estimation](tracking.md#centre-estimation). The [benchmarks](../benchmarks.md) measure the effect of footprint centres against bottom-centres with the same smoothing on synthetic traffic with ground truth.
 
 ## Speed
 
@@ -67,7 +67,7 @@ Units: exports are in m/s (`vx_mps`, `vy_mps`) and km/h (`speed_kmh` $= 3.6 \tim
 
 ## Summary statistics
 
-`Track.summary()` reports `speed_mean_kmh`, `speed_median_kmh`, `speed_p85_kmh` and `speed_max_kmh` over the samples faster than 3 km/h (`Track.moving_mask`), and `moving_share`, the fraction of such samples. `TrackSet.summary()` (also in `summary.json`) reports `vehicle_speed_kmh` (median, 85th percentile, maximum) over the moving samples of all moving `ok` tracks that are not persons, i.e. motor vehicles and two-wheelers together. Use `tracks.csv` to compute statistics per class (see the [end-to-end example](../examples/intersection.md)).
+`Track.summary()` reports `speed_mean_kmh`, `speed_median_kmh`, `speed_p85_kmh` and `speed_max_kmh` over the samples faster than 3 km/h (`Track.moving_mask`), and `moving_share`, the fraction of such samples. `TrackSet.summary()` (also in `summary.json`) reports `vehicle_speed_kmh` (median, 85th percentile, maximum) over the moving samples of the moving `ok` tracks of the vehicle super-class (cars, buses and trucks); two-wheelers and persons are excluded. Use `tracks.csv` to compute statistics per class (see the [end-to-end example](../examples/intersection.md)).
 
 ## Bird's-eye images
 

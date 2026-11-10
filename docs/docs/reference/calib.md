@@ -16,6 +16,10 @@ Manual and automatic calibration, lens estimation, metric scale and previews. Th
 
 ::: tachymetry.calib.auto
 
+::: tachymetry.calib.from_silhouettes
+
+::: tachymetry.calib.from_markings
+
 ::: tachymetry.calib.from_cuboids
 
 ::: tachymetry.calib.from_lines

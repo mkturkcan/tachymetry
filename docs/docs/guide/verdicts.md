@@ -8,11 +8,11 @@ After per-track hygiene ([Association and track hygiene](tracking.md)), `trackin
 2. Tracks are sorted by start time and renumbered from 1.
 3. When `filters.enabled = True`: **duplicates**, then **passengers, riders and inferred cyclists**, then **shadows**, then **ghosts**.
 
-Each rule considers only tracks that are still `ok` when it runs, so the order matters: a track rejected as a duplicate is not tested again as a ghost. A duplicate is resolved against the other track of the pair even if that track is rejected by a later rule; on the public sample clip this happens once (track 48 is a duplicate of track 31, which is then rejected as a ghost; both are excluded).
+Each rule considers only tracks that are still `ok` when it runs, so the order matters: a track rejected as a duplicate is not tested again as a ghost. A duplicate is resolved against the other track of the pair even if that track is rejected by a later rule, in which case both are excluded.
 
 ## Stitching
 
-Occlusions and missed detections end a raw track early; the object then reappears under a new id. `stitch_candidates` considers tracks with verdict `ok` or `invalid` and tests every ordered pair $(A, B)$:
+Occlusions and missed detections end a raw track early; the object then reappears under a new id. `stitch_candidates` considers tracks with verdict `ok` or `invalid` and tests each ordered pair $(A, B)$:
 
 1. $A$ must not have left through the image border at its end: its last sample is not `TRUNCATED` and its last box is more than $\max(3\,\text{px}, 0.01 \cdot \text{diagonal})$ from the border (*fixed*);
 2. same super-class;
@@ -39,6 +39,8 @@ A person track whose box lies inside an `ok` vehicle box, with intersection over
 
 A person and a two-wheeler with at least 4 common frames are one road user when the person box overlaps the two-wheeler box, expanded by 15 % of its size on each side (*fixed*), with intersection over the person box above `rider_overlap` (0.30) in more than `rider_share` (0.50) of the common frames, or, with at least 5 common frames, when the ground positions are closer than `rider_distance_m` (1.2 m) in more than half of them (*fixed*). The person track is marked `rider` (reason `riding two-wheeler <id>`), and the two-wheeler keeps the id of its rider in `meta["rider"]`.
 
+With SAM 3, two-wheelers come from the class-evidence prompts: a `bike` or `motorcycle` detection that overlaps a `vehicle` detection gives it its class, and one that no vehicle detection covers is kept as a two-wheeler detection of its own ([SAM 3 prompts](detection.md#sam-3-prompts)), to which the rider rule then attaches the person.
+
 A person track that remains `ok`, lasts at least 2.0 s and has a median speed above 15 km/h over its moving samples (both *fixed*) is re-labelled `bicycle` with bicycle dimensions (1.75 × 0.6 × 1.6 m) and `meta["inferred"] = "person moving at cycling speed"`. This recovers cyclists whose bicycle was not detected. A cyclist slower than 15 km/h without a detected bicycle remains a pedestrian.
 
 ## Shadows
@@ -53,20 +55,20 @@ A person track that moves in lockstep with a moving vehicle is a false positive 
 |---|---|
 | `too short` | duration below `ghost_min_duration_s` (1.0 s) |
 | `low confidence and static` | mean score of observed samples below `ghost_min_score` (0.35) and path length below 2.0 m (*fixed*) |
-| `static low-confidence vehicle without a 3D footprint` | parked vehicle with a mean score below 0.4, or, when the detector provides cuboids, a footprint share below 0.15 and a mean score below 0.6 (*fixed*) |
+| `static low-confidence vehicle without a 3D footprint` | parked vehicle with a mean score below `ghost_parked_score` (0.40), or, when the detector provides cuboids, a cuboid-footprint share below 0.15 (*fixed*) and a mean score below `ghost_parked_cuboid_score` (0.60) |
 
-The third rule targets parked-vehicle hallucinations: shadows, road markings, signs or dark patches detected as cars at a fixed position. A real parked vehicle seen by a cuboid detector receives trusted 3D footprints for a large share of its samples; a hallucination rarely does, and its score stays moderate. A confident persistent false positive (mean score of at least 0.6 with footprints, for example a vehicle printed on a billboard) is kept as a parked car.
+The third rule targets parked-vehicle hallucinations: shadows, road markings, signs or dark patches detected as cars at a fixed position. With SAM 3 and RF-DETR, only the score clause applies. The score thresholds refer to the detector's score scale: the `rfdetr` [score profile](detection.md#score-profiles) lowers `ghost_min_score` and `ghost_parked_score` to 0.20, because RF-DETR scores real parked cars between 0.15 and 0.5. With UrbanOmniDetect-2 the cuboid clause adds evidence: a real parked vehicle seen by a cuboid detector receives trusted 3D footprints for a large share of its samples, while a hallucination rarely does and its score stays moderate. A confident persistent false positive (for example a vehicle printed on a billboard) is kept as a parked car.
 
 ## Counts on the sample clip
 
-On the public sample clip (`intersection-day`, default configuration), `summary.json` reports 110 raw tracks, 3 stitched fragments and the following verdicts:
+On the public sample clip (`intersection-day`, default configuration with SAM 3 and the sample's field of view), `summary.json` reports 163 raw tracks, 9 stitched fragments and the following verdicts:
 
 | Verdict | Tracks |
 |---|---|
-| `ok` | 44 |
-| `duplicate` | 2 |
+| `ok` | 50 |
 | `rider` | 2 |
-| `ghost` | 1 |
+| `ghost` | 2 |
+| `duplicate` | 1 |
 
 The rejected tracks and their reasons are listed in the [end-to-end example](../examples/intersection.md). The contribution of stitching and verdicts on synthetic traffic with ground truth (fragments per object, false tracks) is the last row of the [benchmarks](../benchmarks.md).
 

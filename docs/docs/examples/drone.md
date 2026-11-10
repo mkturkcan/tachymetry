@@ -13,7 +13,7 @@ The sample `dhaka-roundabout` is 30 s of dense mixed traffic at a roundabout, re
 tachymetry demo --sample dhaka-roundabout -o runs/dhaka
 ```
 
-The demo downloads the 30 s excerpt (about 390 MB), prints its attribution and the camera, and uses the sample's known camera (`tachymetry.data.sample_camera`) with `detector.imgsz = 2560` (`tachymetry.data.sample_overrides`). On one NVIDIA RTX PRO 6000, with the detections already cached, it took 60 s, most of it rendering the 4K video. The sections below make each of these choices explicit.
+The demo downloads the 30 s excerpt (about 390 MB), prints its attribution and the camera, and runs the default pipeline with the sample's known camera (`tachymetry.data.sample_camera`). The sections below make each step explicit.
 
 ## The camera
 
@@ -101,83 +101,67 @@ print(cam.describe())
 print(f"ground sampling distance {100 * cam.height / cam.focal:.2f} cm/px")
 cam.save("cam.json")
 
-run = tm.track(video, out="runs/dhaka", camera=cam, detector__imgsz=2560)
+run = tm.track(video, out="runs/dhaka", camera=cam)
 print(run.summary()["by_class"])
+print(run.report["timings"])
 ```
 
 ```text
 DRINF: Dhaka Road Intersection Nadir Footage by Hamim Mahmud (Hugging Face, doi:10.57967/hf/10301); 30 s excerpt from 2:20, CC BY 4.0, https://huggingface.co/datasets/hamimmahmud0/DRINF
 f=2825.2px (hfov 68.4 deg), height=111.70 m, pitch=90.00 deg, roll=0.00 deg, yaw=90.0 deg, lens=identity
 ground sampling distance 3.95 cm/px
-{'bicycle': 72, 'person': 85, 'motorcycle': 79, 'car': 39, 'truck': 11}
+{'motorcycle': 222, 'car': 121, 'bicycle': 1, 'person': 38, 'truck': 13}
+{'detect_s': 46.98, 'calibrate_s': 17.89, 'track_s': 104.52, 'total_s': 170.09}
 ```
 
-Detection, tracking and export took 43 s on one GPU. The class counts are the detector's labels for accepted tracks.
+On one NVIDIA RTX PRO 6000 GPU, SAM 3 detection took 47 s for the 360 analysed frames. The background median and the camera took 18 s, and tracking 105 s, most of it the mask geometry of 134 vehicle tracks on the CPU. The class counts are the detector's labels for accepted tracks.
 
-**Detector input size.** `detector.imgsz = 2560` keeps small road users resolvable. At 3.95 cm/px a pedestrian, about 0.5 m across, covers 13 px of the 4K frame. The default input size of 960 shrinks the frame by 4, leaving 3 px; 2560 leaves 8 px.
+- **Rickshaws.** SAM 3's class-evidence prompts label most cycle-rickshaws and auto-rickshaws of this traffic `motorcycle`, which gives 222 motorcycle tracks against 1 bicycle track ([Limitations](../limitations.md#mixed-traffic-and-class-dependent-scale)).
+- **Small road users.** In steep views, persons and two-wheelers are placed at their mask centroid projected at a class height, not at their lowest mask point (`hygiene.steep_view_deg`, 60° to 80° of depression). Their lowest point is a foot or a wheel, far from the centre seen from above.
 
 ## Command line
 
 ```bash
 python -c "import math, tachymetry as tm; tm.Camera.from_pose((3840, 2160), focal=1920 / math.tan(math.radians(34.2)), height=111.7, pitch=90.0).save('cam.json')"
-tachymetry run ~/.cache/tachymetry/samples/dhaka-roundabout.mp4 --camera cam.json --imgsz 2560 --out runs --render
+tachymetry run ~/.cache/tachymetry/samples/dhaka-roundabout.mp4 --camera cam.json --out runs --render
 ```
 
 The sample is stored under `$TACHYMETRY_CACHE/samples`, by default `~/.cache/tachymetry/samples`, once `sample_video("dhaka-roundabout")` or the demo has fetched it. A camera given with `--camera` is used as is; it is resized if the video's resolution differs. For a flight with a different altitude or lens, change `height` and the field of view.
 
 ## Why automatic calibration is not used
 
-Automatic calibration ([Automatic calibration](../guide/auto-calibration.md)) assumes an oblique view, in which perspective changes the image shape of ground rectangles with position. In a straight-down view that signal is absent, and two biases take its place. The script below reproduces both from the run above:
+Automatic calibration ([Automatic calibration](../guide/auto-calibration.md)) assumes an oblique view. In a straight-down view, the road's parallel markings stay parallel in the image, so their vanishing points lie at infinity, and perspective does not change the shape of vehicle silhouettes across the image. The script below runs it on the detections of the run above:
 
 ```python
 import warnings
 
 import cv2
-import numpy as np
 
-import tachymetry as tm
 from tachymetry.calib import calibrate_auto
-from tachymetry.calib.from_cuboids import collect_footprints, footprint_scale
 from tachymetry.detections import DetectionSet
 
 dets = DetectionSet.load("runs/dhaka/detections.npz")
 background = cv2.imread("runs/dhaka/background.jpg")
-
-# 1. what automatic calibration makes of a straight-down view
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
+with warnings.catch_warnings(record=True) as caught:
+    warnings.simplefilter("always")
     res = calibrate_auto(background, dets)
-print(res.method, res.camera.describe())
-
-# 2. footprint shape in the image: a straight-down camera images the ground at one scale,
-#    so the length-to-width ratio of car footprints must not depend on their orientation
-quads, weights = collect_footprints(dets)
-L = np.linalg.norm(quads[:, 0] - quads[:, 1], axis=1) + np.linalg.norm(quads[:, 3] - quads[:, 2], axis=1)
-W = np.linalg.norm(quads[:, 0] - quads[:, 3], axis=1) + np.linalg.norm(quads[:, 1] - quads[:, 2], axis=1)
-axis = (quads[:, 0] + quads[:, 3]) - (quads[:, 1] + quads[:, 2])
-angle = np.degrees(np.arctan2(np.abs(axis[:, 1]), np.abs(axis[:, 0])))  # 0 = image horizontal
-print(f"aspect, axis near horizontal: {np.median((L / W)[angle < 30]):.2f}; near vertical: {np.median((L / W)[angle > 60]):.2f}")
-
-# 3. vehicle-size scale under the known camera (1.0 would mean the car prior fits)
-cam = tm.Camera.load("cam.json")
-scale, info = footprint_scale(cam, quads, weights)
-print(f"vehicle-size scale factor under the known camera: {scale:.2f}")
+print(res.method, res.camera.describe(), res.details["scale"])
+for w in caught:
+    print("warning:", str(w.message).split(";")[0])
 ```
 
 ```text
-auto:fused f=21038.5px (hfov 10.4 deg), height=1342.95 m, pitch=66.12 deg, roll=0.20 deg, yaw=0.5 deg, lens=identity
-aspect, axis near horizontal: 2.75; near vertical: 2.24
-vehicle-size scale factor under the known camera: 1.83
+auto:lines f=10074.4px (hfov 21.6 deg), height=1.00 m, pitch=2.78 deg, roll=0.17 deg, yaw=-4.7 deg, lens=identity {'scale': 'relative'}
+warning: car silhouettes do not fit this camera (cost 2.01)
+warning: dashed lane markings change length along the road under this camera (spread 0.47 in log units): its pitch or focal length is likely wrong
 ```
 
-1. **Footprint bias.** A nadir camera images the ground at a uniform scale, so the image aspect ratio of a car footprint should not depend on its orientation. The detector's footprints are compressed along the image vertical: the median length-to-width ratio is 2.75 for car footprints whose long axis lies within 30° of the image horizontal and 2.24 within 30° of the vertical (2500 trusted footprints).
-2. **A false tilt.** The cuboid solver explains this compression as perspective. The fused estimate places the camera at a pitch of 66°, a focal length of 21,000 px (HFOV 10.4°) and a height of 1343 m.
-    - The scene contradicts it. The roundabout's central island images as a circle: an ellipse fitted to its outline has an axis ratio of 0.98, whereas a circle seen at 66° below the horizon would image with an axis ratio of about $\sin 66° = 0.91$.
-    - `Pipeline` flags such results. When automatic calibration places the camera more than `MAX_PLAUSIBLE_HEIGHT_M` = 250 m above the ground, it issues a warning and stores the note in `camera.meta["warnings"]` ([Camera calibration](../guide/calibration.md#implausible-automatic-calibrations)).
-3. **Vehicle-size scale.** UrbanOmniDetect-2 labels the CNG auto-rickshaws of this traffic, about 2.6 m long, as `car`.
-    - Back-projected with the known camera, car-class footprints have a median size of 2.3 m by 1.0 m, against the 4.6 m by 1.85 m prior. This reflects both the rickshaws and the footprint bias.
-    - The vehicle-size cue would therefore multiply all distances and speeds by 1.83.
-    - Scenes whose `car` class is dominated by smaller vehicles need a scale from elsewhere: `scale="height=..."`, `scale="lane_width=..."` or a known camera ([Limitations](../limitations.md#mixed-traffic-and-class-dependent-scale)).
+The `lines` candidate reads nearly parallel lines as a distant vanishing point and returns a near-level camera with a long focal length. Both checks reject it:
+
+- the car silhouettes do not fit it, so it keeps relative scale (height 1);
+- the dashed markings change length along the road under it.
+
+The scene contradicts such a camera. The roundabout's central island images as a circle: an ellipse fitted to its outline has an axis ratio of 0.98, while a level camera would image it as a flat ellipse. With UrbanOmniDetect-2, whose cuboid footprints are compressed along the image vertical in nadir views, the cuboid solver reads the compression as perspective instead. `Pipeline` warns when an automatic calibration places the camera more than 250 m above the ground ([Camera calibration](../guide/calibration.md#implausible-automatic-calibrations)).
 
 ## Checks of the known camera
 
@@ -187,9 +171,9 @@ The known camera is not compared with ground truth: the clip has none. The quant
 |---|---|---|
 | Width of the swimming pool beside the roundabout, in the bird's-eye view | 24.3 m | 25 m if it is a standard 50 m pool; its far end lies outside the frame |
 | Roundabout island in the image | circle, axis ratio 0.98; diameter 29.7 m | a circular island under a nadir view |
-| Pedestrians, median of per-track median speeds (60 moving tracks) | 4.5 km/h | free walking speeds of 1.2 to 1.4 m/s (4.3 to 5.0 km/h) |
-| Cars, median of per-track median speeds (33 moving tracks) | 12.1 km/h | congested roundabout |
-| Motorcycles, median of per-track median speeds (69 moving tracks) | 13.2 km/h | congested roundabout |
+| Pedestrians, median of per-track median speeds (34 moving tracks) | 4.9 km/h | free walking speeds of 1.2 to 1.4 m/s (4.3 to 5.0 km/h) |
+| Cars, median of per-track median speeds (97 moving tracks) | 11.8 km/h | congested roundabout |
+| Motorcycles, median of per-track median speeds (200 moving tracks, rickshaws included) | 12.8 km/h | congested roundabout |
 
 The speeds are computed from `tracks_summary.csv` of the run above:
 
@@ -199,16 +183,18 @@ import pandas as pd
 s = pd.read_csv("runs/dhaka/tracks_summary.csv")
 moving = s[(s.verdict == "ok") & (s.state == "moving")]
 print(moving.groupby("class").speed_median_kmh.median().round(1))
+print(moving["class"].value_counts().to_dict())
 ```
 
 ```text
 class
-bicycle       13.4
-car           12.1
-motorcycle    13.2
-person         4.5
-truck          5.3
+bicycle       16.9
+car           11.8
+motorcycle    12.8
+person         4.9
+truck         10.2
 Name: speed_median_kmh, dtype: float64
+{'motorcycle': 200, 'car': 97, 'person': 34, 'truck': 10, 'bicycle': 1}
 ```
 
 ## Rendering straight-down views

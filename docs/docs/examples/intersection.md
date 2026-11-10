@@ -8,18 +8,19 @@ This example runs the full pipeline on the public sample clip `intersection-day`
 tachymetry demo --out demo_run
 ```
 
-`tachymetry demo` downloads the clip, runs detection, automatic calibration, tracking, export and rendering, and writes everything to `demo_run/`. `--device cuda:1` selects a GPU, `--sample` another clip ([Sample clips](../samples.md)).
+`tachymetry demo` downloads the clip, runs detection (SAM 3), automatic calibration with the sample's lens field of view, tracking, export and rendering, and writes everything to `demo_run/`. `--device cuda:1` selects a GPU, `--sample` another clip ([Sample clips](../samples.md)).
 
 ## Python
 
 ```python
 import tachymetry as tm
-from tachymetry.data import attribution, sample_video
+from tachymetry.data import attribution, sample_overrides, sample_video
 
 clip = sample_video("intersection-day")  # downloaded once into the Hugging Face cache
 print(attribution("intersection-day"))
+print(sample_overrides("intersection-day"))  # the lens field of view of this camera
 
-run = tm.track(clip, out="runs/intersection-day", render=True)
+run = tm.track(clip, out="runs/intersection-day", render=True, calibration__hfov_deg=47.5)
 print(run.camera.describe())
 print(run.camera.meta["calibration_method"])
 print(run.summary())
@@ -28,13 +29,21 @@ print(run.report["timings"])
 
 ```text
 svbrd-llm-roadside-video-av by Ryan-xiangyu-ut (Hugging Face), CC BY 4.0, https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av
-f=2211.9px (hfov 46.9 deg), height=27.83 m, pitch=17.85 deg, roll=-0.08 deg, yaw=134.3 deg, lens=identity
-auto:fused
-{'tracks': 44, 'by_class': {'person': 9, 'bus': 2, 'car': 31, 'bicycle': 2}, 'moving_by_class': {'person': 8, 'bus': 2, 'car': 18, 'bicycle': 2}, 'parked_by_class': {'car': 13}, 'rejected': {'rider': 2, 'ghost': 1, 'duplicate': 2}, 'vehicle_speed_kmh': {'median': 25.01, 'p85': 35.98, 'max': 55.4}}
-{'detect_s': 6.6, 'calibrate_s': 16.9, 'track_s': 3.25, 'render_s': 28.56, 'total_s': 55.51}
+{'calibration.hfov_deg': 47.5}
+f=2181.8px (hfov 47.5 deg), height=27.21 m, pitch=17.88 deg, roll=-0.01 deg, yaw=134.0 deg, lens=identity
+auto:fov+vp
+{'tracks': 50, 'by_class': {'person': 8, 'car': 29, 'bus': 2, 'bicycle': 2, 'truck': 9}, 'moving_by_class': {'bus': 2, 'car': 17, 'bicycle': 2, 'person': 7, 'truck': 3}, 'parked_by_class': {'car': 12, 'truck': 6}, 'rejected': {'rider': 2, 'ghost': 2, 'duplicate': 1}, 'vehicle_speed_kmh': {'median': 24.65, 'p85': 34.62, 'max': 58.59}}
+{'detect_s': 55.88, 'calibrate_s': 23.29, 'track_s': 41.34, 'render_s': 24.5, 'total_s': 145.22}
 ```
 
-The automatic calibration selected the fused candidate (learned cuboid footprints plus road-marking and vertical vanishing points, [Automatic calibration](../guide/auto-calibration.md)): a camera 27.8 m above the road, pitched 17.9° down, with a 46.9° horizontal field of view. The metric scale comes from the median passenger-car footprint. The run directory now holds the files described in [Outputs](../guide/outputs.md):
+The run uses the default detector, SAM 3, whose instance masks give the vehicle footprints ([Vehicle footprints from masks](../guide/footprints.md)) and the metric scale of the calibration. `tachymetry demo` applies the sample's overrides itself; with `tm.track`, the field of view is passed as `calibration__hfov_deg`.
+
+Calibration:
+
+* *Candidate.* The known field of view (47.5°) and the main ground vanishing point give the orientation (`fov+vp`, [Automatic calibration](../guide/auto-calibration.md)): a camera pitched 17.9° down.
+* *Scale.* The vehicle silhouettes place it 27.2 m above the road. The camera packaged for the five intersection clips, calibrated once, is 27.7 m high; see [Camera calibration](../guide/calibration.md) for the spread between calibrations of one camera.
+
+The run directory now holds the files described in [Outputs](../guide/outputs.md):
 
 ```text
 runs/intersection-day/
@@ -44,8 +53,8 @@ runs/intersection-day/
 
 ![The rendered side layout of the sample clip](../../media/layout_side.jpg)
 
-!!! note "Reproducibility of the calibration"
-    The fused least-squares fit can converge to slightly different solutions from run to run on identical detections and background. Three runs of this clip with version 0.1.0 gave $f$ = 2211.9 to 2212.2 px, a height of 27.82 to 27.83 m and 44 `ok` tracks; earlier development versions also converged to solutions about 3 % apart in focal length. Check `calibration_preview.jpg`, and pass a fixed camera (`camera="runs/intersection-day/camera.json"`) when several runs must share one calibration.
+!!! note "One camera for the five intersection clips"
+    The five `intersection-*` samples come from one camera pose. `tachymetry.data.sample_camera` returns the camera of this intersection for the other four clips. Pass it, or the `camera.json` of this run, when several runs must share one calibration, as in the [batch example](batch.md).
 
 ## Analysing the outputs
 
@@ -70,12 +79,12 @@ veh = samples[samples["class"].isin(["car", "bus", "truck"]) & (samples.state ==
 spot = veh.loc[veh.speed_kmh > 3, "speed_kmh"]
 print(spot.describe(percentiles=[0.15, 0.5, 0.85]).round(1).to_string())
 
-# A screen line across the main road: x = 0 m, restricted to y < -25 m
+# A screen line across the main road: x = -45 m, restricted to 35 m < y < 60 m
 counts = {"+x": 0, "-x": 0}
 for tid, g in veh.groupby("track_id"):
-    g = g[g.y_m < -25]
+    g = g[(g.y_m > 35) & (g.y_m < 60)]
     x = g.x_m.to_numpy()
-    if len(x) > 1 and x.min() < 0 < x.max():
+    if len(x) > 1 and x.min() < -45 < x.max():
         counts["+x" if x[-1] > x[0] else "-x"] += 1
 print(counts)
 ```
@@ -85,35 +94,36 @@ state    moving  parked  stationary
 class
 bicycle       2       0           0
 bus           2       0           0
-car          18      13           0
-person        8       0           1
- id  class   verdict                    reason
- 29 person     rider     riding two-wheeler 24
- 32    car     ghost low confidence and static
- 34    car duplicate           duplicate of 10
- 38 person     rider     riding two-wheeler 36
- 48    car duplicate           duplicate of 32
-count    2116.0
-mean       25.6
-std         9.4
-min         3.0
-15%        15.6
-50%        25.0
-85%        36.0
-max        55.4
-{'+x': 9, '-x': 2}
+car          17      12           0
+person        7       0           1
+truck         3       6           0
+ id  class   verdict                reason
+  7 person     rider  riding two-wheeler 6
+ 29 person     ghost             too short
+ 33  truck duplicate       duplicate of 23
+ 43 person     rider riding two-wheeler 41
+ 46    car     ghost             too short
+count    2177.0
+mean       25.2
+std         9.6
+min         3.2
+15%        15.0
+50%        24.6
+85%        34.6
+max        58.6
+{'+x': 8, '-x': 2}
 ```
 
 Notes on the result:
 
 * The two riders are the persons on the two bicycles; they are counted once, as cyclists ([Verdicts](../guide/verdicts.md#riders-and-inferred-cyclists)).
-* Thirteen parked cars are reported with zero speed; they do not enter the speed statistics.
-* The world frame of an automatic calibration has $+x$ along the best-supported lane-line direction and its origin at the median vehicle position, so the main road runs along $x$ at $y \approx -35$ to $-45$ m in this clip. For counts at a specific location, define the screen line in this frame, or calibrate manually against a georeferenced reference to work in map coordinates ([Manual calibration](../guide/manual-calibration.md)).
+* Twelve parked cars and six parked trucks are reported with zero speed; they do not enter the speed statistics.
+* The world frame of an automatic calibration has $+x$ along the best-supported lane-line direction. Without cuboid footprints the origin stays below the camera, so the main road runs along $x$ at $y \approx 41$ to $53$ m in this clip (traffic in $+x$ near 42 m, in $-x$ near 52 m). For counts at a specific location, define the screen line in this frame, or calibrate manually against a georeferenced reference to work in map coordinates ([Manual calibration](../guide/manual-calibration.md)).
 * The spot speeds are samples at 15 Hz, so longer tracks weigh more. For one value per vehicle use `tracks_summary.csv` (`speed_median_kmh`, `speed_p85_kmh`).
 
 ## Changing settings without re-detecting
 
-Detections and the automatic calibration are cached in the run directory ([Pipeline](../guide/pipeline.md#caching-and-re-runs)). Re-running with other tracking settings takes seconds:
+Detections and the automatic calibration are cached in the run directory ([Pipeline](../guide/pipeline.md#caching-and-re-runs)). Re-running with other tracking settings repeats only the CPU stages, of which the mask geometry takes most of the time:
 
 ```python
 import tachymetry as tm
@@ -127,7 +137,7 @@ print(run.report["timings"], run.summary()["vehicle_speed_kmh"])
 ```
 
 ```text
-{'detect_s': 0.01, 'calibrate_s': 0.01, 'track_s': 3.25, 'total_s': 3.48} {'median': 25.03, 'p85': 35.71, 'max': 53.76}
+{'detect_s': 0.03, 'calibrate_s': 0.01, 'track_s': 40.92, 'total_s': 41.18} {'median': 24.81, 'p85': 34.85, 'max': 57.8}
 ```
 
-A shorter smoothing window follows speed changes faster at the cost of more noise ([Bird's-eye view and speed](../guide/bev-speed.md#speed)); on this clip the median and 85th-percentile vehicle speeds move by less than 0.3 km/h.
+A shorter smoothing window follows speed changes faster at the cost of more noise ([Bird's-eye view and speed](../guide/bev-speed.md#speed)); on this clip the median and 85th-percentile vehicle speeds move by 0.16 and 0.23 km/h.

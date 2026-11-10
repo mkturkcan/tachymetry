@@ -1,19 +1,24 @@
 # Sample clips
 
-`tachymetry.data` registers eight public clips for demos, tests and the figures of this documentation. They are downloaded on first use from their original hosts and are not redistributed with Tachymetry. Files hosted on Hugging Face go to the Hugging Face cache. The Wikimedia Commons file and the excerpt go to `$TACHYMETRY_CACHE/samples`, which defaults to `~/.cache/tachymetry/samples`.
+`tachymetry.data` registers seven public clips for demos, tests and the figures of this documentation. They are downloaded on first use from their original hosts and are not redistributed with Tachymetry. Files hosted on Hugging Face go to the Hugging Face cache; the excerpt goes to `$TACHYMETRY_CACHE/samples`, which defaults to `~/.cache/tachymetry/samples`.
 
 | Name | Scene | Camera | Video | Calibration | Licence |
 |---|---|---|---|---|---|
-| `intersection-day` | signalised urban intersection | elevated pole camera | 1920 x 1080, 30 fps, 31.0 s | automatic | CC BY 4.0 |
-| `intersection-day-2` | same intersection, another time of day | same camera | 1920 x 1080, 30 fps, 31.2 s | automatic | CC BY 4.0 |
-| `intersection-day-3` | same intersection, dense traffic | same camera | 1920 x 1080, 30 fps, 74.0 s | automatic | CC BY 4.0 |
-| `intersection-turn` | same intersection, turning traffic | same camera | 1920 x 1080, 30 fps, 6.6 s | automatic | CC BY 4.0 |
-| `intersection-night` | same intersection, infrared night view | same camera | 1920 x 1080, 30 fps, 18.5 s | automatic | CC BY 4.0 |
-| `roundabout-aerial` | roundabout | hovering drone, oblique | 1920 x 1080, 23.976 fps, 36.4 s | automatic | CC0 1.0 |
-| `motorway-overpass` | divided motorway | camera on an overpass | 1280 x 720, 25 fps, 42.4 s | automatic | MIT |
+| `intersection-day` | signalised urban intersection | elevated PTZ camera | 1920 x 1080, 30 fps, 31.0 s | automatic, with the 47.5° field of view registered for the sample | CC BY 4.0 |
+| `intersection-day-2` | same intersection, another time of day | same camera | 1920 x 1080, 30 fps, 31.2 s | shared camera file | CC BY 4.0 |
+| `intersection-day-3` | same intersection, dense traffic | same camera | 1920 x 1080, 30 fps, 74.0 s | shared camera file | CC BY 4.0 |
+| `intersection-turn` | same intersection, turning traffic | same camera | 1920 x 1080, 30 fps, 6.6 s | shared camera file | CC BY 4.0 |
+| `intersection-night` | same intersection, infrared night view | same camera | 1920 x 1080, 30 fps, 18.5 s | shared camera file | CC BY 4.0 |
+| `motorway-overpass` | divided urban expressway | camera on an overpass | 1280 x 720, 25 fps, 42.4 s | automatic, with the 59° field of view registered for the sample | MIT |
 | `dhaka-roundabout` | dense mixed traffic at a roundabout | drone, straight down | 3840 x 2160, 23.976 fps, 31.1 s | known camera from the flight altitude | CC BY 4.0 |
 
-The video properties are those reported by `tachymetry.io.VideoSource`; all eight files are read by the OpenCV backend.
+The video properties are those reported by `tachymetry.io.VideoSource`; all seven files are read by its OpenCV backend.
+
+**Cameras.**
+
+- **Intersection.** The five intersection clips come from one camera pose; their backgrounds register to each other within 4.2 px (the infrared night clip up to 12.4 px at the image corners). `intersection-day` is calibrated automatically with a 47.5° field of view, which GeoCalib estimated on four of the clips. The other four load that camera from the package (`tachymetry/assets/cameras/svbrd-intersection.json`), because calibrating each clip separately adds the per-clip variance of automatic calibration ([Calibration verification](guide/calibration.md#calibration-verification)).
+- **Motorway.** The 59° field of view of `motorway-overpass` is checked by its lane markings. Under the resulting camera, the five dashes of the chain found on the road measure 2.76 to 3.07 m, with a dash-regularity spread of 0.019 (`docs/media/calib_dashes.jpg`), consistent with urban-expressway markings.
+- **Drone.** The straight-down camera of `dhaka-roundabout` comes from its flight log ([Drone footage](examples/drone.md)).
 
 ## Sources and attribution
 
@@ -22,7 +27,6 @@ The video properties are those reported by `tachymetry.io.VideoSource`; all eigh
 | Samples | Source | Credit | Licence |
 |---|---|---|---|
 | `intersection-*` | [svbrd-llm-roadside-video-av](https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av) | Ryan-xiangyu-ut (Hugging Face) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
-| `roundabout-aerial` | [Roundabout 14 61](https://commons.wikimedia.org/wiki/File:Roundabout_14_61.webm) | Wikideas1 (Wikimedia Commons) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | `motorway-overpass` | [Small-Crowd-and-Traffic-Video-Footages](https://huggingface.co/datasets/parsafaramarzi/Small-Crowd-and-Traffic-Video-Footages), `cartraffic03.mp4` | parsafaramarzi (Hugging Face) | MIT |
 | `dhaka-roundabout` | [DRINF: Dhaka Road Intersection Nadir Footage](https://huggingface.co/datasets/hamimmahmud0/DRINF), doi:10.57967/hf/10301; a 30 s excerpt from 2:20 of a 15 min recording | Hamim Mahmud (Hugging Face) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 
@@ -32,11 +36,11 @@ The excerpt of `dhaka-roundabout` is cut from the remote file with HTTP range re
 
 ```bash
 tachymetry demo                                  # intersection-day
-tachymetry demo --sample roundabout-aerial -o runs/roundabout
+tachymetry demo --sample motorway-overpass -o runs/motorway
 tachymetry demo --sample dhaka-roundabout -o runs/dhaka
 ```
 
-`tachymetry demo` prints the sample's attribution, then runs detection, calibration, tracking, export and rendering. Samples that carry a known camera use it instead of automatic calibration, together with the configuration overrides they need. In this release that applies only to `dhaka-roundabout`. The drone clip and the reasons for its known camera are covered in [Drone footage](examples/drone.md).
+`tachymetry demo` prints the sample's attribution, then runs detection, calibration, tracking, export and rendering with the camera or configuration overrides registered for the sample.
 
 ```python
 from tachymetry.data import SAMPLES, attribution, sample_camera, sample_overrides, sample_video
@@ -52,35 +56,40 @@ print(attribution("motorway-overpass"))
 Output:
 
 ```text
-intersection-day     CC BY 4.0 automatic    {}
-intersection-day-2   CC BY 4.0 automatic    {}
-intersection-day-3   CC BY 4.0 automatic    {}
-intersection-turn    CC BY 4.0 automatic    {}
-intersection-night   CC BY 4.0 automatic    {}
-roundabout-aerial    CC0 1.0   automatic    {}
-motorway-overpass    MIT       automatic    {}
-dhaka-roundabout     CC BY 4.0 known camera {'detector.imgsz': 2560}
+intersection-day     CC BY 4.0 automatic    {'calibration.hfov_deg': 47.5}
+intersection-day-2   CC BY 4.0 known camera {}
+intersection-day-3   CC BY 4.0 known camera {}
+intersection-turn    CC BY 4.0 known camera {}
+intersection-night   CC BY 4.0 known camera {}
+motorway-overpass    MIT       automatic    {'calibration.hfov_deg': 59.0}
+dhaka-roundabout     CC BY 4.0 known camera {}
 Small-Crowd-and-Traffic-Video-Footages by parsafaramarzi (Hugging Face), MIT, https://huggingface.co/datasets/parsafaramarzi/Small-Crowd-and-Traffic-Video-Footages
 ```
 
 ## Results with the default configuration
 
-Summaries of one run per clip: the default configuration with `camera="auto"`, except `dhaka-roundabout`, which uses its known camera and `detector.imgsz = 2560`. Counts are accepted tracks (`summary.json`, `summary.tracks`). Speeds are the median and 85th percentile over the samples above 3 km/h of moving car, bus and truck tracks (`summary.vehicle_speed_kmh`).
+One run per clip with the default configuration (SAM 3, 15 Hz) and the camera or overrides registered for the sample. The run is reproduced by `python tools/make_docs_media.py --only gallery`, which also writes `docs/media/figures.json`.
 
-| Name | Calibration | Camera | Tracks | Median speed (km/h) | p85 speed (km/h) |
+- **Tracks** counts the accepted tracks (`summary.json`, `summary.tracks`).
+- **Speeds** are the median and 85th percentile over the samples above 3 km/h of moving car, bus and truck tracks (`summary.vehicle_speed_kmh`).
+
+| Name | Camera | Tracks | Tracks by class | Median speed (km/h) | p85 speed (km/h) |
 |---|---|---|---|---|---|
-| `intersection-day` | `auto:fused` | f = 2212 px, height 27.8 m, pitch 17.9° | 44 | 25.0 | 36.0 |
-| `intersection-day-2` | `auto:fused` | f = 2298 px, height 29.1 m, pitch 17.4° | 41 | 32.6 | 45.2 |
-| `intersection-day-3` | `auto:fused` | f = 2314 px, height 29.2 m, pitch 17.4° | 91 | 25.9 | 43.5 |
-| `intersection-turn` | `auto:fused` | f = 2079 px, height 25.1 m, pitch 17.2° | 23 | 21.2 | 28.4 |
-| `intersection-night` | `auto:lines` | f = 2108 px, height 32.7 m, pitch 21.3° | 7 | 47.8 | 62.1 |
-| `roundabout-aerial` | `auto:fused` | f = 1518 px, height 75.9 m, pitch 34.7° | 18 | 36.7 | 51.7 |
-| `motorway-overpass` | `auto:fused` | f = 2072 px, height 15.3 m, pitch 9.8° | 45 | 94.4 | 122.5 |
-| `dhaka-roundabout` | known | f = 2825 px, height 111.7 m, pitch 90° | 286 | 11.8 | 15.9 |
+| `intersection-day` | f = 2182 px, height 27.7 m, pitch 17.9° | 49 | 28 car, 9 truck, 2 bus, 2 bicycle, 8 person | 24.8 | 35.0 |
+| `intersection-day-2` | shared camera | 49 | 35 car, 7 truck, 5 bus, 2 person | 31.1 | 43.1 |
+| `intersection-day-3` | shared camera | 117 | 59 car, 17 truck, 3 bus, 3 bicycle, 35 person | 25.7 | 41.8 |
+| `intersection-turn` | shared camera | 32 | 27 car, 2 truck, 3 person | 20.3 | 27.6 |
+| `intersection-night` | shared camera | 8 | 8 car | 50.1 | 65.6 |
+| `motorway-overpass` | f = 1131 px, height 8.1 m, pitch 11.8° | 70 | 61 car, 9 truck | 59.6 | 76.3 |
+| `dhaka-roundabout` | f = 2825 px, height 111.7 m, pitch 90° | 395 | 121 car, 13 truck, 222 motorcycle, 1 bicycle, 38 person | 11.9 | 15.9 |
 
-The five intersection clips come from one PTZ camera, recorded on three different days, so its zoom and pose may differ between them. The four daytime calibrations span focal lengths of 2079 to 2314 px (11 %), heights of 25.1 to 29.2 m and pitches of 17.2° to 17.9°. This spread bounds the calibration error only if the camera did not move between recordings. For the infrared night clip the `lines` candidate scored highest (0.328, against 0.317 for `fused` and 0.170 for `cuboids`; `camera.report.json`); see [Limitations](limitations.md#night-and-low-light).
+The shared intersection camera is the automatic calibration of `intersection-day`: f = 2182 px, 27.7 m high, pitched 17.9° down, roll −0.18°.
+
+- **Truck labels.** The truck counts of the intersection clips come from SAM 3's class-evidence prompts. In `intersection-day`, all nine truck tracks are pickups, one of them towing a trailer.
+- **Two-wheelers in mixed traffic.** In the straight-down clip, cycle-rickshaws and auto-rickshaws are mostly labelled motorcycle ([Limitations](limitations.md#mixed-traffic-and-class-dependent-scale)).
+- **Motorway speeds.** Moving vehicles on the motorway have a median speed of 59.6 km/h. An earlier cuboid-based calibration of this clip, without a known field of view, gave about 95 km/h; under that camera the dashes of the same chain grow from 3.35 m to 6.28 m along the road (spread 0.165). The dash check is what exposes such a calibration.
 
 <figure markdown="span">
-  ![Camera-view stills of the eight sample clips with Tachymetry's output](../media/gallery/roundabout-aerial.jpg)
-  <figcaption>`roundabout-aerial` with Tachymetry's output: metric 3D boxes, speeds and trails. Stills of all eight clips are generated by `python tools/make_docs_media.py --only gallery` into `docs/media/gallery/` and shown on the project page.</figcaption>
+  ![A divided expressway seen from an overpass with tracked vehicles and speeds](../media/gallery/motorway-overpass.jpg)
+  <figcaption>`motorway-overpass` with Tachymetry's output: metric 3D boxes, speeds and trails, and corner brackets for detections beyond the metric range. Stills of all seven clips are written to `docs/media/gallery/` and shown on the project page.</figcaption>
 </figure>

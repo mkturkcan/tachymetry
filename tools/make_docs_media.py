@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -33,7 +34,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 QUALITY = 85
-GROUPS = ("clip", "calib", "synthetic", "lens", "social", "gallery")
+GROUPS = ("clip", "calib", "synthetic", "lens", "social", "gallery", "occlusion")
 INK = (13, 11, 10)
 TEXT = (232, 235, 236)
 MUTED = (163, 156, 155)
@@ -92,14 +93,8 @@ def fmt(v: float | None, nd: int = 2) -> str:
 
 # ----------------------------------------------------------------------------- sample clip
 def run_sample(work: Path, device: str) -> Any:
-    from tachymetry.config import PipelineConfig
-    from tachymetry.data import sample_video
-    from tachymetry.pipeline import Pipeline
-
-    path = sample_video("intersection-day")
-    out = work / "intersection-day"
-    print(f"Pipeline on {path.name} -> {out}")
-    return Pipeline(PipelineConfig(), device=device).run(path, out)
+    """The default pipeline on ``intersection-day``, with the overrides the sample registry gives it."""
+    return run_named_sample("intersection-day", work, device)
 
 
 def read_frame(run: Any, t: float) -> tuple[np.ndarray, float]:
@@ -249,28 +244,31 @@ def raw_vs_clean(run: Any, t_view: float, out: Path, stats: dict) -> None:
 
 
 # ----------------------------------------------------------------------------- calibration on the clip
-def calib_figures(run: Any, out: Path, stats: dict, device: str) -> None:
+def calib_figures(run: Any, out: Path, stats: dict, device: str, work: Path | None = None) -> None:
+    """Calibration previews of the intersection clip for the candidates of the default (segmenting) detector."""
+    from tachymetry import data
     from tachymetry.calib.auto import calibrate_auto
     from tachymetry.calib.preview import preview
     from tachymetry.config import CalibrationConfig
 
     bg, dets = run.background, run.detections
+    hfov = data.sample_overrides("intersection-day").get("calibration.hfov_deg")
     stats["calibration_clip"] = {}
-    for name, methods, title in (
-        ("fused", ("cuboids", "lines"), "Automatic, fused cuboids + vanishing points"),
-        ("lines", ("lines",), "Road markings and vertical vanishing points"),
-        ("cuboids", ("cuboids",), "Learned vehicle cuboids"),
-        ("depth", ("depth",), "Monocular metric depth + road segmentation"),
+    for name, cfg, title in (
+        ("auto", CalibrationConfig(hfov_deg=hfov), f"Automatic: known {hfov:g} deg field of view + ground vanishing point"),
+        ("lines", CalibrationConfig(methods=("lines",)), "Road markings and vertical vanishing points"),
+        ("depth", CalibrationConfig(methods=("depth",)), "Monocular metric depth + road segmentation"),
     ):
         t0 = time.time()
         try:
-            res = calibrate_auto(bg, dets, CalibrationConfig(methods=methods))
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                res = calibrate_auto(bg, dets, cfg)
         except Exception as exc:  # optional back-ends may be missing
             print(f"  calib_{name}: skipped ({type(exc).__name__}: {exc})")
             continue
         cam = res.camera
-        sub = f"{res.method}, vehicle-size scale"
-        save(preview(bg, cam, title=f"{title} ({sub})"), out / f"calib_{name}.jpg", 1920)
+        save(preview(bg, cam, title=f"{title} ({res.method}, silhouette scale)"), out / f"calib_{name}.jpg", 1920)
         stats["calibration_clip"][name] = {
             "method": res.method,
             "camera": cam.describe(),
@@ -278,8 +276,45 @@ def calib_figures(run: Any, out: Path, stats: dict, device: str) -> None:
             "height_m": cam.height,
             "pitch_deg": cam.pitch,
             "roll_deg": cam.roll,
+            "scale": res.details.get("scale"),
             "seconds": round(time.time() - t0, 1),
         }
+    if work is not None:
+        dash_figure(run_named_sample("motorway-overpass", work, device), out, stats)
+
+
+def dash_figure(run: Any, out: Path, stats: dict) -> None:
+    """Dashed lane lines found without a camera, with their ground lengths and periods under the run's camera."""
+    from tachymetry.calib.from_markings import dashed_lines, marking_regularity, road_region
+    from tachymetry.render.text import draw_text
+
+    cam, bg = run.camera, run.background
+    rect = not cam.lens.is_identity  # dash ends are in rectified pixels when the camera has a lens
+    # as in automatic calibration: chains on the road surface swept by vehicles, five dashes or more
+    lines = [ln for ln in dashed_lines(bg, lens=cam.lens if rect else None, region=road_region(run.detections))
+             if len(ln) >= 5]
+    img = cam.lens.rectify_image(bg) if rect else bg.copy()
+    scale = max(1, int(round(img.shape[0] / 720)))
+    rows = []
+    for k, ln in enumerate(lines):
+        a, b = np.asarray(ln.a, float), np.asarray(ln.b, float)
+        ga, gb = cam.image_to_ground(a, rectified=rect), cam.image_to_ground(b, rectified=rect)
+        lengths = np.linalg.norm(gb - ga, axis=1)
+        periods = np.linalg.norm(np.diff(ga, axis=0), axis=1)
+        col = CYAN if k % 2 == 0 else AMBER
+        for i in range(len(a)):
+            p, q = tuple(np.round(a[i]).astype(int)), tuple(np.round(b[i]).astype(int))
+            cv2.line(img, p, q, col, 3 * scale, cv2.LINE_AA)
+            if np.isfinite(lengths[i]):
+                m = (0.5 * (a[i] + b[i])).astype(int)
+                draw_text(img, f"{lengths[i]:.1f}", (int(m[0]) + 8 * scale, int(m[1]) - 9 * scale), size=13 * scale,
+                          color=TEXT)
+        rows.append({"dashes": len(a), "length_m": [round(float(v), 2) for v in lengths],
+                     "period_m": [round(float(v), 2) for v in periods]})
+    reg = float(marking_regularity(cam, lines)) if len(lines) else float("nan")
+    sub = f"{len(lines)} dash chains, spread {reg:.3f} (log units) under {cam.describe().split(', lens')[0]}"
+    save(titled(img, "Dash check: ground lengths of lane dashes (m)", sub), out / "calib_dashes.jpg", 1920)
+    stats["dash_check"] = {"sample": "motorway-overpass", "camera": cam.describe(), "regularity": reg, "lines": rows}
 
 
 # ----------------------------------------------------------------------------- synthetic scenes
@@ -328,9 +363,10 @@ def compare_cameras(est: Any, true: Any, uv: np.ndarray, frame_given: bool) -> d
 
 
 def synthetic_figures(out: Path, stats: dict) -> None:
-    from tachymetry.calib import calibrate_auto, calibrate_from_cuboids, calibrate_from_lines, calibrate_manual
+    from tachymetry.calib import calibrate_auto, calibrate_from_lines, calibrate_manual
     from tachymetry.calib.correspondences import Correspondences
     from tachymetry.calib.preview import preview
+    from tachymetry.config import CalibrationConfig
     from tachymetry.synthetic import RoadLayout, default_camera, make_scene
     from tachymetry.synthetic.traffic import TrafficSpec, simulate
 
@@ -345,19 +381,32 @@ def synthetic_figures(out: Path, stats: dict) -> None:
     idx = rng.choice(len(uv), 12, replace=False)
     img_pts = cam_true.ground_to_image(g[idx]) + rng.normal(0.0, 1.0, (12, 2))
     corr = Correspondences(img_pts, g[idx], image_size=size)
-    ds, _ = simulate(cam_true, TrafficSpec(duration_s=60, seed=0))
+    ds_cub, _ = simulate(cam_true, TrafficSpec(duration_s=60, seed=0))  # boxes with cuboid corners
+    ds_mask, _ = simulate(cam_true, TrafficSpec(duration_s=60, seed=0, masks=True))  # boxes with instance masks
+    hfov = cam_true.fov[0]
 
     rows = []
     results = {}
     t0 = time.time()
-    results["manual"] = (calibrate_manual(corr, size, lens="auto"), "12 points, 1.0 px noise, lens auto", True)
-    results["lines"] = (
-        calibrate_from_lines(scene.image, scale="height=8", lens="auto"),
-        "background image, camera height 8 m",
-        False,
-    )
-    results["cuboids"] = (calibrate_from_cuboids(ds), "60 s of simulated cuboid detections", False)
-    results["auto"] = (calibrate_auto(scene.image, ds), "background image + 60 s of detections", False)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        results["manual"] = (calibrate_manual(corr, size, lens="auto"), "12 points, 1.0 px noise, lens auto", True)
+        results["lines"] = (
+            calibrate_from_lines(scene.image, scale="height=8", lens="auto"),
+            "background image, camera height 8 m",
+            False,
+        )
+        results["auto"] = (calibrate_auto(scene.image, ds_mask), "background image + 60 s of instance masks", False)
+        results["auto_fov"] = (
+            calibrate_auto(scene.image, ds_mask, CalibrationConfig(hfov_deg=round(hfov))),
+            f"as above, known {round(hfov):g} deg field of view",
+            False,
+        )
+        results["auto_cuboids"] = (
+            calibrate_auto(scene.image, ds_cub),
+            "background image + 60 s of cuboid detections",
+            False,
+        )
     stats["synthetic_calibration"] = {
         "true_camera": cam_true.describe(),
         "seconds": round(time.time() - t0, 1),
@@ -368,8 +417,9 @@ def synthetic_figures(out: Path, stats: dict) -> None:
         label = {
             "manual": "Manual",
             "lines": "Road markings (`lines`)",
-            "cuboids": "Cuboids (`cuboids`)",
-            "auto": f"Automatic (`calibrate_auto`, selected `{res.method}`)",
+            "auto": f"Automatic, masks (`{res.method}`)",
+            "auto_fov": f"Automatic, masks, known field of view (`{res.method}`)",
+            "auto_cuboids": f"Automatic, cuboids (`{res.method}`)",
         }[name]
         rows.append(
             f"| {label} | {inp} | {fmt(m['focal_pct'])} | {fmt(m['pitch_deg'])} | {fmt(m['roll_deg'])} | "
@@ -380,6 +430,8 @@ def synthetic_figures(out: Path, stats: dict) -> None:
             "camera": res.camera.describe(),
             **m,
             "cv_rmse_m": res.cv_rmse_m,
+            "scale": res.details.get("scale") if name.startswith("auto") else None,
+            "candidates": res.details.get("candidates") if name.startswith("auto") else None,
         }
     table = [
         "| Method | Input | Focal error (%) | Pitch error (deg) | Roll error (deg) | Height error (m) | "
@@ -407,10 +459,156 @@ def synthetic_figures(out: Path, stats: dict) -> None:
         preview(
             scene.image,
             results["auto"][0].camera,
-            title=f"Automatic calibration (selected {results['auto'][0].method})",
+            title=f"Automatic calibration from instance masks (selected {results['auto'][0].method}, silhouette scale)",
         ),
         out / "syn_calib_auto.jpg",
     )
+
+
+# ----------------------------------------------------------------------------- occlusion (mask geometry)
+def _road_agent(aid: int, cls: str, dims: tuple, s0: float, s1: float, offset: float, v: float, t0: float,
+                u: np.ndarray, n_hat: np.ndarray, c0: np.ndarray, rate: float) -> Any:
+    import math
+
+    from tachymetry.synthetic.traffic import Agent
+
+    d = 1.0 if s1 > s0 else -1.0
+    n = int(abs(s1 - s0) / v * rate)
+    t = t0 + np.arange(n) / rate
+    xy = c0 + (s0 + d * v * (t - t0))[:, None] * u + offset * n_hat
+    return Agent(aid, cls, *dims, t, xy, np.full(n, math.atan2(d * u[1], d * u[0])), np.full(n, v))
+
+
+def occlusion_figures(out: Path, stats: dict) -> None:
+    """A bus passing behind a tree crown: footprints from instance masks and from boxes only, against ground truth.
+
+    The scene of ``tests/test_mask_geometry.py::test_occluded_bus_keeps_its_footprint``: a 12 m bus at 25 km/h,
+    40 m from a 12 m mast camera, and an oncoming car; segmenting-detector simulation with image-space occluders.
+    """
+    import math
+    from dataclasses import replace
+
+    from tachymetry.config import PipelineConfig
+    from tachymetry.geometry import Camera
+    from tachymetry.render.overlay import box_corners
+    from tachymetry.render.style import CLASS_COLORS
+    from tachymetry.render.text import draw_text
+    from tachymetry.synthetic.masks import agent_parts, render_label_image, tree_occluder
+    from tachymetry.synthetic.traffic import TrafficSpec, render_detections
+    from tachymetry.tracking.builder import build_tracks
+
+    rate = 15.0
+    cam = Camera.from_pose((1280, 720), focal=1100.0, height=12.0, pitch=25.0, yaw=45.0, roll=0.5,
+                           position=(-14.0, -14.0))
+    u = np.array([math.cos(-math.pi / 4), math.sin(-math.pi / 4)])
+    n_hat = np.array([-u[1], u[0]])
+    c0 = np.array([-14.0, -14.0]) + 40.0 * np.array([math.cos(math.pi / 4), math.sin(math.pi / 4)])
+    bus = _road_agent(0, "bus", (12.0, 2.55, 3.2), -30.0, 30.0, -1.75, 7.0, 0.0, u, n_hat, c0, rate)
+    car = _road_agent(1, "car", (4.6, 1.8, 1.45), 30.0, -30.0, 1.75, 8.0, 0.5, u, n_hat, c0, rate)
+    p = cam.ground_to_image((c0 + 4.0 * u - 1.75 * n_hat)[None])[0]
+    tree = tree_occluder((p[0], p[1] + 35), 95, seed=1)
+    spec = TrafficSpec(duration_s=8.5, rate_hz=rate, masks=True, occluders=(tree,), ghost_rate=0.0, miss_prob=0.03,
+                       flicker_prob=0.0, seed=7)
+    ds = render_detections(cam, [bus, car], spec)
+    paths = {"masks": build_tracks(ds, cam, PipelineConfig())[0],
+             "boxes": build_tracks(replace(ds, masks=None), cam, PipelineConfig())[0]}
+
+    def bus_track(trs: list) -> tuple:
+        for tr in trs:
+            j = np.round((tr.t - bus.t[0]) * rate).astype(int)
+            k = (j >= 0) & (j < len(bus.t))
+            if tr.is_ok and k.sum() > 10 and np.median(np.linalg.norm(tr.xy[k] - bus.xy[j[k]], axis=1)) < 3:
+                return tr, j[k], k
+        raise RuntimeError("bus not tracked")
+
+    def depth(xy: np.ndarray) -> float:
+        return float(np.linalg.norm(np.append(xy, 0.0) - cam.center))
+
+    # visible share of the bus silhouette per ground-truth sample
+    vis = np.zeros(len(bus.t))
+    area = np.zeros(len(bus.t))
+    for i in range(len(bus.t)):
+        parts = agent_parts("bus", bus.xy[i, 0], bus.xy[i, 1], bus.heading[i], bus.L, bus.W, bus.H)
+        area[i] = (render_label_image(cam, [(0, parts, depth(bus.xy[i]))]) == 0).sum()
+        seen = (render_label_image(cam, [(0, parts, depth(bus.xy[i]))], (tree,)) == 0).sum()
+        vis[i] = seen / area[i] if area[i] else 0.0
+    in_view = area >= 0.9 * area.max()  # whole silhouette inside the frame
+
+    rows, entry, res = [], {}, {}
+    for key, label in (("masks", "Instance masks (mask geometry)"), ("boxes", "Boxes only (same detections)")):
+        tr, j, k = bus_track(paths[key])
+        err = np.linalg.norm(tr.xy[k] - bus.xy[j], axis=1)
+        hd = np.degrees(np.abs((tr.heading[k] - bus.heading[j] + np.pi / 2) % np.pi - np.pi / 2))
+        res[key] = (tr, j, k, err, hd)
+        entry[key] = {"samples": int(k.sum()), "centre_median_m": float(np.median(err)), "centre_max_m": float(err.max()),
+                      "heading_max_deg": float(hd.max()), "length_m": float(tr.length), "width_m": float(tr.width),
+                      "geometry": tr.meta.get("geometry", {}).get("source"),
+                      "occluded_samples": tr.meta.get("geometry", {}).get("occluded_samples")}
+        rows.append(f"| {label} | {int(k.sum())} | {np.median(err):.2f} | {err.max():.2f} | {hd.max():.1f} | "
+                    f"{tr.length:.2f} | {tr.width:.2f} |")
+    rows.append("| Ground truth | | | | | 12.00 | 2.55 |")
+    table = ["| Path | Samples | Centre error, median (m) | Centre error, max (m) | Heading error, max (deg) | "
+             "Length (m) | Width (m) |", "|---|---|---|---|---|---|---|", *rows]
+    (out / "occlusion_bus.md").write_text("\n".join(table) + "\n")
+    print("\n".join(table))
+
+    # three moments: fully visible, most hidden, visible again
+    cand = np.flatnonzero(in_view)
+    i_mid = int(cand[np.argmin(vis[cand])])
+    clear = np.flatnonzero(in_view & (vis > 0.98))
+    before = clear[clear < i_mid]
+    after = clear[clear > i_mid]
+    moments = [int(before[-1]) if len(before) else 0, i_mid, int(after[0]) if len(after) else len(bus.t) - 1]
+    panels = []
+    for i in moments:
+        t = float(bus.t[i])
+        f = int(np.argmin(np.abs(ds.processed_frames / rate - t)))
+        parts_b = agent_parts("bus", bus.xy[i, 0], bus.xy[i, 1], bus.heading[i], bus.L, bus.W, bus.H)
+        jc = int(round((t - car.t[0]) * rate))
+        agents = [(0, parts_b, depth(bus.xy[i]))]
+        if 0 <= jc < len(car.t):
+            agents.append((1, agent_parts("car", car.xy[jc, 0], car.xy[jc, 1], car.heading[jc], car.L, car.W, car.H),
+                           depth(car.xy[jc])))
+        label = render_label_image(cam, agents, (tree,))
+        img = np.full((720, 1280, 3), (58, 54, 52), np.uint8)
+        from tachymetry.calib.preview import draw_ground_grid
+
+        img = draw_ground_grid(img, cam, spacing=1.0, major=5.0, color=(92, 88, 86), alpha=0.9, horizon=False)
+        img[label == 0] = (0.55 * np.array(CLASS_COLORS["bus"]) + 0.45 * 90).astype(np.uint8)
+        img[label == 1] = (0.55 * np.array(CLASS_COLORS["car"]) + 0.45 * 90).astype(np.uint8)
+        img[label == -2] = (38, 84, 46)
+
+        def quad(xy: np.ndarray, heading: float, L: float, W: float) -> np.ndarray:
+            return cam.ground_to_image(box_corners(np.asarray(xy, float), float(heading), L, W, 0.0)[:4, :2])
+
+        cv2.polylines(img, [np.round(quad(bus.xy[i], bus.heading[i], bus.L, bus.W) * 4).astype(np.int32)], True,
+                      (240, 240, 240), 3, cv2.LINE_AA, shift=2)
+        notes = []
+        for key, col, name in (("boxes", AMBER, "boxes only"), ("masks", CYAN, "masks")):
+            tr, j, k, err, hd = res[key]
+            m = np.flatnonzero(k)
+            if not len(m):
+                continue
+            s_i = int(np.argmin(np.abs(tr.t[m] - t)))
+            if abs(tr.t[m][s_i] - t) > 1.5 / rate:
+                notes.append(f"{name}: no sample")
+                continue
+            q = quad(tr.xy[m][s_i], tr.heading[m][s_i], tr.length, tr.width)
+            cv2.polylines(img, [np.round(q * 4).astype(np.int32)], True, col, 3, cv2.LINE_AA, shift=2)
+            notes.append(f"{name}: {err[s_i]:.2f} m, {hd[s_i]:.1f} deg")
+        # crop to the stretch of road around the tree (the full frame shows mostly empty ground)
+        cu, cv_ = int(round(p[0])), int(round(p[1]))
+        x0, y0 = max(0, cu - 560), max(0, cv_ - 250)
+        img = np.ascontiguousarray(img[y0:y0 + 420, x0:x0 + 1120])
+        draw_text(img, f"t = {t:.1f} s, {100 * vis[i]:.0f} % of the bus visible", (22, 18), size=36, color=TEXT)
+        for n_i, line in enumerate(notes):
+            draw_text(img, line, (22, 66 + 40 * n_i), size=32, color=AMBER if line.startswith("boxes") else CYAN)
+        panels.append(img)
+    legend = "white: ground truth   amber: boxes only   cyan: instance masks"
+    save(titled(hstack(panels, 10), "Bus passing behind a tree crown (synthetic masks)", legend), out / "occlusion_bus.jpg",
+         1920)
+    stats["occlusion_bus"] = {"paths": entry, "moments_s": [float(bus.t[i]) for i in moments],
+                              "visible_share": [float(vis[i]) for i in moments]}
 
 
 # ----------------------------------------------------------------------------- lens rectification
@@ -571,20 +769,21 @@ def social_card(out: Path) -> None:
 
 
 # ----------------------------------------------------------------------------- scene gallery
-GALLERY = (
-    "intersection-day",
-    "intersection-day-2",
-    "intersection-day-3",
-    "intersection-turn",
-    "intersection-night",
-    "roundabout-aerial",
-    "motorway-overpass",
-    "dhaka-roundabout",
-)
+GALLERY = ("intersection-day", "intersection-day-2", "intersection-day-3", "intersection-turn",
+           "intersection-night", "motorway-overpass", "dhaka-roundabout")
+
+
+_RUNS: dict[str, Any] = {}
 
 
 def run_named_sample(name: str, work: Path, device: str) -> Any:
-    """Run the pipeline on a registered sample with its known camera and overrides, if it has them."""
+    """Run the pipeline on a registered sample with its known camera and overrides, if it has them (once per process)."""
+    if name not in _RUNS:
+        _RUNS[name] = _run_named_sample(name, work, device)
+    return _RUNS[name]
+
+
+def _run_named_sample(name: str, work: Path, device: str) -> Any:
     from tachymetry import data
     from tachymetry.config import PipelineConfig
     from tachymetry.pipeline import Pipeline
@@ -646,13 +845,15 @@ def main() -> None:
         if "clip" in only:
             clip_figures(run, out, stats)
         if "calib" in only:
-            calib_figures(run, out, stats, args.device)
+            calib_figures(run, out, stats, args.device, Path(args.work))
     if "synthetic" in only:
         synthetic_figures(out, stats)
     if "lens" in only:
         lens_figures(out, stats)
     if "social" in only:
         social_card(out)
+    if "occlusion" in only:
+        occlusion_figures(out, stats)
     if "gallery" in only:
         gallery_figures(Path(args.work), out, stats, args.device)
     stats_path.write_text(json.dumps(stats, indent=1, default=lambda o: o.tolist() if hasattr(o, "tolist") else str(o)))

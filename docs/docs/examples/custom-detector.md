@@ -1,6 +1,6 @@
 # Custom detectors
 
-The pipeline accepts object detectors that map frames to boxes in the road-user taxonomy. The built-in back-ends (RF-DETR, SAM 3, UrbanOmniDetect-2) are selected by name ([Detection](../guide/detection.md#detectors)); other models are wrapped in a subclass of `tachymetry.detect.Detector` and passed to `Pipeline(detector=...)`.
+The pipeline accepts object detectors that map frames to boxes in the road-user taxonomy. The built-in back-ends (SAM 3, the default, RF-DETR and UrbanOmniDetect-2) are selected by name ([Detection](../guide/detection.md#detectors)); other models are wrapped in a subclass of `tachymetry.detect.Detector` and passed to `Pipeline(detector=...)`.
 
 ## The detector contract
 
@@ -71,21 +71,21 @@ print(run.report["timings"])
 ```
 
 ```text
-{'tracks': 59, 'by_class': {'car': 38, 'truck': 3, 'motorcycle': 1, 'person': 14, 'bicycle': 1, 'bus': 2}, 'moving_by_class': {'truck': 2, 'car': 26, 'motorcycle': 1, 'person': 10, 'bicycle': 1, 'bus': 2}, 'parked_by_class': {'car': 12, 'truck': 1}, 'rejected': {'duplicate': 21, 'rider': 2, 'ghost': 7, 'invalid': 1}, 'vehicle_speed_kmh': {'median': 23.59, 'p85': 33.83, 'max': 58.72}}
-{'detect_s': 9.37, 'calibrate_s': 6.53, 'track_s': 5.65, 'total_s': 21.68}
+{'tracks': 58, 'by_class': {'car': 37, 'person': 14, 'motorcycle': 1, 'truck': 3, 'bus': 2, 'bicycle': 1}, 'moving_by_class': {'car': 23, 'motorcycle': 1, 'person': 10, 'bus': 2, 'bicycle': 1}, 'parked_by_class': {'car': 14, 'truck': 3}, 'rejected': {'rider': 2, 'duplicate': 22, 'invalid': 1, 'ghost': 5}, 'vehicle_speed_kmh': {'median': 23.89, 'p85': 34.09, 'max': 50.17}}
+{'detect_s': 9.14, 'calibrate_s': 6.24, 'track_s': 5.54, 'total_s': 21.2}
 ```
 
 Three details of this example matter in general:
 
-* **Camera.** A box-only detector provides no cuboid footprints, so automatic calibration would lose its cuboid, fused and vehicle-size evidence ([Detectors without cuboids](../guide/detection.md#detectors-without-cuboids)). The example reuses the camera that the cuboid detector calibrated in the [end-to-end example](intersection.md); `calibrate_s` is then only the background estimation. Alternatively give a metric cue, e.g. `cfg.calibration.scale = "height=28.4"`, or calibrate manually.
+* **Camera.** A box-only detector provides no instance masks, so automatic calibration has no vehicle-silhouette scale ([Detectors without masks](../guide/detection.md#detectors-without-masks)). The example reuses the camera that the default pipeline calibrated in the [end-to-end example](intersection.md); `calibrate_s` is then only the background estimation. Alternatively give a metric cue, e.g. `cfg.calibration.scale = "height=27.2"`, or calibrate manually.
 * **Cache key.** The detection cache key is computed from `cfg.detector` and `rate_hz`, not from the detector object. A distinct `detector.name`, or a fresh output directory, prevents the pipeline from reusing detections of another detector cached in the same directory.
-* **Duplicates.** torchvision applies non-maximum suppression per label, so one vehicle often yields overlapping `car` and `truck` boxes. The tracker gates by super-class, so both boxes enter one association problem, and the duplicate verdict removed 21 tracks in this run ([Verdicts](../guide/verdicts.md#duplicates)). Cross-label suppression inside the detector (for example `nms_by_group`) removes them earlier.
+* **Duplicates.** torchvision applies non-maximum suppression per label, so one vehicle often yields overlapping `car` and `truck` boxes. The tracker gates by super-class, so both boxes enter one association problem, and the duplicate verdict removed 22 tracks in this run ([Verdicts](../guide/verdicts.md#duplicates)). Cross-label suppression inside the detector (for example `nms_by_group`) removes them earlier.
 
-Without cuboids, centres come from the box-contact model with class priors instead of measured footprints, which the [benchmarks](../benchmarks.md) quantify on synthetic traffic.
+Without masks, vehicle centres come from the box-contact model with class priors instead of the mask geometry; [Vehicle footprints from masks](../guide/footprints.md#synthetic-occlusion) compares the two paths on a synthetic occlusion. A detector that segments returns the optional fifth element, and its vehicles then take the mask path.
 
 ## Detection only
 
-`detect_video` runs any detector over a video and returns a `DetectionSet`, which can be saved and inspected independently of tracking:
+`detect_video` runs a detector over a video and returns a `DetectionSet`, which can be saved and inspected independently of tracking:
 
 ```python
 from tachymetry.detect.run import detect_video

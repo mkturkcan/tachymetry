@@ -8,7 +8,7 @@ This example renders the same synthetic intersection through four lens models wi
 - **True lenses.** `DivisionLens(size, k=-0.27)`; `EquidistantLens(size, s=900.0)`; `BrownConradyLens(size, k1=-0.25, k2=0.06)` (radial unit: half the image diagonal, 734.3 px); `FisheyeLens(size, k1=0.05, k2=-0.01, focal=914.0)`.
 - **Scene.** `make_scene(camera, RoadLayout(), seed=0)`: the raw (distorted) image of a marked four-way intersection with poles and buildings.
 - **Estimators.** Plumb-line with the division model and with the equidistant model (`estimate_lens_plumbline`); vanishing-point consistency with the division model on the LSD segments of the raw image (`estimate_lens_vp_consistency`), as used by `calibrate_from_lines(lens="auto")`; and manual calibration (`calibrate_manual`, `lens="auto"`) from 16 ground correspondences with 0.5 px Gaussian noise.
-- **Residual.** For every raw pixel on a 16 px grid, the estimated and the true rectifications are compared after the best isotropic scale about the image centre (a pure scale change of the rectified image is absorbed by the focal length of the camera and does not affect ground measurements). The table reports the RMS and the maximum displacement in pixels; the *identity* row is the error of leaving the lens uncorrected.
+- **Residual.** For each raw pixel on a 16 px grid, the estimated and the true rectifications are compared after the best isotropic scale about the image centre (a pure scale change of the rectified image is absorbed by the focal length of the camera and does not affect ground measurements). The table reports the RMS and the maximum displacement in pixels; the *identity* row is the error of leaving the lens uncorrected.
 
 The table is produced by `tools/make_docs_media.py`.
 

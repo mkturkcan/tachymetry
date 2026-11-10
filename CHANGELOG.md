@@ -1,35 +1,71 @@
 # Changelog
 
-## Unreleased
+## 0.1.0 (unreleased)
 
-- Detection: RF-DETR back-ends with Apache-2.0 weights, `rfdetr-seg-{n,s,m,l}` (boxes and instance masks) and `rfdetr-{n,s,m,l}` (boxes); `rfdetr-seg-l` is the new default. RF-DETR runs on a square input of twice its training resolution, at most 1008 pixels, in batches through its export graph with FP16 weights on CUDA.
-- Detection: a SAM 3 back-end (`sam3`) through Hugging Face `transformers`, prompted with one text prompt per road class; a missing access approval for the gated `facebook/sam3` checkpoint raises a `PermissionError` that explains how to request access and log in.
-- Detection: segmenting detectors store one instance mask per detection (`DetectionSet.masks`); masks are sampled from the low-resolution mask maps inside each box only (`detect.masks.mask_crops`).
-- Detection: duplicates whose instance masks overlap (IoU above 0.5) are suppressed within each super-class; for RF-DETR and SAM 3, nested-vehicle suppression requires the enclosing box to score at least as high and, with masks, the nested detection to lie on the enclosing mask.
-- Detection: `DetectorConfig.imgsz` and `DetectorConfig.conf` default to `None`, the back-end's own values (RF-DETR 1008 and 0.15 for `rfdetr-seg-l`, SAM 3 1008 and 0.30, UrbanOmniDetect-2 960 and 0.10). Detectors may return a fifth element per image, the mask crops.
-- UrbanOmniDetect-2 (`uod2-*`) needs the optional `uod2` extra (`pip install "tachymetry[uod2]"`), which installs Ultralytics; `UltralyticsDetector` is now `UOD2Detector`. The `yolo:<weights>` back-end is removed. `transformers` and `rfdetr` are core dependencies.
-- `tachymetry download --detector <name>` fetches RF-DETR, SAM 3 and UrbanOmniDetect-2 weights; the default is `rfdetr-seg-l`.
-- Video decoding: a consumer that stops early (`max_frames`) now stops and joins the prefetch thread before the video is released.
+First public release, licensed under the Apache License 2.0. Detector weights are not distributed with the package: SAM 3 is downloaded from Hugging Face under Meta's terms after an access request, RF-DETR weights are Apache-2.0, and the optional UrbanOmniDetect-2 back-end (`tachymetry[uod2]`) depends on Ultralytics (AGPL-3.0).
 
-## 0.1.0 (2026-11-09)
+### Detection
 
-First public release.
+- SAM 3 (`sam3`, the default) through Hugging Face `transformers`, with a two-level prompt scheme.
+    - The detection prompts `vehicle` and `person` give the tracked boxes and instance masks, at a score threshold of 0.40.
+    - The class-evidence prompts `car`, `van`, `suv`, `bus`, `truck`, `bike` and `motorcycle` run in the same pass. A vehicle takes the class of the best overlapping evidence that scores at least 0.20 (car, van and suv fold into car), and is a car otherwise.
+    - Two-wheeler evidence that no vehicle detection covers is kept as a detection of its own.
+    - The `facebook/sam3` checkpoint is gated. A missing approval raises a `PermissionError` that explains the access request and `hf auth login`.
+- RF-DETR alternatives with Apache-2.0 weights: `rfdetr-seg-{n,s,m,l}` (boxes and instance masks) and `rfdetr-{n,s,m,l}` (boxes).
+    - They run on a square input of twice the training resolution, at most 1008 pixels, with FP16 weights on CUDA.
+    - `DETECTOR_SCORE_PROFILES` lowers the track-start and ghost score thresholds for their lower confidences.
+- UrbanOmniDetect-2 (`uod2-*`, boxes and 3D cuboid corners) needs the `uod2` extra. The `yolo:<weights>` back-end is removed.
+- Precomputed detections are loaded with `detector.name = "precomputed:<npz or folder>"`.
+- Instance masks are stored bit-packed per detection in `detections.npz`.
+- Post-processing:
+    - duplicates whose masks overlap (IoU above 0.5) are suppressed within a super-class;
+    - nested-vehicle suppression requires the enclosing detection to score at least as high and, with masks, the nested mask to lie on the enclosing one.
+- `tachymetry download --detector <name>` fetches the weights; the default is `sam3`.
 
-Licensed under the Apache License 2.0. The optional UrbanOmniDetect-2 back-end (`tachymetry[uod2]`) depends on Ultralytics (AGPL-3.0).
+### Vehicle footprints from instance masks
 
-- Detection with UrbanOmniDetect-2 (boxes and 3D cuboid corners) or an Ultralytics model; precomputed detections are loaded with `detector.name = "precomputed:<npz or folder>"`.
+- The ground contact of a masked detection is the bottom-centre of its mask.
+- A truncation-aware ground-envelope anchor gives the centre along the vehicle axis from the vehicle's observed ends.
+- A calibrated upright-box silhouette is fitted to the masks of each vehicle track. One length, width, height and clearance are shared by the whole track, with a pose and bounded heading correction per frame. The asymmetric silhouette cost lets an occluder or the frame border hide part of the box.
+- Occluded frames are detected from the mask fill of the fitted silhouette. The heading and the hidden end of the vehicle are then taken from the clean frames and the motion of the box centres.
+- Stopped vehicles take their heading from the street axes of the moving traffic.
+- Poses of moving vehicles are fitted at up to 7.5 Hz (`hygiene.boxfit_max_hz`).
+- In steep views, persons and two-wheelers are placed at their mask centroid projected at a class height (`hygiene.steep_view_deg`).
+
+### Tracking
+
 - Two-stage BYTE association with a continuous-time Kalman filter, super-class gating and a metric plausibility gate.
-- Per-track filtering: footprint centres, gap-aware zero-phase smoothing, presplit and identity-switch splitting, end trimming (truncated, far-field and low-confidence ends), Hampel repair, parked-vehicle detection with hold-still, physical-validity checks.
-- Cross-track verdicts: fragment stitching, duplicates, passengers, riders, shadows, ghosts and static low-confidence false positives.
-- Calibration: manual (points and lines, cross-validated lens selection, browser-based picker), automatic from cuboid footprints, from road-marking and vertical vanishing points, and a fused estimate; optional depth-plus-segmentation and GeoCalib back-ends.
-- Lens models: division, equidistant, Brown–Conrady, Kannala–Brandt.
-- Rendering in side-by-side, dashboard, camera and bird's-eye-view layouts; H.264 output through FFmpeg.
-- Batch processing over multiple GPUs with resume and per-video fault isolation.
-- Exports: CSV, JSON, GeoJSON, MOTChallenge, Parquet.
-- Synthetic scenes and traffic with ground truth, and an ablation benchmark.
-- Sample clips: eight public clips with their licences and credit lines (`tachymetry.data.SAMPLES`, `attribution`). They comprise five recordings of a signalised intersection (CC BY 4.0), a roundabout from a hovering drone (CC0 1.0), a motorway from an overpass (MIT), and a 30 s straight-down drone excerpt of mixed traffic (CC BY 4.0), cut from a 15 min recording with HTTP range requests and a stream copy. Samples can carry a known camera and configuration overrides (`sample_camera`, `sample_overrides`), which `tachymetry demo --sample` applies.
-- Video input falls back to the FFmpeg binary of `imageio-ffmpeg` when OpenCV cannot decode a file (for example AV1) or reports an implausible frame rate; `VideoSource.backend` reports the reader. Ogg video (`.ogv`, `.ogg`) is recognised in batch inputs.
-- Rendering draws detections without a metric track (beyond the reliable range, or on tracks that failed kinematic validation) as lightened, class-coloured corner brackets without a speed (`render.show_detections`, on by default).
-- Batch processing assigns worker slots round-robin across devices, so fewer videos than slots still spread over all selected GPUs.
-- Straight-down cameras: `Camera.ground_up()` orients the bird's-eye view for pitches from level to straight down, and nadir views have no horizon. Automatic calibrations that place the camera more than 250 m above the ground raise a warning that is also stored in `camera.meta["warnings"]`.
-- Cuboid calibration: the car aspect prior carries full weight, the metric scale uses each footprint's dimension across the viewing ray (widths weighted four times), and the pitch range extends to 10° above the horizon.
+- Per-track filtering:
+    - footprint centres and gap-aware zero-phase smoothing; gap bridges that contradict the motion on both sides are not differentiated;
+    - presplit and identity-switch splitting, end trimming of truncated, far-field, low-confidence and partly visible ends, and Hampel repair;
+    - parked-vehicle detection with hold-still, and physical-validity checks.
+- Cross-track verdicts: fragment stitching, duplicates, passengers, riders, shadows and ghosts. The score thresholds of the static parked-vehicle ghost rule are configurable (`filters.ghost_parked_score`, `filters.ghost_parked_cuboid_score`).
+
+### Calibration
+
+- Manual calibration from points and lines, with cross-validated lens selection and a browser-based picker.
+- Automatic calibration:
+    - Orientation comes from road-marking and vertical vanishing points, from a known horizontal field of view with the main ground vanishing point (`calibration.hfov_deg`, `tachymetry calibrate --hfov`), or from the optional depth-plus-segmentation and GeoCalib back-ends.
+    - A given field of view is authoritative: candidates more than 10 % away from its focal length are dropped.
+    - The metric scale comes from car silhouettes in the instance masks, or from cuboid footprints with UrbanOmniDetect-2.
+- A dash-regularity check ranks the candidates and warns about irregular dashes. Dashed lane lines are searched on the road surface swept by vehicles, from the cross-ratio of their dash starts and their perspective order. Chains of five or more dashes compare their ground lengths and periods along the road.
+- Automatic calibrations that place the camera more than 250 m above the ground raise a warning, which is also stored in `camera.meta["warnings"]`.
+- Straight-down cameras are supported when given: `Camera.ground_up()` orients the bird's-eye view, and nadir views have no horizon.
+- Lens models: identity, division, equidistant (`tan`), Brown–Conrady and Kannala–Brandt.
+
+### Samples, input and output
+
+- Seven public sample clips with their licences and credit lines (`tachymetry.data`):
+    - five recordings of one signalised intersection, which share one packaged camera;
+    - a motorway seen from an overpass, with its lens field of view;
+    - a 30 s straight-down drone excerpt of mixed traffic with its known camera, fetched with HTTP range requests and a stream copy.
+- `tachymetry demo --sample <name>` applies each sample's camera and overrides.
+- Video input falls back to the FFmpeg binary of `imageio-ffmpeg` when OpenCV cannot decode a file or reports an implausible frame rate. `PipelineConfig.fps` overrides the input frame rate.
+- Rendering in the side, dashboard, camera and bird's-eye layouts with H.264 output. Detections without a metric track are drawn as corner brackets without a speed (`render.show_detections`).
+- Batch processing on multiple GPUs:
+    - worker slots are assigned round-robin across devices, and SAM 3 workers budget 9 GB of GPU memory each;
+    - logical GPU indices are mapped to physical ones under `CUDA_VISIBLE_DEVICES`;
+    - finished videos are resumed, and a failure stops only its own video;
+    - `--overwrite` recomputes cached detections and cameras.
+- Exports: CSV, JSON, GeoJSON, MOTChallenge and Parquet.
+- Synthetic scenes and traffic with ground truth, including instance masks with image-space occluders, and a benchmark with box-only and mask-geometry variants.

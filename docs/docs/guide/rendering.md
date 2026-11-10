@@ -31,7 +31,7 @@ In `side`, the camera view is scaled by $\min(1, (\texttt{max\_width} - 2)/(w + 
 
 ## What is drawn
 
-* **Vehicles and two-wheelers** as metric boxes of the track's length, width and height, placed at the smoothed footprint centre with the smoothed heading and projected through the calibrated camera and lens (`render.overlay.draw_camera_overlay`). The box is computed from the track, not copied from the detector's cuboid, so it is drawn for box-only detectors as well. `draw = "box"` draws the detection box instead and `draw = "footprint"` only the ground rectangle; `auto` (default) draws the 3D box.
+* **Vehicles and two-wheelers** as metric boxes of the track's length, width and height, placed at the smoothed footprint centre with the smoothed heading and projected through the calibrated camera and lens (`render.overlay.draw_camera_overlay`). The box is computed from the track, not copied from the detector's output: for vehicles on the mask path its dimensions are the fitted box ([Vehicle footprints from masks](footprints.md)), otherwise the class priors or cuboid estimates, so it is drawn for box-only detectors as well. `draw = "box"` draws the detection box instead and `draw = "footprint"` only the ground rectangle; `auto` (default) draws the 3D box.
 * **Pedestrians** as dots at their ground position.
 * **Trails**: the recent ground path of moving objects (the last 40 % of `trail_s = 3.0` s in the camera view, the full window in the bird's-eye view), fading towards the oldest end.
 * **Speed labels** on moving objects whose image box is at least 22 px high (scaled with resolution), at most 14 per frame, largest boxes first. `show_ids = True` prefixes the track id.
@@ -58,7 +58,7 @@ Colour encodes class only (`render/style.py`): car `#6096f6`, bus `#56c48c`, tru
 | `show_detections` | `True` | corner brackets, without speed, for detections that have no metric track |
 | `trail_s` | 3.0 | trail length in seconds |
 | `max_width` | 1920 | output width limit (pixels) |
-| `fps` | `None` | output frame rate; the source rate by default, otherwise every `round(fps_src / fps)`-th frame is rendered |
+| `fps` | `None` | output frame rate; the source rate by default, otherwise one frame in `round(fps_src / fps)` is rendered |
 | `crf` | 18 | H.264 constant rate factor |
 | `title` | `None` | header title; the video file stem by default |
 | `bev_range_m` | `None` | fixed bird's-eye window size in metres; fitted to the trajectories by default |

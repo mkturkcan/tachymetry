@@ -1,84 +1,99 @@
 {
  "clip": {
-  "hero_time_s": 27.466666666666665,
-  "viewer_time_s": 13.466666666666667,
+  "hero_time_s": 29.466666666666665,
+  "viewer_time_s": 19.133333333333333,
   "summary": {
-   "tracks": 44,
+   "tracks": 49,
    "by_class": {
-    "person": 9,
+    "person": 8,
+    "car": 28,
     "bus": 2,
-    "car": 31,
-    "bicycle": 2
+    "bicycle": 2,
+    "truck": 9
    },
    "moving_by_class": {
-    "person": 8,
     "bus": 2,
-    "car": 18,
-    "bicycle": 2
+    "car": 17,
+    "bicycle": 2,
+    "person": 7,
+    "truck": 3
    },
    "parked_by_class": {
-    "car": 13
+    "car": 11,
+    "truck": 6
    },
    "rejected": {
     "rider": 2,
     "ghost": 1,
-    "duplicate": 2
+    "duplicate": 1
    },
    "vehicle_speed_kmh": {
-    "median": 25.01,
-    "p85": 35.98,
-    "max": 55.4
+    "median": 24.83,
+    "p85": 34.99,
+    "max": 59.33
    }
   },
-  "camera": "f=2211.9px (hfov 46.9 deg), height=27.83 m, pitch=17.85 deg, roll=-0.08 deg, yaw=134.3 deg, lens=identity"
+  "camera": "f=2181.8px (hfov 47.5 deg), height=27.71 m, pitch=17.89 deg, roll=-0.18 deg, yaw=133.8 deg, lens=identity"
  },
  "raw_vs_clean": {
-  "frame": 404,
-  "raw_boxes_in_frame": 54,
-  "raw_associations": 80,
-  "tachymetry_tracks": 44
+  "frame": 574,
+  "raw_boxes_in_frame": 52,
+  "raw_associations": 120,
+  "tachymetry_tracks": 49
  },
  "calibration_clip": {
-  "fused": {
-   "method": "auto:fused",
-   "camera": "f=2212.2px (hfov 46.9 deg), height=27.82 m, pitch=17.85 deg, roll=-0.09 deg, yaw=134.2 deg, lens=identity",
-   "focal_px": 2212.197969670455,
-   "height_m": 27.824420081123915,
-   "pitch_deg": 17.8498693705625,
-   "roll_deg": -0.0883610895232682,
-   "seconds": 10.2
+  "auto": {
+   "method": "auto:fov+vp",
+   "camera": "f=2181.8px (hfov 47.5 deg), height=27.71 m, pitch=17.89 deg, roll=-0.18 deg, yaw=133.8 deg, lens=identity",
+   "focal_px": 2181.765963769613,
+   "height_m": 27.709480445935142,
+   "pitch_deg": 17.892957180575934,
+   "roll_deg": -0.1844990532755718,
+   "scale": {
+    "scale": "vehicle silhouettes",
+    "factor": 27.70948044593515,
+    "cost": 0.6979929590630961,
+    "n_masks": 84,
+    "n_tracklets": 23
+   },
+   "seconds": 17.9
   },
   "lines": {
    "method": "auto:lines",
-   "camera": "f=1777.3px (hfov 56.7 deg), height=21.40 m, pitch=18.13 deg, roll=-3.10 deg, yaw=127.6 deg, lens=identity",
+   "camera": "f=1777.3px (hfov 56.7 deg), height=18.68 m, pitch=18.13 deg, roll=-3.10 deg, yaw=127.6 deg, lens=identity",
    "focal_px": 1777.349852825967,
-   "height_m": 21.399426418897065,
+   "height_m": 18.682418374300415,
    "pitch_deg": 18.128510115162406,
    "roll_deg": -3.0973840235938224,
-   "seconds": 9.9
-  },
-  "cuboids": {
-   "method": "auto:cuboids",
-   "camera": "f=2294.3px (hfov 45.4 deg), height=29.05 m, pitch=17.80 deg, roll=-0.19 deg, yaw=139.9 deg, lens=identity",
-   "focal_px": 2294.3038411387192,
-   "height_m": 29.04619147490779,
-   "pitch_deg": 17.795962825436643,
-   "roll_deg": -0.18651806097578746,
-   "seconds": 0.3
+   "scale": {
+    "scale": "vehicle silhouettes",
+    "factor": 18.682418374300415,
+    "cost": 1.0751742508006197,
+    "n_masks": 84,
+    "n_tracklets": 23
+   },
+   "seconds": 17.7
   },
   "depth": {
    "method": "auto:depth",
-   "camera": "f=1792.5px (hfov 56.3 deg), height=31.59 m, pitch=22.92 deg, roll=-3.48 deg, yaw=110.4 deg, lens=identity",
+   "camera": "f=1792.5px (hfov 56.3 deg), height=30.54 m, pitch=22.92 deg, roll=-3.48 deg, yaw=90.0 deg, lens=identity",
    "focal_px": 1792.4893264127572,
-   "height_m": 31.58594681514723,
+   "height_m": 30.539564870252452,
    "pitch_deg": 22.918989318586082,
    "roll_deg": -3.4837468278634014,
-   "seconds": 4.1
+   "scale": {
+    "scale": "vehicle silhouettes",
+    "factor": 29.20084493598744,
+    "cost": 0.7442215046656157,
+    "n_masks": 84,
+    "n_tracklets": 23
+   },
+   "seconds": 17.2
   }
  },
  "synthetic_calibration": {
   "true_camera": "f=914.0px (hfov 70.0 deg), height=8.00 m, pitch=32.00 deg, roll=1.50 deg, yaw=55.0 deg, lens=identity",
-  "seconds": 13.1,
+  "seconds": 41.2,
   "rows": {
    "manual": {
     "method": "manual",
@@ -90,7 +105,9 @@
     "scale_pct": 0.05910322379640842,
     "ground_rms_m": 0.019003252505348633,
     "n_eval": 2304,
-    "cv_rmse_m": 0.09395819842235432
+    "cv_rmse_m": 0.09395819842235432,
+    "scale": null,
+    "candidates": null
    },
    "lines": {
     "method": "lines",
@@ -102,21 +119,80 @@
     "scale_pct": -1.8364884269457593,
     "ground_rms_m": 0.28631360907445885,
     "n_eval": 2304,
-    "cv_rmse_m": null
-   },
-   "cuboids": {
-    "method": "cuboids",
-    "camera": "f=868.7px (hfov 72.8 deg), height=7.71 m, pitch=32.69 deg, roll=1.82 deg, yaw=61.8 deg, lens=identity",
-    "focal_pct": -4.963100696665516,
-    "pitch_deg": 0.6857812054784205,
-    "roll_deg": 0.31900406165506645,
-    "height_m": -0.2930898861599607,
-    "scale_pct": -0.6033204693143945,
-    "ground_rms_m": 0.26185906946003945,
-    "n_eval": 2304,
-    "cv_rmse_m": null
+    "cv_rmse_m": null,
+    "scale": null,
+    "candidates": null
    },
    "auto": {
+    "method": "auto:lines",
+    "camera": "f=889.6px (hfov 71.5 deg), height=7.61 m, pitch=32.43 deg, roll=1.83 deg, yaw=55.5 deg, lens=identity",
+    "focal_pct": -2.672496982748546,
+    "pitch_deg": 0.4282142943284484,
+    "roll_deg": 0.3299865349101896,
+    "height_m": -0.38926232670403316,
+    "scale_pct": 3.184228164882108,
+    "ground_rms_m": 0.41388362042305565,
+    "n_eval": 2304,
+    "cv_rmse_m": null,
+    "scale": {
+     "scale": "vehicle silhouettes",
+     "factor": 7.610737673295965,
+     "cost": 0.4682424000271259,
+     "n_masks": 92,
+     "n_tracklets": 28
+    },
+    "candidates": [
+     {
+      "method": "lines",
+      "score": 0.9999999999999979,
+      "camera": "f=889.6px (hfov 71.5 deg), height=1.00 m, pitch=32.43 deg, roll=1.83 deg, yaw=55.5 deg, lens=identity",
+      "consistency": {
+       "vp_residual_deg": 6.3611093629270335e-15,
+       "score": 0.9999999999999979
+      }
+     }
+    ]
+   },
+   "auto_fov": {
+    "method": "auto:fov+vp",
+    "camera": "f=914.0px (hfov 70.0 deg), height=7.75 m, pitch=31.89 deg, roll=1.41 deg, yaw=54.8 deg, lens=identity",
+    "focal_pct": 0.0,
+    "pitch_deg": -0.10827977920720144,
+    "roll_deg": -0.09090951348320497,
+    "height_m": -0.24707270127267122,
+    "scale_pct": 2.3701777773317945,
+    "ground_rms_m": 0.2862297919380945,
+    "n_eval": 2304,
+    "cv_rmse_m": null,
+    "scale": {
+     "scale": "vehicle silhouettes",
+     "factor": 7.75292729872733,
+     "cost": 0.4624858687244004,
+     "n_masks": 92,
+     "n_tracklets": 28
+    },
+    "candidates": [
+     {
+      "method": "fov+vp",
+      "score": 0.949465422759272,
+      "camera": "f=914.0px (hfov 70.0 deg), height=1.00 m, pitch=31.89 deg, roll=1.41 deg, yaw=90.0 deg, lens=identity",
+      "consistency": {
+       "vp_residual_deg": 0.15556849696452435,
+       "score": 0.949465422759272
+      }
+     },
+     {
+      "method": "lines",
+      "score": 0.9999999999999979,
+      "camera": "f=889.6px (hfov 71.5 deg), height=1.00 m, pitch=32.43 deg, roll=1.83 deg, yaw=55.5 deg, lens=identity",
+      "consistency": {
+       "vp_residual_deg": 6.3611093629270335e-15,
+       "score": 0.9999999999999979
+      }
+     }
+    ]
+   },
+   "auto_cuboids": {
     "method": "auto:lines",
     "camera": "f=889.6px (hfov 71.5 deg), height=7.93 m, pitch=32.43 deg, roll=1.83 deg, yaw=55.5 deg, lens=identity",
     "focal_pct": -2.672496982748546,
@@ -126,7 +202,50 @@
     "scale_pct": -0.9594866716188033,
     "ground_rms_m": 0.2097317458586046,
     "n_eval": 2304,
-    "cv_rmse_m": null
+    "cv_rmse_m": null,
+    "scale": {
+     "scale": 7.929160160758142,
+     "n": 351,
+     "n_width_based": 152,
+     "n_length_based": 298,
+     "scale_width_only": 7.688271359402702,
+     "scale_length_only": 7.990213132940211
+    },
+    "candidates": [
+     {
+      "method": "lines",
+      "score": 0.3483661640561204,
+      "camera": "f=889.6px (hfov 71.5 deg), height=1.00 m, pitch=32.43 deg, roll=1.83 deg, yaw=55.5 deg, lens=identity",
+      "consistency": {
+       "footprint_right_angle_deg": 8.918175668139945,
+       "size_range_slope": 0.024402538499978886,
+       "vp_residual_deg": 6.3611093629270335e-15,
+       "score": 0.3483661640561204
+      }
+     },
+     {
+      "method": "cuboids",
+      "score": 0.27877028398841014,
+      "camera": "f=868.7px (hfov 72.8 deg), height=7.71 m, pitch=32.69 deg, roll=1.82 deg, yaw=61.8 deg, lens=identity",
+      "consistency": {
+       "footprint_right_angle_deg": 8.865175220492734,
+       "size_range_slope": 0.056991604303338654,
+       "vp_residual_deg": 0.032716921336868945,
+       "score": 0.27877028398841014
+      }
+     },
+     {
+      "method": "fused",
+      "score": 0.2701951321854314,
+      "camera": "f=882.9px (hfov 71.9 deg), height=1.00 m, pitch=32.33 deg, roll=1.65 deg, yaw=90.0 deg, lens=identity",
+      "consistency": {
+       "footprint_right_angle_deg": 8.922386486185127,
+       "size_range_slope": 0.05772013090238297,
+       "vp_residual_deg": 0.09471404374564416,
+       "score": 0.2701951321854314
+      }
+     }
+    ]
    }
   }
  },
@@ -222,7 +341,7 @@
      }
     }
    },
-   "seconds": 6.4
+   "seconds": 6.2
   },
   "equidistant": {
    "true": "equidistant (tan), s = 900 px",
@@ -407,7 +526,7 @@
      }
     }
    },
-   "seconds": 6.7
+   "seconds": 6.9
   },
   "fisheye": {
    "true": "Kannala-Brandt, k1 = 0.05, k2 = -0.01",
@@ -500,176 +619,217 @@
      }
     }
    },
-   "seconds": 6.9
+   "seconds": 6.6
   }
  },
  "gallery": {
   "intersection-day": {
-   "time_s": 27.47,
-   "calibration": "auto:fused",
-   "camera": "f=2211.9px (hfov 46.9 deg), height=27.83 m, pitch=17.85 deg, roll=-0.08 deg, yaw=134.3 deg, lens=identity",
+   "time_s": 29.47,
+   "calibration": "auto:fov+vp",
+   "camera": "f=2181.8px (hfov 47.5 deg), height=27.71 m, pitch=17.89 deg, roll=-0.18 deg, yaw=133.8 deg, lens=identity",
    "size": [
     1920,
     1080
    ],
-   "tracks": 44,
+   "tracks": 49,
    "by_class": {
-    "person": 9,
+    "person": 8,
+    "car": 28,
     "bus": 2,
-    "car": 31,
-    "bicycle": 2
+    "bicycle": 2,
+    "truck": 9
    },
    "vehicle_speed_kmh": {
-    "median": 25.01,
-    "p85": 35.98,
-    "max": 55.4
+    "median": 24.83,
+    "p85": 34.99,
+    "max": 59.33
    },
    "attribution": "svbrd-llm-roadside-video-av by Ryan-xiangyu-ut (Hugging Face), CC BY 4.0, https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av"
   },
   "intersection-day-2": {
-   "time_s": 14.53,
-   "calibration": "auto:fused",
-   "camera": "f=2297.5px (hfov 45.4 deg), height=29.09 m, pitch=17.38 deg, roll=-0.16 deg, yaw=135.6 deg, lens=identity",
+   "time_s": 14.2,
+   "calibration": "auto:fov+vp",
+   "camera": "f=2181.8px (hfov 47.5 deg), height=27.71 m, pitch=17.89 deg, roll=-0.18 deg, yaw=133.8 deg, lens=identity",
    "size": [
     1920,
     1080
    ],
-   "tracks": 41,
+   "tracks": 49,
    "by_class": {
-    "car": 38,
-    "bus": 3
+    "car": 35,
+    "truck": 7,
+    "bus": 5,
+    "person": 2
    },
    "vehicle_speed_kmh": {
-    "median": 32.62,
-    "p85": 45.21,
-    "max": 60.26
+    "median": 31.11,
+    "p85": 43.13,
+    "max": 58.83
    },
    "attribution": "svbrd-llm-roadside-video-av by Ryan-xiangyu-ut (Hugging Face), CC BY 4.0, https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av"
   },
   "intersection-day-3": {
-   "time_s": 28.0,
-   "calibration": "auto:fused",
-   "camera": "f=2314.4px (hfov 45.1 deg), height=29.17 m, pitch=17.41 deg, roll=-0.30 deg, yaw=135.4 deg, lens=identity",
+   "time_s": 20.93,
+   "calibration": "auto:fov+vp",
+   "camera": "f=2181.8px (hfov 47.5 deg), height=27.71 m, pitch=17.89 deg, roll=-0.18 deg, yaw=133.8 deg, lens=identity",
    "size": [
     1920,
     1080
    ],
-   "tracks": 91,
+   "tracks": 117,
    "by_class": {
-    "car": 60,
-    "person": 25,
-    "bus": 1,
-    "bicycle": 4,
-    "truck": 1
+    "person": 35,
+    "car": 59,
+    "truck": 17,
+    "bus": 3,
+    "bicycle": 3
    },
    "vehicle_speed_kmh": {
-    "median": 25.9,
-    "p85": 43.51,
-    "max": 76.1
+    "median": 25.69,
+    "p85": 41.75,
+    "max": 79.71
    },
    "attribution": "svbrd-llm-roadside-video-av by Ryan-xiangyu-ut (Hugging Face), CC BY 4.0, https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av"
   },
   "intersection-turn": {
-   "time_s": 3.87,
-   "calibration": "auto:fused",
-   "camera": "f=2078.9px (hfov 49.6 deg), height=25.08 m, pitch=17.19 deg, roll=1.11 deg, yaw=133.7 deg, lens=identity",
+   "time_s": 3.93,
+   "calibration": "auto:fov+vp",
+   "camera": "f=2181.8px (hfov 47.5 deg), height=27.71 m, pitch=17.89 deg, roll=-0.18 deg, yaw=133.8 deg, lens=identity",
    "size": [
     1920,
     1080
    ],
-   "tracks": 23,
+   "tracks": 32,
    "by_class": {
-    "car": 20,
+    "car": 27,
     "truck": 2,
-    "person": 1
+    "person": 3
    },
    "vehicle_speed_kmh": {
-    "median": 21.16,
-    "p85": 28.42,
-    "max": 44.76
+    "median": 20.33,
+    "p85": 27.59,
+    "max": 41.94
    },
    "attribution": "svbrd-llm-roadside-video-av by Ryan-xiangyu-ut (Hugging Face), CC BY 4.0, https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av"
   },
   "intersection-night": {
-   "time_s": 13.07,
-   "calibration": "auto:lines",
-   "camera": "f=2107.6px (hfov 49.0 deg), height=32.73 m, pitch=21.25 deg, roll=-2.55 deg, yaw=-147.5 deg, lens=identity",
+   "time_s": 17.33,
+   "calibration": "auto:fov+vp",
+   "camera": "f=2181.8px (hfov 47.5 deg), height=27.71 m, pitch=17.89 deg, roll=-0.18 deg, yaw=133.8 deg, lens=identity",
    "size": [
     1920,
     1080
    ],
-   "tracks": 7,
+   "tracks": 8,
    "by_class": {
-    "car": 7
+    "car": 8
    },
    "vehicle_speed_kmh": {
-    "median": 47.8,
-    "p85": 62.14,
-    "max": 67.4
+    "median": 50.08,
+    "p85": 65.61,
+    "max": 73.23
    },
    "attribution": "svbrd-llm-roadside-video-av by Ryan-xiangyu-ut (Hugging Face), CC BY 4.0, https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av"
   },
-  "roundabout-aerial": {
-   "time_s": 10.51,
-   "calibration": "auto:fused",
-   "camera": "f=1518.1px (hfov 64.6 deg), height=75.94 m, pitch=34.72 deg, roll=0.48 deg, yaw=124.3 deg, lens=identity",
-   "size": [
-    1920,
-    1080
-   ],
-   "tracks": 18,
-   "by_class": {
-    "car": 18
-   },
-   "vehicle_speed_kmh": {
-    "median": 36.73,
-    "p85": 51.74,
-    "max": 82.15
-   },
-   "attribution": "Roundabout 14 61 by Wikideas1 (Wikimedia Commons), CC0 1.0, https://commons.wikimedia.org/wiki/File:Roundabout_14_61.webm"
-  },
   "motorway-overpass": {
-   "time_s": 7.12,
-   "calibration": "auto:fused",
-   "camera": "f=2072.4px (hfov 34.3 deg), height=15.28 m, pitch=9.82 deg, roll=-0.01 deg, yaw=-0.6 deg, lens=identity",
+   "time_s": 5.68,
+   "calibration": "auto:fov+vp",
+   "camera": "f=1131.2px (hfov 59.0 deg), height=8.13 m, pitch=11.83 deg, roll=-1.49 deg, yaw=-1.3 deg, lens=identity",
    "size": [
     1280,
     720
    ],
-   "tracks": 45,
+   "tracks": 70,
    "by_class": {
-    "car": 38,
-    "truck": 7
+    "truck": 9,
+    "car": 61
    },
    "vehicle_speed_kmh": {
-    "median": 94.4,
-    "p85": 122.47,
-    "max": 151.7
+    "median": 59.64,
+    "p85": 76.3,
+    "max": 92.55
    },
    "attribution": "Small-Crowd-and-Traffic-Video-Footages by parsafaramarzi (Hugging Face), MIT, https://huggingface.co/datasets/parsafaramarzi/Small-Crowd-and-Traffic-Video-Footages"
   },
   "dhaka-roundabout": {
-   "time_s": 17.1,
+   "time_s": 19.69,
    "calibration": "known",
    "camera": "f=2825.2px (hfov 68.4 deg), height=111.70 m, pitch=90.00 deg, roll=0.00 deg, yaw=90.0 deg, lens=identity",
    "size": [
     3840,
     2160
    ],
-   "tracks": 286,
+   "tracks": 395,
    "by_class": {
-    "bicycle": 72,
-    "person": 85,
-    "motorcycle": 79,
-    "car": 39,
-    "truck": 11
+    "motorcycle": 222,
+    "car": 121,
+    "bicycle": 1,
+    "person": 38,
+    "truck": 13
    },
    "vehicle_speed_kmh": {
-    "median": 11.76,
-    "p85": 15.92,
-    "max": 33.2
+    "median": 11.88,
+    "p85": 15.86,
+    "max": 50.19
    },
    "attribution": "DRINF: Dhaka Road Intersection Nadir Footage by Hamim Mahmud (Hugging Face, doi:10.57967/hf/10301); 30 s excerpt from 2:20, CC BY 4.0, https://huggingface.co/datasets/hamimmahmud0/DRINF"
   }
+ },
+ "occlusion_bus": {
+  "paths": {
+   "masks": {
+    "samples": 64,
+    "centre_median_m": 0.32981775697886395,
+    "centre_max_m": 0.46407369201378085,
+    "heading_max_deg": 1.0694671106980749,
+    "length_m": 12.293463686261154,
+    "width_m": 2.5999999999999996,
+    "geometry": "boxfit",
+    "occluded_samples": 46
+   },
+   "boxes": {
+    "samples": 64,
+    "centre_median_m": 0.7955634429034792,
+    "centre_max_m": 1.4065547643168763,
+    "heading_max_deg": 10.567169704341856,
+    "length_m": 12.0,
+    "width_m": 2.55,
+    "geometry": null,
+    "occluded_samples": null
+   }
+  },
+  "moments_s": [
+   3.533333333333333,
+   4.666666666666667,
+   6.133333333333334
+  ],
+  "visible_share": [
+   0.9827153368922233,
+   0.6027456522366106,
+   0.981424495048397
+  ]
+ },
+ "dash_check": {
+  "sample": "motorway-overpass",
+  "camera": "f=1131.2px (hfov 59.0 deg), height=8.13 m, pitch=11.83 deg, roll=-1.49 deg, yaw=-1.3 deg, lens=identity",
+  "regularity": 0.018732499546035845,
+  "lines": [
+   {
+    "dashes": 5,
+    "length_m": [
+     2.97,
+     2.76,
+     2.81,
+     2.98,
+     3.07
+    ],
+    "period_m": [
+     9.11,
+     8.76,
+     8.64,
+     8.66
+    ]
+   }
+  ]
  }
 }

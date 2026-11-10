@@ -6,7 +6,18 @@ Tachymetry requires Python 3.10 to 3.13 and installs from GitHub:
 pip install git+https://github.com/mkturkcan/tachymetry
 ```
 
-The runtime dependencies (`pyproject.toml`) are NumPy, SciPy, OpenCV, Pillow, PyYAML, Rich, `huggingface_hub`, `imageio-ffmpeg` (a bundled FFmpeg for H.264 output), pandas, PyTorch 2.2 or newer, `rfdetr` 1.12 or newer (the default detector) and `transformers` 5.1 or newer (SAM 3). RF-DETR weights are downloaded to `~/.roboflow/models` (or `$RF_HOME`), other detector weights and the sample clips into the Hugging Face cache, on first use. UrbanOmniDetect-2 needs the optional `uod2` extra (below).
+The runtime dependencies (`pyproject.toml`) are NumPy, SciPy, OpenCV, Pillow, PyYAML, Rich, `huggingface_hub`, `imageio-ffmpeg` (a bundled FFmpeg for H.264 output), pandas, PyTorch 2.2 or newer, `transformers` 5.1 or newer (SAM 3, the default detector) and `rfdetr` 1.12 or newer (the RF-DETR alternatives). SAM 3 weights and the sample clips are downloaded into the Hugging Face cache on first use, RF-DETR weights to `~/.roboflow/models` (or `$RF_HOME`). UrbanOmniDetect-2 needs the optional `uod2` extra (below).
+
+## Access to SAM 3
+
+The SAM 3 checkpoint `facebook/sam3` is gated on Hugging Face. Request access on its [model page](https://huggingface.co/facebook/sam3), wait for the approval, then authenticate the machine once:
+
+```bash
+hf auth login                 # or set the HF_TOKEN environment variable
+tachymetry download           # fetches the default detector, sam3
+```
+
+Without an approved token, the first detection raises a `PermissionError` that repeats these steps. The RF-DETR detectors (`--detector rfdetr-seg-l`) need no access request.
 
 Check the installation and the compute devices:
 
@@ -55,7 +66,7 @@ pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install git+https://github.com/mkturkcan/tachymetry
 ```
 
-Detection dominates the run time on a CPU. A smaller detector (`--detector rfdetr-seg-s`), a lower analysis rate (`--rate 5`) and a smaller input size (`--imgsz 504`) reduce it; see the [configuration reference](guide/configuration.md).
+Detection dominates the run time on a CPU, and SAM 3 is the slowest back-end. An RF-DETR detector (`--detector rfdetr-seg-s`), a lower analysis rate (`--rate 5`) and a smaller input size (`--imgsz 504`) reduce it; see [Detection](guide/detection.md) and the [configuration reference](guide/configuration.md). The mask geometry of vehicle tracks runs on the CPU in all cases, at a median of 0.45 to 0.88 s per vehicle track on the sample clips ([Vehicle footprints](guide/footprints.md)).
 
 ## Optional extras
 
@@ -87,8 +98,8 @@ mkdocs serve
 Detector weights can be fetched ahead of time, for example on a machine that will later run without network access:
 
 ```bash
-tachymetry download                          # the default detector, rfdetr-seg-l
-tachymetry download --detector sam3          # needs approved access to facebook/sam3 and `hf auth login`
+tachymetry download                          # the default detector, sam3 (needs approved access and `hf auth login`)
+tachymetry download --detector rfdetr-seg-l  # an Apache-2.0 alternative
 ```
 
 The command prints the location of the checkpoint.

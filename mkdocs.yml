@@ -116,6 +116,7 @@ nav:
           - Pipeline overview: docs/guide/pipeline.md
           - Detection: docs/guide/detection.md
           - Association and track hygiene: docs/guide/tracking.md
+          - Vehicle footprints from masks: docs/guide/footprints.md
           - Cross-track verdicts: docs/guide/verdicts.md
           - Bird's-eye view and speed: docs/guide/bev-speed.md
       - Calibration:
@@ -139,6 +140,7 @@ nav:
   - Limitations: docs/limitations.md
   - API reference:
       - tachymetry: docs/reference/tachymetry.md
+      - tachymetry.detect: docs/reference/detect.md
       - tachymetry.geometry: docs/reference/geometry.md
       - tachymetry.calib: docs/reference/calib.md
       - tachymetry.tracking: docs/reference/tracking.md

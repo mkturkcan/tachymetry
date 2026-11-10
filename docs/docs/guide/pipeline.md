@@ -1,6 +1,6 @@
 # Pipeline overview
 
-`tachymetry.track()` and `tachymetry.Pipeline.run()` (`pipeline.py`) process one video through a fixed sequence of stages. Every stage after detection is deterministic given its inputs, and the two expensive stages (detection and automatic calibration) are cached in the run directory, so tracking, filtering and rendering settings can be changed and re-run without touching the GPU again.
+`tachymetry.track()` and `tachymetry.Pipeline.run()` (`pipeline.py`) process one video through a fixed sequence of stages. The stages after detection are deterministic given their inputs. Detection, which needs the GPU, and automatic calibration are cached in the run directory, so tracking, filtering and rendering settings can be changed and re-run on the CPU alone.
 
 <figure class="tm-diagram" style="width:100%;max-width:100%;margin:1.5em 0">
 <svg viewBox="0 0 980 340" role="img" aria-labelledby="tm-pipe-title" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;font-family:inherit">
@@ -21,7 +21,7 @@
 <path d="M860 233H876" marker-end="url(#tm-arrow)"/>
 </g>
 <rect x="-4" y="178" width="752" height="112" rx="16" fill="none" stroke="#6fe3ff" stroke-opacity="0.55" stroke-dasharray="5 5"/>
-<text x="6" y="308" font-size="12" fill="#6fe3ff">track.build_tracks: no GPU, a few seconds per clip</text>
+<text x="6" y="308" font-size="12" fill="#6fe3ff">tracking.build_tracks: CPU only; with masks, about 1 s per vehicle track</text>
 <g stroke="#ffb547" stroke-width="1.4" fill="#ffb547" fill-opacity="0.07">
 <rect x="0" y="30" width="120" height="74" rx="10"/>
 <rect x="150" y="30" width="190" height="74" rx="10"/>
@@ -52,12 +52,12 @@
 </g>
 <g font-size="11.5" fill="#9b9ca3" text-anchor="middle">
 <text x="60" y="82">file or images</text>
-<text x="245" y="82">boxes and cuboid corners</text>
+<text x="245" y="82">boxes and instance masks</text>
 <text x="455" y="82">median of 41 frames</text>
 <text x="665" y="82">auto, manual or given</text>
-<text x="75" y="248">contact, footprint, GSD</text>
+<text x="75" y="248">mask contact, GSD</text>
 <text x="240" y="248">BYTE, metric gate</text>
-<text x="405" y="248">split, smooth, referees</text>
+<text x="405" y="248">mask boxes, smooth, referees</text>
 <text x="555" y="248">fragments</text>
 <text x="685" y="248">ghosts, riders</text>
 <text x="810" y="248">CSV, JSON, ...</text>
@@ -69,25 +69,25 @@
 <text x="665" y="122">camera.json</text>
 </g>
 </svg>
-<figcaption>Stages of <code>Pipeline.run</code>. Amber: stages whose results are cached in the run directory (file names in amber). Grey: stages recomputed on every run. Rendering is optional.</figcaption>
+<figcaption>Stages of <code>Pipeline.run</code>. Amber: stages whose results are cached in the run directory (file names in amber). Grey: stages recomputed on each run. Rendering is optional.</figcaption>
 </figure>
 
 ## Stages
 
 | Stage | Implementation | Result | Cache file |
 |---|---|---|---|
-| Detection | `detect.backends.build_detector`, `detect.run.detect_video` | `DetectionSet`: boxes, scores, classes, instance masks or cuboid corners | `detections.npz`, `detections.json` |
+| Detection | `detect.backends.build_detector`, `detect.run.detect_video` | `DetectionSet`: boxes, scores, classes and, for segmenting detectors (`sam3`, the default, and `rfdetr-seg-*`), instance masks; cuboid corners for `uod2-*` | `detections.npz` (masks bit-packed), `detections.json` |
 | Background | `calib.lines.background_image` (temporal median of `calibration.background_frames = 41` frames spread evenly over the video) | traffic-free image | `background.jpg` |
-| Calibration | `pipeline.resolve_camera`, `calib.auto.calibrate_auto` | `Camera` (intrinsics, pose, lens) | `camera.json`, `camera.report.json`, `calibration_preview.jpg` |
-| Ground measurement | `tracking.measure.measure_ground` | contact point, footprint, ground sampling distance per detection | none |
+| Calibration | `pipeline.resolve_camera`, `calib.auto.calibrate_auto` (orientation from vanishing points or a known field of view, metric scale from vehicle silhouettes) | `Camera` (intrinsics, pose, lens) | `camera.json`, `camera.report.json`, `calibration_preview.jpg` |
+| Ground measurement | `tracking.measure.measure_ground` | contact point (the mask bottom-centre when a mask exists), cuboid footprint, ground sampling distance per detection | none |
 | Association | `tracking.builder.associate`, `tracking.associate.ByteTracker` | track id per detection | none |
-| Track hygiene | `tracking.hygiene.process_raw_track` | `Track` objects in metres | none |
+| Track hygiene | `tracking.hygiene.process_raw_track`; for vehicles with masks `tracking.maskgeom.vehicle_geometry` ([Vehicle footprints from masks](footprints.md)) | `Track` objects in metres | none |
 | Stitching | `tracking.verdicts.stitch_candidates`, then hygiene again on the joined rows | merged fragments | none |
 | Verdicts | `tracking.verdicts.mark_duplicates`, `mark_passengers_and_riders`, `mark_shadows`, `mark_ghosts` | `verdict` and `reason` per track | none |
 | Export | `results.TrackSet.export` | `tracks.csv`, `tracks_summary.csv`, `tracks.json` (default `exports = ("csv", "json")`) | |
 | Render | `render.video.render_video` | `overlay.mp4` | |
 
-The stages are documented in detail in [Detection](detection.md), [Calibration](calibration.md), [Association and track hygiene](tracking.md), [Verdicts](verdicts.md), [Bird's-eye view and speed](bev-speed.md), [Outputs](outputs.md) and [Rendering](rendering.md).
+The stages are documented in detail in [Detection](detection.md), [Calibration](calibration.md), [Association and track hygiene](tracking.md), [Vehicle footprints from masks](footprints.md), [Verdicts](verdicts.md), [Bird's-eye view and speed](bev-speed.md), [Outputs](outputs.md) and [Rendering](rendering.md).
 
 ## Video input
 
@@ -106,12 +106,12 @@ The stages are documented in detail in [Detection](detection.md), [Calibration](
 from tachymetry.data import sample_video
 from tachymetry.io import VideoSource
 
-with VideoSource(sample_video("roundabout-aerial")) as src:   # a WebM file
+with VideoSource(sample_video("motorway-overpass")) as src:
     print(src.backend, src.size, round(src.fps, 3), src.frame_count)
 ```
 
 ```text
-opencv (1920, 1080) 23.976 872
+opencv (1280, 720) 25.0 1060
 ```
 
 **Frame times.** Frame times are `index / fps`, with `fps` taken from the container; the timestamps that OpenCV reports are not used. The FFmpeg reader seeks by time and estimates the frame count from the container duration.
@@ -120,7 +120,7 @@ opencv (1920, 1080) 23.976 872
 
 The run directory doubles as a cache. `Pipeline.run` applies the following rules (`pipeline.py`):
 
-* **Detections** are reused when `detections.npz` and `detections.json` exist and the key stored in `detections.json` equals `_detector_key(config)`: the first 12 hexadecimal digits of the SHA-1 of the detector name, weights, `imgsz`, `conf`, `class_conf`, `classes`, `cuboid_conf`, the two nested-suppression thresholds and `rate_hz`. Changing any of these re-runs detection; changing tracker, hygiene, filter, export or render settings does not. Batch size, half precision and device are not part of the key. `keep_detections = False` disables writing the cache.
+* **Detections** are reused when `detections.npz` and `detections.json` exist and the key stored in `detections.json` equals `_detector_key(config)`: the first 12 hexadecimal digits of the SHA-1 of the detector name, weights, `imgsz`, `conf`, `class_conf`, `classes`, `cuboid_conf`, the two nested-suppression thresholds and `rate_hz`. Changing one of these re-runs detection; changing tracker, hygiene, filter, export or render settings does not. Batch size, half precision and device are not part of the key. `keep_detections = False` disables writing the cache.
 * **Background** is reused when `background.jpg` exists and has the video's resolution.
 * **Camera**: an explicit camera (a `Camera`, a camera JSON, a correspondence file, or a directory of per-video cameras) is used as given, resized with `Camera.resized` if the video has a different resolution, and written to `camera.json`. With `camera="auto"`, an existing `camera.json` with the video's resolution whose `meta.calibration_method` starts with `auto` is reused; otherwise automatic calibration runs and writes `camera.json`, `camera.report.json` and `calibration_preview.jpg`.
 
@@ -143,26 +143,28 @@ print(run.report["timings"])
 On the public sample clip, after a first full run into the same directory, this printed
 
 ```text
-{'detect_s': 0.02, 'calibrate_s': 0.02, 'track_s': 3.21, 'total_s': 3.36}
+{'detect_s': 0.03, 'calibrate_s': 0.01, 'track_s': 41.26, 'total_s': 41.51}
 ```
+
+With instance masks, the tracking time is dominated by the mask geometry, a median of 0.78 s of CPU per vehicle track on this clip ([Runtime](footprints.md#runtime)).
 
 ## Measured stage times
 
-One run of `tm.track(sample_video("intersection-day"), out=..., render=True)` with the default configuration on one NVIDIA RTX PRO 6000 Blackwell Max-Q (clip: 1920×1080, 30 fps, 30.97 s; 465 frames analysed at `rate_hz = 15`):
+One run of `tm.track(sample_video("intersection-day"), out=..., render=True, calibration__hfov_deg=47.5)` with the default configuration otherwise, on one NVIDIA RTX PRO 6000 Blackwell Max-Q and the CPU of that machine (clip: 1920×1080, 30 fps, 30.97 s; 465 frames analysed at `rate_hz = 15`; the [end-to-end example](../examples/intersection.md)):
 
 | Stage | Seconds |
 |---|---|
-| Detection (UrbanOmniDetect-2 X, `imgsz` 960, FP16, batch 8) | 6.60 |
-| Background and automatic calibration | 16.90 |
-| Ground measurement, association, hygiene, stitching, verdicts, export | 3.25 |
-| Rendering (`side` layout, 929 frames, H.264) | 28.56 |
-| Total | 55.51 |
+| Detection (SAM 3, 1008 × 1008, BF16, batch 8, model loading included) | 55.88 |
+| Background and automatic calibration | 23.29 |
+| Ground measurement, association, hygiene (incl. the mask geometry of about 40 vehicle tracks), stitching, verdicts, export | 41.34 |
+| Rendering (`side` layout, 929 frames, H.264) | 24.50 |
+| Total | 145.22 |
 
-The values are the `timings` block of `summary.json`. Detection time depends on the GPU, the detector size and `imgsz`; calibration time is dominated by line-segment detection and vanishing-point estimation on the background image and by the cuboid and fused least-squares fits.
+The values are the `timings` block of `summary.json`. Detection time depends on the GPU and the back-end ([Detection](detection.md#frame-rate-and-decoding)). Calibration time is dominated by line-segment detection and vanishing-point estimation on the background image and by the silhouette-scale search over car masks. Tracking time grows with the number of vehicle tracks that take the mask path ([Runtime](footprints.md#runtime)); with `hygiene.mask_geometry = False`, `build_tracks` took 3.8 s on a run of the same clip.
 
 ## Units and rates
 
-All thresholds are in seconds, metres, metres per second or fractions of the image (`config.py`), so a configuration behaves the same at any frame rate and resolution. `rate_hz` (default 15) selects the analysed frames: the frame stride is `round(fps / rate_hz)` (`VideoSource.stride_for`), so a 30 fps video is analysed at every second frame and a 25 fps video at `round(25 / 15) = 2`, i.e. 12.5 Hz. `rate_hz = 0` analyses every frame. Frame times are `index / fps` from the container frame rate (`io/video.py`), which assumes constant-frame-rate footage.
+All thresholds are in seconds, metres, metres per second or fractions of the image (`config.py`), so a configuration behaves the same across frame rates and resolutions. `rate_hz` (default 15) selects the analysed frames: the frame stride is `round(fps / rate_hz)` (`VideoSource.stride_for`), so a 30 fps video is analysed at one frame in two and a 25 fps video at `round(25 / 15) = 2`, i.e. 12.5 Hz. `rate_hz = 0` analyses all frames. Frame times are `index / fps` from the container frame rate (`io/video.py`), which assumes constant-frame-rate footage.
 
 ## Reloading a run
 
@@ -176,5 +178,5 @@ print(len(run.tracks), run.camera.describe())
 ```
 
 ```text
-45 f=2211.9px (hfov 46.9 deg), height=27.83 m, pitch=17.85 deg, roll=-0.08 deg, yaw=134.3 deg, lens=identity
+50 f=2181.8px (hfov 47.5 deg), height=27.21 m, pitch=17.88 deg, roll=-0.01 deg, yaw=134.0 deg, lens=identity
 ```

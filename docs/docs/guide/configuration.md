@@ -26,7 +26,7 @@ Values given as strings are converted to the type of the default (`"true"`/`"fal
 The command-line flags `--detector`, `--rate`, `--imgsz`, `--layout`, `--units` and `--formats` are shortcuts for `detector.name`, `rate_hz`, `detector.imgsz`, `render.layout`, `render.units` and `exports`.
 
 !!! note "Detection cache"
-    Detections are cached in `detections.npz` under a key computed from `detector.{name, weights, imgsz, conf, class_conf, classes, cuboid_conf, nested_containment, nested_ground_overlap}` and `rate_hz` (`pipeline._detector_key`). Changing any other key re-runs only calibration (if automatic), tracking and export.
+    Detections are cached in `detections.npz` under a key computed from `detector.{name, weights, imgsz, conf, class_conf, classes, cuboid_conf, nested_containment, nested_ground_overlap}` and `rate_hz` (`pipeline._detector_key`). Changing other keys re-runs only calibration (if automatic), tracking and export.
 
 ## All keys
 

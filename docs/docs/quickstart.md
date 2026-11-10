@@ -6,7 +6,7 @@
 tachymetry demo
 ```
 
-The demo downloads the clip `intersection-day` from [svbrd-llm-roadside-video-av](https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av) (CC BY 4.0; an elevated camera over a signalised intersection, 1920 x 1080 at 30 fps, 31 s), runs detection, automatic calibration and tracking, renders `overlay.mp4` and writes everything to `demo_run/`. Other clips are selected with `--sample` and the output directory with `-o`; the eight registered clips are a signalised intersection (five recordings), a roundabout seen from a hovering drone, a motorway seen from an overpass and a straight-down drone view of mixed traffic ([Sample clips](samples.md)). `tachymetry demo --sample dhaka-roundabout` uses that clip's known camera and detector input size ([Drone footage](examples/drone.md)).
+The demo downloads the clip `intersection-day` from [svbrd-llm-roadside-video-av](https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av) (CC BY 4.0; an elevated camera over a signalised intersection, 1920 x 1080 at 30 fps, 31 s), runs detection with SAM 3, automatic calibration with the 47.5° field of view registered for the clip, and tracking, renders `overlay.mp4` and writes everything to `demo_run/`. SAM 3 needs an approved access request and `hf auth login` once ([Installation](installation.md#access-to-sam-3)). Other clips are selected with `--sample` and the output directory with `-o`. The seven registered clips are five recordings of the intersection, a motorway seen from an overpass and a straight-down drone view of mixed traffic ([Sample clips](samples.md)); each runs with the camera or field of view registered for it, for example `tachymetry demo --sample dhaka-roundabout` ([Drone footage](examples/drone.md)).
 
 ## Your own videos
 
@@ -47,10 +47,10 @@ print(cars.groupby("track_id")["speed_kmh"].median().describe())
 
 ## Calibration
 
-`camera="auto"` (the default) calibrates each video automatically. To calibrate once and reuse the camera:
+`camera="auto"` (the default) calibrates each video automatically. Give the lens's horizontal field of view when it is known (`--hfov`, `calibration.hfov_deg`); for a fixed camera, calibrate once on its clearest clip and reuse the camera file for its other clips ([Calibration verification](guide/calibration.md#calibration-verification)):
 
 ```bash
-tachymetry calibrate auto clip.mp4 -o camera.json                     # writes camera_preview.jpg as well
+tachymetry calibrate auto clip.mp4 --hfov 60 -o camera.json           # writes camera_preview.jpg as well
 tachymetry calibrate lines clip.mp4 --scale height=8.5 -o camera.json # road markings and a known camera height
 tachymetry calibrate pick clip.mp4 --reference ortho.png --gsd 0.1    # click correspondences in the browser
 tachymetry calibrate manual clip.mp4 --points points.yaml -o camera.json
@@ -64,13 +64,13 @@ tachymetry run clip.mp4 --camera camera.json
 Any configuration key can be overridden on the command line or as a keyword argument, with `__` in place of the dot:
 
 ```bash
-tachymetry run clip.mp4 --detector rfdetr-seg-m --rate 10 --set detector.imgsz=1008 --set hygiene.max_gsd_m=0.25
+tachymetry run clip.mp4 --detector rfdetr-seg-l --rate 10 --set hygiene.max_gsd_m=0.25
 tachymetry config --dump defaults.yaml       # every key with its default
 tachymetry run clip.mp4 --config my.yaml     # partial files override the defaults
 ```
 
 ```python
-run = tm.track("clip.mp4", detector__name="rfdetr-seg-m", hygiene__max_gsd_m=0.25)
+run = tm.track("clip.mp4", detector__name="rfdetr-seg-l", hygiene__max_gsd_m=0.25)
 ```
 
 The keys are listed in the [configuration reference](guide/configuration.md).

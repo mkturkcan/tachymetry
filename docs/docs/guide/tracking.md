@@ -1,19 +1,20 @@
 # Association and track hygiene
 
-This page specifies how detections become metric trajectories: per-detection ground measurements (`tracking/measure.py`), online association (`tracking/associate.py`), and the offline per-track repair sequence (`tracking/hygiene.py`, `tracking/signal.py`). Cross-track reasoning (stitching and verdicts) follows in [Verdicts](verdicts.md). The defaults below are the values in `config.py` (`TrackerConfig`, `HygieneConfig`); constants that are not configurable are marked *fixed*.
+This page specifies how detections become metric trajectories: per-detection ground measurements (`tracking/measure.py`), online association (`tracking/associate.py`), and the offline per-track repair sequence (`tracking/hygiene.py`, `tracking/signal.py`). For vehicles with instance masks, the centre, heading and size come from the mask path described in [Vehicle footprints from masks](footprints.md). Cross-track reasoning (stitching and verdicts) follows in [Verdicts](verdicts.md). The defaults below are the values in `config.py` (`TrackerConfig`, `HygieneConfig`); constants that are not configurable are marked *fixed*.
 
 ## Ground measurements
 
-`measure_ground` computes, for every detection, quantities in world metres on the ground plane $z = 0$:
+`measure_ground` computes, for each detection, quantities in world metres on the ground plane $z = 0$:
 
 | Quantity | Definition |
 |---|---|
-| contact | ground point under the bottom-centre of the box, $\big(\tfrac{x_1 + x_2}{2}, y_2\big)$, i.e. the object edge nearest the camera |
+| contact | ground point under the bottom-centre of the box, $\big(\tfrac{x_1 + x_2}{2}, y_2\big)$, i.e. the object edge nearest the camera. With an instance mask (and `mask_geometry = True`), the mask bottom-centre instead: the mean column of the mask pixels in its lowest three rows, at the bottom edge of the lowest row, which lies on the object's own silhouette |
+| centroid | the mask centroid in the image (the box centre without a mask), used in steep views ([Centre estimation](#centre-estimation)) |
 | gsd | ground sampling distance at the contact: largest singular value of the image-to-ground Jacobian, metres per pixel ([Bird's-eye view](bev-speed.md#ground-sampling-distance)) |
 | valid | contact at least 2 px (*fixed*) below the horizon, finite, `gsd <= max_gsd_m` (0.30) and, if set, within `max_range_m` (default `None`) of the camera |
 | truncated | a box edge within $\max(3\,\text{px}, \texttt{edge\_margin\_frac} \cdot \text{diagonal})$ of the image border; `edge_margin_frac = 0.004` (8.8 px at 1920×1080) |
 | big | box wider than `big_box_frac = 0.45` of the image width or taller than 0.45 of its height |
-| footprint | from a trusted cuboid: the four ground corners, their centroid, heading, length and width |
+| footprint | from a trusted cuboid (`uod2-*` only): the four ground corners, their centroid, heading, length and width |
 
 A cuboid footprint is accepted only when its back-projected length $L$ and width $W$ lie in $[0.6\,L_{\min}, 1.4\,L_{\max}]$ and $[0.6\,W_{\min}, 1.4\,W_{\max}]$ of the class bounds below, the corner angle between edges 0-1 and 0-3 satisfies $|\cos| < 0.35$ (between 69.5° and 110.5°), and the contact is valid (*fixed* tolerances).
 
@@ -38,11 +39,11 @@ Q = \operatorname{diag}(\sigma_p^2 I_4, \sigma_v^2 I_4)\cdot\max\!\Big(\frac{\De
 R = \Big(\frac{h}{20}\Big)^2 I_4 .
 $$
 
-New tracks start with $P_0 = \operatorname{diag}\big((h/10)^2 I_4, (10\,h/160/\Delta t_0)^2 I_4\big)$ and zero velocity. Because $Q$ scales with $\Delta t$, the filter behaves the same at any `rate_hz`.
+New tracks start with $P_0 = \operatorname{diag}\big((h/10)^2 I_4, (10\,h/160/\Delta t_0)^2 I_4\big)$ and zero velocity. Because $Q$ scales with $\Delta t$, the filter behaves the same at different `rate_hz`.
 
 **Cost.** For predicted track boxes and detections, the cost is $c = (1 - \mathrm{DIoU})/2 \in [0, 1]$ with $\mathrm{DIoU} = \mathrm{IoU} - \rho^2 / d^2$, where $\rho$ is the distance between box centres and $d$ the diagonal of the smallest enclosing box. Unlike IoU, DIoU still ranks non-overlapping boxes, so fast objects at low frame rates associate.
 
-**Gates.** A pair is forbidden (cost $10^6$) when any of the following holds:
+**Gates.** A pair is forbidden (cost $10^6$) when one of the following holds:
 
 1. the detection's super-class differs from the track's (`super_class_gating = True`);
 2. IoU is below the stage minimum (0 in stage 1, `min_iou_low = 0.20` in stage 2);
@@ -55,7 +56,7 @@ New tracks start with $P_0 = \operatorname{diag}\big((h/10)^2 I_4, (10\,h/160/\D
 
 ## Per-track hygiene
 
-`process_raw_track` turns the detection rows of one raw track into zero or more clean tracks. The steps run in the order below. Counters of every step are reported in `summary.json` under `report.hygiene` (`HygieneStats`).
+`process_raw_track` turns the detection rows of one raw track into zero or more clean tracks. The steps run in the order below. Counters of the steps are reported in `summary.json` under `report.hygiene` (`HygieneStats`).
 
 ### Validity and frame uniqueness
 
@@ -65,7 +66,7 @@ Rows with `valid = False` are removed, and when a track holds two detections in 
 
 The class of a track is the label with the largest summed weight $s \cdot \sqrt{A} \cdot \kappa$, with detection score $s$, box area $A$ and centrality
 $\kappa = \operatorname{clip}\!\big(1 - 0.8\,|x_m - W/2| / (W/2), 0.05, 1\big)\cdot\big(0.4 + 0.6\,\operatorname{clip}(y_2 / H, 0, 1)\big)$,
-so central, near-field views dominate (`class_vote`). The vote is repeated for every segment after splitting.
+so central, near-field views dominate (`class_vote`). The vote is repeated for each segment after splitting.
 
 ### Presplit at gaps and teleports
 
@@ -75,7 +76,7 @@ $$
 v_\text{tele}\,\Delta t + 3\sqrt{s_i^2 + s_{i+1}^2},\qquad s = \max(\texttt{position\_noise\_m}, 3\,\text{gsd}),
 $$
 
-with `position_noise_m = 0.25` m and `teleport_speed_mps = {vehicle: 55, two_wheeler: 25, person: 8}` m/s. Every resulting run is kept and processed separately.
+with `position_noise_m = 0.25` m and `teleport_speed_mps = {vehicle: 55, two_wheeler: 25, person: 8}` m/s. All resulting runs are kept and processed separately.
 
 ### Identity-switch split
 
@@ -96,6 +97,8 @@ A segment is dropped if it has fewer than 3 samples, lasts less than `min_track_
 
 ### Centre estimation
 
+Vehicle tracks whose detections carry instance masks on at least `mask_min_share` = 0.5 of their usable samples take the mask path ([Vehicle footprints from masks](footprints.md)): mask contact, envelope anchor and a calibrated box fit with shared dimensions. The box-only model below applies to persons and two-wheelers, to detectors without masks, and with `mask_geometry = False`.
+
 `footprints = True` (with `False`, the contact point itself is used, which is the "bottom-centre" baseline of the [benchmarks](../benchmarks.md)). The goal is the centre of the ground footprint, which the box bottom misses for two reasons: the bottom of the box images the footprint edge nearest the camera, and that edge (bumper or wheel bottom) sits above the ground, so its back-projection overshoots along the viewing ray.
 
 For a sample with contact $g$, horizontal camera position $C$, ray direction $\hat r = (g - C)/\lVert g - C\rVert$, range $d = \lVert g - C \rVert$, heading $\psi$ and ray azimuth $\alpha$:
@@ -110,7 +113,19 @@ where $e$ is the extent of the footprint along the ray, $h_c$ the class clearanc
 
 The heading $\psi$ for this model comes from a preliminary smoothing of the contact path (window $\max(1.5\,\text{s}, \texttt{smooth\_window\_s})$, order 1), used where the speed exceeds 1 m/s and held through stops; without motion, the axial mean of the footprint headings; without footprints, the ray direction.
 
+**Steep views.** The model assumes that the lowest image point of an object is its side facing the camera, which holds while the camera's nadir lies well below the image. In steep views the lowest image point is merely one side of the object. There, the image centroid of the object (`centroid` above), intersected with the horizontal plane at a class height (`CENTROID_HEIGHTS`: car 0.75 m, bus and truck 1.6 m, two-wheelers 0.55 m, person 0.9 m), lies above the footprint centre. The model therefore moves from the ray offset to this centroid point as the depression angle of the sample rises through `steep_view_deg` = (60°, 80°), with a smoothstep weight, so that a track crossing the band keeps continuous position and velocity. Oblique cameras, whose samples stay below 60°, are unaffected.
+
 Where trusted footprints exist, the footprint centroid replaces the model at those samples, and the residual between footprint centroid and model is interpolated in time to the other samples, fading linearly to zero between 1 and 3 s away from the nearest footprint sample (*fixed*). Samples measured from a footprint carry the `FOOTPRINT` flag.
+
+### Partial visibility
+
+Box-only vehicle tracks (not the mask path, which handles occlusion with the shared box) are checked for samples at which the vehicle is partly hidden by an occluder or the frame (`_partial_visibility`), from the ratio of the detection box to the projection of the track's own 3D box:
+
+* a sample without a 3D footprint whose box covers less than 0.55 (*fixed*) of the expected box width or height;
+* a sample whose 3D footprint is shorter than `partial_footprint_ratio` = 0.7 times the vehicle's length while its box is also smaller than usual;
+* occlusion onset or exit at a track end: the run of samples, contiguous with the end, whose box width or height ratio falls below `end_shrink` = 0.9 times the track's median ratio. A vehicle passing behind a tree or a building keeps moving while its box stops growing or shrinks. The test applies to vehicles that move more than 3 m, and to at most a quarter of the track at each end (*fixed*).
+
+Partly visible ends are trimmed, and the track is rebuilt from the remaining samples; partly visible samples inside the track are interpolated.
 
 ### Outlier repair
 
@@ -128,17 +143,19 @@ Where trusted footprints exist, the footprint centroid replaces the model at tho
 
 At 15 Hz, $\Delta t = 1/15$ s, so the median filter spans 7 samples and the Savitzky-Golay window 19 samples (`signal.odd` rounds to the next odd count).
 
+**Inconsistent gap bridges.** Linear interpolation across a gap puts the chord between the last position before the gap and the first after it into the velocities on both sides. When the two positions are inconsistent, for example a re-acquired box of different extent or a partly visible object, this appears as speed. For each gap longer than `vel_gap_s` = 0.5 s (*fixed*), the chord velocity is compared with the mean of the velocities measured on its two sides, each side differentiated on its own. If they differ by more than $\max(1.5\ \text{m/s}, 0.3\,\lvert\bar v\rvert)$ (`BRIDGE_TOL_MPS`), each side keeps its own derivative within half a smoothing window of the gap, and samples inside the gap interpolate between the two sides. Positions keep the bridge, and consistent bridges are differentiated as before.
+
 ### End-fold trimming
 
 Also controlled by `trim`. A track end is cut when it forms a hook: if the track is at least $3\times$`fold_dist_m` = 6 m long and still moving at its end (speed at least `move_speed_kmh = 3`), the last `fold_dist_m = 2.0` m of path is compared with the preceding 2 m; if the two chords (both at least 0.3 m long, *fixed*) turn by more than `fold_deg = 45°`, the samples of the final 2 m are removed. The same test runs on the reversed track for its start. The track is dropped if fewer than 3 samples or less than `min_track_s` remain.
 
 ### Kinematics and hold-still
 
-Speed is the norm of the smoothed velocity. The heading is $\operatorname{atan2}(v_y, v_x)$ where the speed exceeds `move_speed_kmh = 3.0` km/h and is held (forward-filled, then back-filled) through slower samples. With `hold_still = True`, every run of samples slower than `stop_speed_kmh = 1.5` km/h that lasts at least 0.6 s and whose raw measurements have an RMS radius of at most 0.6 m about their median (both *fixed*) is frozen at that median with zero velocity and flagged `HELD`. This removes the phantom speed of jittering positions of stopped vehicles.
+Speed is the norm of the smoothed velocity. The heading is $\operatorname{atan2}(v_y, v_x)$ where the speed exceeds `move_speed_kmh = 3.0` km/h and is held (forward-filled, then back-filled) through slower samples. With `hold_still = True`, each run of samples slower than `stop_speed_kmh = 1.5` km/h that lasts at least 0.6 s and whose raw measurements have an RMS radius of at most 0.6 m about their median (both *fixed*) is frozen at that median with zero velocity and flagged `HELD`. This removes the phantom speed of jittering positions of stopped vehicles.
 
 ### Parked classification
 
-`parked = True`, for vehicles and two-wheelers. With `moving_share` the fraction of samples faster than 3 km/h, `rog` the RMS radius of the raw measurements about their median, `net` the end-to-end displacement and `path` the smoothed path length, a track is parked when any of these holds:
+`parked = True`, for vehicles and two-wheelers. With `moving_share` the fraction of samples faster than 3 km/h, `rog` the RMS radius of the raw measurements about their median, `net` the end-to-end displacement and `path` the smoothed path length, a track is parked when one of these holds:
 
 1. `rog < parked_radius_m` (1.2 m) and `moving_share < parked_moving_share` (0.30);
 2. `moving_share < 0.3` and `net < 3.0` m (*fixed*);
@@ -167,11 +184,12 @@ Each track sample carries bit flags (`tracking.model.Flags`), exported in `track
 | Flag | Value | Meaning |
 |---|---|---|
 | `OBSERVED` | 1 | the position is backed by a detection at this sample |
-| `INTERPOLATED` | 2 | no usable measurement (truncated or big box); position from neighbours |
+| `INTERPOLATED` | 2 | no usable measurement (truncated or big box, partly visible, or hidden behind an occluder); position from neighbours |
 | `REPAIRED` | 4 | an outlier replaced by the local median |
 | `TRUNCATED` | 8 | the box touched the image border |
 | `HELD` | 16 | position frozen during a stop or for a parked vehicle; speed zero |
-| `FOOTPRINT` | 32 | centre measured from a trusted cuboid footprint |
+| `FOOTPRINT` | 32 | centre measured from a footprint: a trusted cuboid or an accepted silhouette box fit |
+| `SILHOUETTE` | 64 | centre and heading from the calibrated box fit to the instance mask ([Vehicle footprints from masks](footprints.md)) |
 
 ## Configuration
 

@@ -1,6 +1,6 @@
 # Lens models
 
-Wide-angle surveillance lenses bend straight lines, and an uncorrected lens biases every ground position away from the image centre. Tachymetry models distortion as a mapping between *raw* pixels (as recorded) and *rectified* pixels (the ideal pinhole image of the same size, with the same $K$). All models are radially symmetric about a distortion centre $c$ (default: the image centre $((w-1)/2, (h-1)/2)$), so a raw pixel $p_d$ at radius $r_d = \lVert p_d - c \rVert$ maps to
+Wide-angle surveillance lenses bend straight lines, and an uncorrected lens biases ground positions away from the image centre. Tachymetry models distortion as a mapping between *raw* pixels (as recorded) and *rectified* pixels (the ideal pinhole image of the same size, with the same $K$). All models are radially symmetric about a distortion centre $c$ (default: the image centre $((w-1)/2, (h-1)/2)$), so a raw pixel $p_d$ at radius $r_d = \lVert p_d - c \rVert$ maps to
 
 $$
 p_u = c + \frac{r_u(r_d)}{r_d}\,(p_d - c).
@@ -20,7 +20,7 @@ It is what results when a lens maps the angle $\theta$ between a ray and the opt
 
 - **One parameter.** $s$ (pixels) is the fisheye focal length; $s \to \infty$ is the pinhole. Estimators optimise $q = 1/s$, so the pinhole is the finite point $q = 0$, where the cost is smooth, instead of $s = \infty$. The admissible range is $q \in [0, 1.6 / S]$ with $S$ the half image diagonal (negative $q$, i.e. pincushion distortion, is clamped to the identity).
 - **Monotone over the whole image.** $r_u(r_d)$ increases strictly for $0 \le r_d < \pi s / 2$, and its inverse for all $r_u \ge 0$, so the model cannot fold back or inflate outside the region where it was fitted. Polynomial models such as Brown–Conrady can: with $k_2 = k_3 = 0$ and $k_1 < 0$, $r_d(r) = r(1 + k_1 r^2)$ peaks at $r = 1/\sqrt{-3 k_1}$ (normalised units). This matters when correspondences or line segments cover only part of the frame.
-- **No separate focal length.** Near the centre $r_u \approx r_d$, so the rectified image keeps the scale of the raw image, and the camera's focal length remains a parameter of $K$ alone. For a ground plane, any remaining focal-length difference is absorbed by the camera pose and homography, so lens and camera do not compete for the same degree of freedom (Kannala–Brandt, in contrast, carries its own radial unit `focal`).
+- **No separate focal length.** Near the centre $r_u \approx r_d$, so the rectified image keeps the scale of the raw image, and the camera's focal length remains a parameter of $K$ alone. For a ground plane, a remaining focal-length difference is absorbed by the camera pose and homography, so lens and camera do not compete for the same degree of freedom (Kannala–Brandt, in contrast, carries its own radial unit `focal`).
 
 Where it is used:
 
@@ -121,7 +121,7 @@ $$
 | `brown` | `focal` | half the image diagonal | $k_1, k_2$ |
 | `fisheye` | `focal` | half the image diagonal | $k_1, k_2$ |
 
-The defaults of `brown` and `fisheye` normalise by half the image diagonal, not by the camera's focal length as in OpenCV. To reuse OpenCV coefficients, construct the lens with `focal` equal to OpenCV's $f_x$ (square pixels assumed) and the principal point as `center`. Because every radius is measured in a unit tied to the image (or to the lens's own `focal`), the coefficients are resolution independent: `Camera.resized(new_size)` rescales the centre and the keys `scale`, `s` and `focal` by the mean of the horizontal and vertical scale factors and leaves the dimensionless coefficients unchanged.
+The defaults of `brown` and `fisheye` normalise by half the image diagonal, not by the camera's focal length as in OpenCV. To reuse OpenCV coefficients, construct the lens with `focal` equal to OpenCV's $f_x$ (square pixels assumed) and the principal point as `center`. Because all radii are measured in a unit tied to the image (or to the lens's own `focal`), the coefficients are resolution independent: `Camera.resized(new_size)` rescales the centre and the keys `scale`, `s` and `focal` by the mean of the horizontal and vertical scale factors and leaves the dimensionless coefficients unchanged.
 
 ## Estimation
 
@@ -129,18 +129,18 @@ The defaults of `brown` and `fisheye` normalise by half the image diagonal, not 
 
 `estimate_lens_plumbline(image, model="division")` (`calib/lines.py`; Devernay and Faugeras, 2001) estimates one parameter (division or equidistant) so that edge chains become straight:
 
-1. **Chains** (`edge_chains`): Canny edges (thresholds 60 and 160) of the Gaussian-blurred image ($\sigma = 1$); contours are halved, because a thin edge is traced on both sides; chains are sub-sampled every 6 points and split where the direction turns by more than 25 degrees; pieces with at least 5 points and a chord of at least 6 % of the image diagonal are kept, at most the 400 longest.
+1. **Chains** (`edge_chains`): Canny edges (thresholds 60 and 160) of the Gaussian-blurred image ($\sigma = 1$); contours are halved, because a thin edge is traced on both sides; chains are sub-sampled at one point in 6 and split where the direction turns by more than 25 degrees; pieces with at least 5 points and a chord of at least 6 % of the image diagonal are kept, at most the 400 longest.
 2. **Straightness** of a chain under a candidate lens: rectify its points and take the smallest singular value of the centred point matrix divided by $\sqrt{n}$, i.e. the RMS distance to the total-least-squares line.
 3. **Objective**: the mean squared straightness of the 50 % most straight chains (`trim=0.5`, at least 3), so curved world structure is ignored.
 4. **Search**: 61 grid values over the parameter bounds, then a bounded scalar minimisation between the neighbours of the best grid value.
 
-`info` reports `residual_px` and `residual_identity_px` (the objective without correction). With fewer than 5 chains the identity is returned. The trimmed objective is minimised by any parameter for which half of the chains are straight; chains that pass close to the distortion centre are straight for every radial model. On the synthetic intersection of the [lens example](../examples/lens-rectification.md) (true division lens, $k = -0.27$), the 43 extracted chains had a straightness of 0.28 px under the identity and the estimate was $k = -0.068$. Plumb-line estimation needs long, off-centre straight edges (building facades, long kerbs) to be informative.
+`info` reports `residual_px` and `residual_identity_px` (the objective without correction). With fewer than 5 chains the identity is returned. The trimmed objective is minimised by all parameters for which half of the chains are straight; chains that pass close to the distortion centre are straight for all radial models. On the synthetic intersection of the [lens example](../examples/lens-rectification.md) (true division lens, $k = -0.27$), the 43 extracted chains had a straightness of 0.28 px under the identity and the estimate was $k = -0.068$. Plumb-line estimation needs long, off-centre straight edges (building facades, long kerbs) to be informative.
 
 ### Vanishing-point consistency
 
 `estimate_lens_vp_consistency(segments, image_size, model="division")` scores a candidate parameter by how well the rectified segments agree with common vanishing points: the segments are rectified, up to 3 vanishing points are found by sequential RANSAC (threshold 1.0 degree, 600 iterations, minimum support 2 %), and the score is the fraction of the total original segment length that supports them (original lengths, so rectification stretch near the border does not inflate the score). The parameter is the arg-max over a 19-value grid (division: $k \in [-0.9, 0.3]$; equidistant: $q = 1/s \in [0, 1.6/S]$) refined on a 9-value grid between the neighbours of the best value. There is no continuous refinement, so the estimate is quantised: steps of $1/60 \approx 0.017$ in $k$ for the division model and of $1.6 / (72 S)$ in $1/s$ for the equidistant model. `info["gain"]` is the score increase over the identity and `info["support_identity"]` the identity's score.
 
-`calibrate_from_lines` runs this estimator on all LSD segments of the raw image. With `lens="auto"` it estimates both the equidistant (`tan`) and the division model and keeps the one with the higher support; with `"tan"`, `"equidistant"` or `"division"` it estimates only that model. In every case the estimate is accepted only if the gain exceeds 0.08 and the support is more than 1.2 times the identity's; otherwise the pinhole is kept. The estimator works on short segments whose curvature is invisible, because it uses the consistency of their directions rather than their straightness.
+`calibrate_from_lines` runs this estimator on all LSD segments of the raw image. With `lens="auto"` it estimates both the equidistant (`tan`) and the division model and keeps the one with the higher support; with `"tan"`, `"equidistant"` or `"division"` it estimates only that model. In all cases the estimate is accepted only if the gain exceeds 0.08 and the support is more than 1.2 times the identity's; otherwise the pinhole is kept. The estimator works on short segments whose curvature is invisible, because it uses the consistency of their directions rather than their straightness.
 
 ### Joint estimation in manual calibration
 

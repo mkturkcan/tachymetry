@@ -17,7 +17,7 @@
 <p align="center">
   <a href="https://mkturkcan.github.io/tachymetry/"><img src="https://img.shields.io/badge/Project-Page-ffb547?style=flat-square" alt="Project page"></a>
   <a href="https://mkturkcan.github.io/tachymetry/docs/"><img src="https://img.shields.io/badge/Docs-Read-6fe3ff?style=flat-square" alt="Documentation"></a>
-  <a href="https://github.com/roboflow/rf-detr"><img src="https://img.shields.io/badge/Detector-RF--DETR-blue?style=flat-square" alt="RF-DETR"></a>
+  <a href="https://huggingface.co/facebook/sam3"><img src="https://img.shields.io/badge/Detector-SAM%203-blue?style=flat-square" alt="SAM 3"></a>
   <a href="https://github.com/mkturkcan/tachymetry/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/mkturkcan/tachymetry/ci.yml?branch=main&style=flat-square&label=tests" alt="Tests"></a>
   <img src="https://img.shields.io/badge/Python-3.10%E2%80%933.13-3776ab?style=flat-square" alt="Python 3.10 to 3.13">
   <img src="https://img.shields.io/badge/OS-Linux%20%7C%20Windows%20%7C%20macOS-555?style=flat-square" alt="Linux, Windows, macOS">
@@ -32,7 +32,7 @@
 pip install git+https://github.com/mkturkcan/tachymetry
 ```
 
-Python 3.10 or newer. On Windows with an NVIDIA GPU, install the CUDA build of PyTorch first, for example `pip install torch --index-url https://download.pytorch.org/whl/cu128`. Detector weights download on first use.
+Python 3.10 or newer. On Windows with an NVIDIA GPU, install the CUDA build of PyTorch first, for example `pip install torch --index-url https://download.pytorch.org/whl/cu128`. The default detector, SAM 3, is gated on Hugging Face: request access at [facebook/sam3](https://huggingface.co/facebook/sam3), then run `hf auth login`. Weights download on first use.
 
 ## Quick start
 
@@ -64,12 +64,12 @@ tachymetry devices                       # show GPUs and the worker plan
 report = tm.track_many(["site_a/", "site_b/*.mp4"], out="runs", devices="cuda:0,cuda:1")
 ```
 
-**Detection.** RF-DETR-Seg L is the default detector (boxes and instance masks, Apache-2.0 weights). SAM 3 (`--detector sam3`, text prompts per road class; the `facebook/sam3` checkpoint is gated on Hugging Face) and UrbanOmniDetect-2 (`--detector uod2-x`, 3D cuboid corners; `pip install "tachymetry[uod2]"`) are the alternatives.
+**Detection.** SAM 3 is the default detector. Its `vehicle` and `person` prompts give boxes and instance masks, and the class-evidence prompts (car, van, suv, bus, truck, bike, motorcycle) set each vehicle's class. RF-DETR-Seg (`--detector rfdetr-seg-l`, Apache-2.0 weights, 99 against 9.1 frames per second on one GPU, lower confidences) and UrbanOmniDetect-2 (`--detector uod2-x`, 3D cuboid corners, `pip install "tachymetry[uod2]"`) are the alternatives.
 
-**Calibration.** Automatic calibration combines learned vehicle cuboids, road-marking and vertical vanishing points, and vehicle-size statistics; it is the default (`camera="auto"`). Manual calibration uses clicked correspondences against an orthophoto, a site plan or GPS coordinates.
+**Calibration.** Automatic calibration (`camera="auto"`, the default) takes the camera orientation from road-marking and vertical vanishing points, or from a known horizontal field of view (`--hfov`), and the metric scale from vehicle silhouettes in the instance masks; dashed lane markings check the result. Manual calibration uses clicked correspondences against an orthophoto, a site plan or GPS coordinates.
 
 ```bash
-tachymetry calibrate auto clip.mp4 -o camera.json                       # with a preview image
+tachymetry calibrate auto clip.mp4 --hfov 47.5 -o camera.json           # known lens field of view; writes a preview
 tachymetry calibrate pick clip.mp4 --reference ortho.png --gsd 0.1     # click correspondences in the browser
 tachymetry calibrate manual clip.mp4 --points points.yaml -o camera.json
 tachymetry run clip.mp4 --camera camera.json
@@ -90,12 +90,12 @@ tachymetry run clip.mp4 --detector rfdetr-seg-m --rate 10 --set detector.imgsz=1
 ```
 
 ```python
-run = tm.track("clip.mp4", detector__name="sam3", hygiene__max_gsd_m=0.25)
+run = tm.track("clip.mp4", detector__name="rfdetr-seg-l", hygiene__max_gsd_m=0.25)
 ```
 
 ## Track filtering
 
-Detector and tracker output contains short-lived false positives, parked vehicles with apparent motion, identity switches, boxes truncated by the image border, and inflated speeds in the far field. Tachymetry processes each track with footprint-centre estimation, gap-aware zero-phase smoothing, splitting, end trimming and outlier repair, parked-vehicle detection, physical-validity checks and fragment stitching, followed by ghost, duplicate, passenger, rider and shadow verdicts. On simulated intersection traffic with ground truth (two camera geometries, three seeds each), speed MAE drops from 11.9–13.6 km/h for bottom-centre frame differencing to 0.45–0.87 km/h, median position error from 1.4–1.9 m to 0.03–0.04 m, and false tracks from 8.7–13.7 to 0–0.3 per run ([benchmarks](https://mkturkcan.github.io/tachymetry/docs/benchmarks/)).
+Detector and tracker output contains short-lived false positives, parked vehicles with apparent motion, identity switches, boxes truncated by the image border or hidden by occluders, and inflated speeds in the far field. Tachymetry fits one calibrated 3D box to the instance masks of each vehicle track (shared dimensions, a pose per frame, an occlusion-aware silhouette cost), then applies gap-aware zero-phase smoothing, splitting, end trimming and outlier repair, parked-vehicle detection, physical-validity checks and fragment stitching, followed by ghost, duplicate, passenger, rider and shadow verdicts. On simulated intersection traffic with ground truth (two camera geometries, three seeds each), speed MAE drops from 11.9–13.6 km/h for bottom-centre frame differencing to 0.47–0.78 km/h, median position error from 1.4–1.9 m to 0.03–0.04 m, and false tracks from 8.7–13.7 to 0 per run; on simulated instance masks, the mask geometry reduces the median heading error from 8.4–17.9° to 0.7–0.9° ([benchmarks](https://mkturkcan.github.io/tachymetry/docs/benchmarks/)).
 
 ## Documentation
 
@@ -114,4 +114,4 @@ The [documentation](https://mkturkcan.github.io/tachymetry/docs/) covers the pip
 
 ## License
 
-Tachymetry is released under the [Apache License 2.0](LICENSE). Its default detector, [RF-DETR](https://github.com/roboflow/rf-detr), is Apache-2.0 as well; the optional [UrbanOmniDetect-2](https://huggingface.co/mehmetkeremturkcan/UrbanOmniDetect-2) back-end (`pip install "tachymetry[uod2]"`) depends on [Ultralytics](https://github.com/ultralytics/ultralytics), which is licensed AGPL-3.0. The bundled Geist typeface is under the SIL Open Font License. The sample clips are downloaded on demand from their hosts and are not redistributed here: [svbrd-llm-roadside-video-av](https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av) (CC BY 4.0), [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Roundabout_14_61.webm) (CC0 1.0), [Small-Crowd-and-Traffic-Video-Footages](https://huggingface.co/datasets/parsafaramarzi/Small-Crowd-and-Traffic-Video-Footages) (MIT) and [DRINF](https://huggingface.co/datasets/hamimmahmud0/DRINF) (CC BY 4.0); see the [sample list](https://mkturkcan.github.io/tachymetry/docs/samples/).
+Tachymetry is released under the [Apache License 2.0](LICENSE). Detector weights are not distributed with it. [SAM 3](https://huggingface.co/facebook/sam3), the default, is downloaded from Hugging Face under Meta's licence terms after an access request; [RF-DETR](https://github.com/roboflow/rf-detr) weights are Apache-2.0; the optional [UrbanOmniDetect-2](https://huggingface.co/mehmetkeremturkcan/UrbanOmniDetect-2) back-end (`pip install "tachymetry[uod2]"`) depends on [Ultralytics](https://github.com/ultralytics/ultralytics), which is licensed AGPL-3.0. The bundled Geist typeface is under the SIL Open Font License. The sample clips are downloaded on demand from their hosts and are not redistributed here: [svbrd-llm-roadside-video-av](https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av) (CC BY 4.0), [Small-Crowd-and-Traffic-Video-Footages](https://huggingface.co/datasets/parsafaramarzi/Small-Crowd-and-Traffic-Video-Footages) (MIT) and [DRINF](https://huggingface.co/datasets/hamimmahmud0/DRINF) (CC BY 4.0); see the [sample list](https://mkturkcan.github.io/tachymetry/docs/samples/).

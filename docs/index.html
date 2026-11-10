@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tachymetry</title>
-<meta name="description" content="Metric trajectories, speeds and counts from traffic-camera video: 3D-cuboid detection, tracking with metric gating, automatic camera calibration and track filtering in one Python package.">
+<meta name="description" content="Metric trajectories, speeds and counts from traffic-camera video: SAM 3 instance masks, calibrated 3D vehicle boxes, tracking with metric gating, automatic camera calibration and track filtering in one Python package.">
 <meta name="author" content="Mehmet Kerem Turkcan">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Tachymetry">
@@ -327,7 +327,7 @@ footer .links { display: flex; gap: 18px; flex-wrap: wrap; }
       </div>
     </div>
   </div>
-  <p class="hero-note">A public intersection clip (svbrd-llm-roadside-video-av, CC&nbsp;BY&nbsp;4.0) at 27.5&nbsp;s. Move the pointer over the image to see Tachymetry's output.</p>
+  <p class="hero-note">A public intersection clip (svbrd-llm-roadside-video-av, CC&nbsp;BY&nbsp;4.0) at 29.5&nbsp;s. Move the pointer over the image to see Tachymetry's output.</p>
 </header>
 
 <main>
@@ -335,7 +335,7 @@ footer .links { display: flex; gap: 18px; flex-wrap: wrap; }
     <div class="wrap split">
       <div>
         <h2>Traffic cameras as metric sensors</h2>
-        <p class="lede">Tachymetry converts the video of a fixed traffic camera into road-user trajectories on the ground plane, in metres, with speeds, headings and counts per class. It detects road users with <a href="https://huggingface.co/mehmetkeremturkcan/UrbanOmniDetect-2">UrbanOmniDetect-2</a>, which also predicts the eight projected corners of a 3D cuboid for each one, calibrates the camera from those cuboids and from the road markings in the image, associates detections with gates in metres, and repairs, smooths and filters each track before export. On the 31&nbsp;s public sample clip, detection, calibration and tracking take <strong>27&nbsp;s on one GPU</strong> and produce <strong>44 tracks</strong>: 31 cars (13 of them parked), 2 buses, 2 cyclists and 9 pedestrians.</p>
+        <p class="lede">Tachymetry converts the video of a fixed traffic camera into road-user trajectories on the ground plane, in metres, with speeds, headings and counts per class. It segments road users with <a href="https://huggingface.co/facebook/sam3">SAM 3</a>, calibrates the camera from the road markings and the vehicle silhouettes in the image, fits a calibrated 3D box to the instance masks of each vehicle track, associates detections with gates in metres, and repairs, smooths and filters each track before export. On the 31&nbsp;s public sample clip, detection takes <strong>56&nbsp;s on one GPU</strong>, calibration and tracking 65&nbsp;s on the CPU, and the run keeps <strong>50 tracks</strong>: 29 cars and 9 pickups labelled truck (18 of them parked), 2 buses, 2 cyclists and 8 pedestrians.</p>
       </div>
       <div class="try">
         <h3>Try it</h3>
@@ -349,7 +349,7 @@ tachymetry demo</code></pre>
           </a>
           <a class="btn" href="docs/installation/">Installation</a>
         </div>
-        <small>Python 3.10 to 3.13 on Linux, Windows or macOS; CUDA, Apple MPS or CPU. Detector weights and the sample clip download on first use.</small>
+        <small>Python 3.10 to 3.13 on Linux, Windows or macOS; CUDA, Apple MPS or CPU. The SAM&nbsp;3 weights are gated: request access at <a href="https://huggingface.co/facebook/sam3">facebook/sam3</a> and run <code>hf auth login</code> once. Weights and the sample clip download on first use.</small>
       </div>
     </div>
   </section>
@@ -360,7 +360,7 @@ tachymetry demo</code></pre>
       <p class="lede">Every track is a sequence of footprint centres on the ground plane. The camera view draws each road user as a metric 3D box with its speed and a ground trail; the bird's-eye view draws the same instant on the orthorectified, traffic-free background, oriented with the camera looking up. Parked vehicles are drawn in grey without a speed.</p>
       <figure class="mt">
         <div class="frame viewer" id="viewer">
-          <img class="on" src="media/view_camera.jpg" width="1600" height="900" alt="The sample intersection clip at 13.5 seconds" loading="lazy">
+          <img class="on" src="media/view_camera.jpg" width="1600" height="900" alt="The sample intersection clip at 19.1 seconds" loading="lazy">
           <img src="media/view_tracks.jpg" width="1600" height="900" alt="The same frame with metric 3D boxes, ground trails and speeds" loading="lazy">
           <img src="media/view_bev.jpg" width="1600" height="900" alt="Bird's-eye view of the same instant with vehicle footprints and trails" loading="lazy">
         </div>
@@ -370,7 +370,7 @@ tachymetry demo</code></pre>
             <button type="button" aria-pressed="false" data-i="1">Tracks</button>
             <button type="button" aria-pressed="false" data-i="2">Bird's-eye view</button>
           </div>
-          <small>Public sample clip at 13.5&nbsp;s, automatic calibration.</small>
+          <small>Public sample clip at 19.1&nbsp;s, automatic calibration.</small>
         </div>
       </figure>
     </div>
@@ -378,40 +378,36 @@ tachymetry demo</code></pre>
 
   <section id="samples">
     <div class="wrap">
-      <h2>Eight public sample clips</h2>
-      <p class="lede">Tachymetry registers eight public clips that <code>tachymetry demo --sample &lt;name&gt;</code> downloads and processes. Five are recordings of one signalised intersection. The other three are a roundabout seen from a hovering drone, a motorway seen from an overpass, and dense mixed traffic at a roundabout filmed straight down from a drone. Each still is the camera-view render of one run. The straight-down clip uses a camera derived from the flight altitude and the lens's field of view (<a href="docs/examples/drone/">drone footage</a>); the others are calibrated automatically. Licences, credits and per-clip results are listed on the <a href="docs/samples/">sample page</a>.</p>
+      <h2>Seven public sample clips</h2>
+      <p class="lede">Tachymetry registers seven public clips that <code>tachymetry demo --sample &lt;name&gt;</code> downloads and processes. Five are recordings of one signalised intersection, which share one camera file. The other two are a motorway seen from an overpass and dense mixed traffic at a roundabout filmed straight down from a drone. Each still is the camera-view render of one run of the default pipeline. The intersection camera is calibrated automatically with its 47.5° field of view, the motorway camera with its 59° field of view, and the straight-down camera is derived from the flight altitude and the lens (<a href="docs/examples/drone/">drone footage</a>). Licences, credits and per-clip results are listed on the <a href="docs/samples/">sample page</a>.</p>
       <div class="gallery mt">
         <figure class="wide">
           <div class="frame"><img src="media/gallery/dhaka-roundabout.jpg" width="1280" height="720" alt="Straight-down drone view of dense mixed traffic at a roundabout with tracked road users" loading="lazy"></div>
           <figcaption><strong>Mixed traffic at a roundabout</strong>Drone, straight down &middot; known camera from the flight altitude &middot; <a href="https://huggingface.co/datasets/hamimmahmud0/DRINF">DRINF</a>, Hamim Mahmud, CC&nbsp;BY&nbsp;4.0</figcaption>
         </figure>
         <figure class="wide">
-          <div class="frame"><img src="media/gallery/roundabout-aerial.jpg" width="1280" height="720" alt="A roundabout seen obliquely from a hovering drone with tracked vehicles and speeds" loading="lazy"></div>
-          <figcaption><strong>Roundabout</strong>Hovering drone, oblique &middot; automatic calibration &middot; <a href="https://commons.wikimedia.org/wiki/File:Roundabout_14_61.webm">Wikideas1, Wikimedia Commons</a>, CC0&nbsp;1.0</figcaption>
-        </figure>
-        <figure class="wide">
           <div class="frame"><img src="media/gallery/motorway-overpass.jpg" width="1280" height="720" alt="A divided motorway seen from an overpass with tracked vehicles and speeds" loading="lazy"></div>
-          <figcaption><strong>Divided motorway</strong>Camera on an overpass &middot; automatic calibration &middot; <a href="https://huggingface.co/datasets/parsafaramarzi/Small-Crowd-and-Traffic-Video-Footages">parsafaramarzi</a>, MIT</figcaption>
+          <figcaption><strong>Divided expressway</strong>Camera on an overpass &middot; automatic calibration, 59&deg; field of view &middot; <a href="https://huggingface.co/datasets/parsafaramarzi/Small-Crowd-and-Traffic-Video-Footages">parsafaramarzi</a>, MIT</figcaption>
         </figure>
         <figure class="wide">
           <div class="frame"><img src="media/gallery/intersection-day.jpg" width="1280" height="720" alt="A signalised intersection from an elevated camera with tracked road users" loading="lazy"></div>
-          <figcaption><strong>Signalised intersection</strong>Elevated camera &middot; automatic calibration &middot; <a href="https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av">svbrd-llm-roadside-video-av</a>, CC&nbsp;BY&nbsp;4.0</figcaption>
+          <figcaption><strong>Signalised intersection</strong>Elevated camera &middot; automatic calibration, 47.5&deg; field of view &middot; <a href="https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av">svbrd-llm-roadside-video-av</a>, CC&nbsp;BY&nbsp;4.0</figcaption>
         </figure>
         <figure>
           <div class="frame"><img src="media/gallery/intersection-night.jpg" width="1280" height="720" alt="The intersection at night in infrared with tracked vehicles" loading="lazy"></div>
-          <figcaption><strong>Same intersection, infrared night view</strong>Automatic calibration &middot; CC&nbsp;BY&nbsp;4.0</figcaption>
+          <figcaption><strong>Same intersection, infrared night view</strong>Shared camera file &middot; CC&nbsp;BY&nbsp;4.0</figcaption>
         </figure>
         <figure>
           <div class="frame"><img src="media/gallery/intersection-turn.jpg" width="1280" height="720" alt="The intersection with turning traffic" loading="lazy"></div>
-          <figcaption><strong>Same intersection, turning traffic</strong>Automatic calibration &middot; CC&nbsp;BY&nbsp;4.0</figcaption>
+          <figcaption><strong>Same intersection, turning traffic</strong>Shared camera file &middot; CC&nbsp;BY&nbsp;4.0</figcaption>
         </figure>
-        <figure>
+        <figure class="wide">
           <div class="frame"><img src="media/gallery/intersection-day-2.jpg" width="1280" height="720" alt="The intersection at another time of day" loading="lazy"></div>
-          <figcaption><strong>Same intersection, another time of day</strong>Automatic calibration &middot; CC&nbsp;BY&nbsp;4.0</figcaption>
+          <figcaption><strong>Same intersection, another time of day</strong>Shared camera file &middot; CC&nbsp;BY&nbsp;4.0</figcaption>
         </figure>
-        <figure>
+        <figure class="wide">
           <div class="frame"><img src="media/gallery/intersection-day-3.jpg" width="1280" height="720" alt="The intersection in dense traffic" loading="lazy"></div>
-          <figcaption><strong>Same intersection, dense traffic</strong>Automatic calibration &middot; CC&nbsp;BY&nbsp;4.0</figcaption>
+          <figcaption><strong>Same intersection, dense traffic</strong>Shared camera file &middot; CC&nbsp;BY&nbsp;4.0</figcaption>
         </figure>
       </div>
     </div>
@@ -420,11 +416,11 @@ tachymetry demo</code></pre>
   <section id="calibration">
     <div class="wrap">
       <h2>Camera calibration</h2>
-      <p class="lede">Metric output needs the focal length, pitch, roll, height and lens of the camera. Tachymetry estimates them from what the video contains: the ground footprints of passing vehicles, the vanishing points of painted markings and vertical structures, and, optionally, monocular metric depth with road segmentation. A fused maximum-likelihood estimate combines footprints and vanishing points, and the metric scale follows from the size distribution of passenger cars when no height or distance is given. When an orthophoto, a site plan or GPS points are available, a browser picker collects correspondences for <a href="docs/guide/manual-calibration/">manual calibration</a> with a cross-validated lens model.</p>
+      <p class="lede">Metric output needs the focal length, pitch, roll, height and lens of the camera. Tachymetry takes the orientation from the vanishing points of painted markings and vertical structures, or from the lens&rsquo;s field of view when it is known, and the metric scale from the vehicle silhouettes: the scale at which a rigid car model explains the instance masks best. Dashed lane markings check the result, since their dashes and gaps must keep their length along the road under the right camera. A fixed camera is calibrated once on its clearest clip and its camera file reused. Monocular depth with road segmentation and GeoCalib are optional, and a browser picker collects correspondences for <a href="docs/guide/manual-calibration/">manual calibration</a> with a cross-validated lens model.</p>
       <div class="mosaic mt">
-        <figure class="a"><img src="media/calib_fused.jpg" width="1920" height="760" alt="Calibration preview: metric grid on the camera image and the orthorectified bird's-eye view" loading="lazy"><figcaption>Automatic calibration of the sample clip: fused cuboid footprints and vanishing points, vehicle-size scale. Left: 1&nbsp;m and 5&nbsp;m ground grid in the camera image; right: orthorectified view with the same grid.</figcaption></figure>
-        <figure class="b crop"><img src="media/calib_lines.jpg" alt="Calibration from road markings and vertical vanishing points" loading="lazy"><figcaption>Road markings and vertical vanishing points</figcaption></figure>
-        <figure class="c crop"><img src="media/calib_cuboids.jpg" alt="Calibration from learned vehicle cuboids" loading="lazy"><figcaption>Learned vehicle cuboids</figcaption></figure>
+        <figure class="a"><img src="media/calib_auto.jpg" width="1920" height="757" alt="Calibration preview: metric grid on the camera image and the orthorectified bird's-eye view" loading="lazy"><figcaption>Automatic calibration of the sample clip: its 47.5&deg; field of view and the main ground vanishing point give the orientation, the vehicle silhouettes the scale (camera 27.7&nbsp;m high, 17.9&deg; down). Left: 1&nbsp;m and 5&nbsp;m ground grid in the camera image; right: orthorectified view with the same grid.</figcaption></figure>
+        <figure class="b crop"><img src="media/calib_dashes.jpg" alt="Dashed lane markings of the motorway sample with their ground lengths under its camera" loading="lazy"><figcaption>Dash check on the motorway sample: five dashes of 2.76 to 3.07&nbsp;m, spread 0.019</figcaption></figure>
+        <figure class="c crop"><img src="media/calib_lines.jpg" alt="Calibration from road markings and vertical vanishing points" loading="lazy"><figcaption>Road markings only: a 56.7&deg; field of view and an 18.7&nbsp;m camera</figcaption></figure>
         <figure class="d crop"><img src="media/calib_depth.jpg" alt="Calibration from monocular metric depth and road segmentation" loading="lazy"><figcaption>Depth and road segmentation (optional extra)</figcaption></figure>
         <figure class="e crop"><img src="media/syn_calib_manual.jpg" alt="Manual calibration of a synthetic scene from twelve correspondences" loading="lazy"><figcaption>Manual correspondences, synthetic scene with known camera</figcaption></figure>
       </div>
@@ -434,11 +430,15 @@ tachymetry demo</code></pre>
   <section id="filtering">
     <div class="wrap">
       <h2>Track filtering</h2>
-      <p class="lede">A detector with a frame-to-frame tracker reports speeds on parked cars, swaps identities, follows boxes cut off by the image border and keeps false positives. Tachymetry measures footprint centres instead of box bottoms, splits tracks at identity switches, trims truncated ends, repairs outliers, smooths with gap-aware zero-phase filters, freezes stopped and parked vehicles, rejects physically impossible tracks, stitches fragments, and marks duplicates, passengers, riders, shadows and ghosts, including static low-confidence parked-vehicle hallucinations.</p>
+      <p class="lede">A detector with a frame-to-frame tracker reports speeds on parked cars, swaps identities, follows boxes cut off by the image border or an occluder, and keeps false positives. For each vehicle track, Tachymetry fits one calibrated 3D box to the instance masks: shared length, width, height and clearance, a pose per frame, and an asymmetric cost that lets an occluder hide part of the box. It then splits tracks at identity switches, trims partly visible ends, repairs outliers, smooths with gap-aware zero-phase filters, freezes stopped and parked vehicles, rejects physically impossible tracks, stitches fragments, and marks duplicates, passengers, riders, shadows and ghosts.</p>
       <div class="pair mt">
         <figure>
           <div class="frame"><img src="media/raw_vs_clean.jpg" width="1920" height="570" alt="The same frame twice: raw tracker boxes with frame-differenced speeds, and Tachymetry's metric boxes and speeds" loading="lazy"></div>
           <figcaption>The same frame of the sample clip. Left: detections with frame-to-frame association and speeds from differenced box bottom-centres, including speeds on parked cars. Right: Tachymetry's tracks.</figcaption>
+        </figure>
+        <figure>
+          <div class="frame"><img src="media/occlusion_bus.jpg" width="1920" height="331" alt="A synthetic bus passing behind a tree crown, with its true footprint and the footprints estimated from boxes and from masks" loading="lazy"></div>
+          <figcaption>A synthetic 12&nbsp;m bus passes behind a tree crown. From the instance masks, its footprint centre stays within 0.46&nbsp;m and its heading within 1.1&deg; of the truth on all 64 tracked samples; from the boxes of the same detections, the errors reach 1.41&nbsp;m and 10.6&deg;.</figcaption>
         </figure>
         <figure>
           <div class="table-wrap">
@@ -448,15 +448,15 @@ tachymetry demo</code></pre>
               </thead>
               <tbody>
                 <tr class="cam"><th scope="rowgroup" colspan="7">Pole: 8&nbsp;m high, 32&deg; down, 70&deg; HFOV</th></tr>
-                <tr><th scope="row">Bottom-centre, frame differencing</th><td>1.39</td><td>11.93</td><td>35.79</td><td>547</td><td>42.20</td><td>12.33</td></tr>
-                <tr class="ours"><th scope="row">Tachymetry</th><td>0.04</td><td>0.87</td><td>3.98</td><td>6.33</td><td>0.00</td><td>0.33</td></tr>
+                <tr><th scope="row">Bottom-centre, frame differencing</th><td>1.36</td><td>11.89</td><td>35.56</td><td>138</td><td>42.20</td><td>13.67</td></tr>
+                <tr class="ours"><th scope="row">Tachymetry</th><td>0.04</td><td>0.78</td><td>3.37</td><td>6.00</td><td>0.00</td><td>0.00</td></tr>
                 <tr class="cam"><th scope="rowgroup" colspan="7">Mast: 18&nbsp;m high, 22&deg; down, 50&deg; HFOV</th></tr>
-                <tr><th scope="row">Bottom-centre, frame differencing</th><td>1.90</td><td>13.68</td><td>38.62</td><td>633</td><td>40.10</td><td>8.67</td></tr>
-                <tr class="ours"><th scope="row">Tachymetry</th><td>0.03</td><td>0.46</td><td>1.92</td><td>10.67</td><td>0.00</td><td>0.00</td></tr>
+                <tr><th scope="row">Bottom-centre, frame differencing</th><td>1.90</td><td>13.64</td><td>38.64</td><td>258</td><td>40.10</td><td>8.67</td></tr>
+                <tr class="ours"><th scope="row">Tachymetry</th><td>0.03</td><td>0.47</td><td>1.96</td><td>7.00</td><td>0.00</td><td>0.00</td></tr>
               </tbody>
             </table>
           </div>
-          <figcaption>Simulated intersection traffic with ground truth and injected detector failures (box jitter, misses, label flicker, flickering and persistent false positives, parked-car jitter), mean over 3 seeds of 60&nbsp;s. Both variants use the same detections and associations. The full ablation and protocol are in the <a href="docs/benchmarks/">benchmarks</a>.</figcaption>
+          <figcaption>Simulated intersection traffic with ground truth and box detections with injected failures (box jitter, misses, label flicker, flickering and persistent false positives, parked-car jitter), mean over 3 seeds of 60&nbsp;s. Both variants use the same detections and associations. A second part of the benchmark compares the box and mask geometry on simulated instance masks. The full ablation and protocol are in the <a href="docs/benchmarks/">benchmarks</a>.</figcaption>
         </figure>
       </div>
     </div>
@@ -539,7 +539,7 @@ cal.save(<span class="s">"camera.json"</span>)</code></pre>
           <h3>Worker plan</h3>
           <p>From <code>tachymetry devices</code> and <code>tachymetry.batch.plan_workers</code>.</p>
           <table>
-            <tr><td>CUDA GPU</td><td>1 per 6&nbsp;GB free, at most 2</td></tr>
+            <tr><td>CUDA GPU</td><td>1 per 9&nbsp;GB free with SAM&nbsp;3 (6&nbsp;GB otherwise), at most 2</td></tr>
             <tr><td>Apple GPU (MPS)</td><td>1</td></tr>
             <tr><td>CPU only</td><td>1 per 4 threads</td></tr>
             <tr><td>Outputs per video</td><td>tracks, summary, camera, preview</td></tr>
@@ -581,13 +581,13 @@ cal.save(<span class="s">"camera.json"</span>)</code></pre>
   <div class="wrap row">
     <div>
       <p><a href="https://mehmetkeremturkcan.com/">Mehmet Kerem Turkcan</a>, Associate Research Scientist, Department of Civil Engineering, Columbia University.</p>
-      <p>Tachymetry is released under the Apache License 2.0, as is its default detector, RF-DETR. The optional UrbanOmniDetect-2 back-end depends on Ultralytics, which is licensed AGPL-3.0.</p>
-      <p>Sample footage, shown with Tachymetry's overlays added: <a href="https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av">svbrd-llm-roadside-video-av</a> by Ryan-xiangyu-ut (<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>); <a href="https://commons.wikimedia.org/wiki/File:Roundabout_14_61.webm">Roundabout 14 61</a> by Wikideas1, Wikimedia Commons (<a href="https://creativecommons.org/publicdomain/zero/1.0/">CC0 1.0</a>); <a href="https://huggingface.co/datasets/parsafaramarzi/Small-Crowd-and-Traffic-Video-Footages">Small-Crowd-and-Traffic-Video-Footages</a> by parsafaramarzi (MIT); <a href="https://huggingface.co/datasets/hamimmahmud0/DRINF">DRINF: Dhaka Road Intersection Nadir Footage</a> by Hamim Mahmud, doi:10.57967/hf/10301 (<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>). Trailer credits: <a href="https://github.com/mkturkcan/tachymetry/blob/main/docs/media/CREDITS.md">CREDITS.md</a>.</p>
+      <p>Tachymetry is released under the Apache License 2.0. Detector weights are not distributed with it: SAM&nbsp;3, the default, is downloaded under Meta&rsquo;s licence terms after an access request; RF-DETR weights are Apache-2.0; the optional UrbanOmniDetect-2 back-end depends on Ultralytics, which is licensed AGPL-3.0.</p>
+      <p>Sample footage, shown with Tachymetry's overlays added: <a href="https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av">svbrd-llm-roadside-video-av</a> by Ryan-xiangyu-ut (<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>); <a href="https://huggingface.co/datasets/parsafaramarzi/Small-Crowd-and-Traffic-Video-Footages">Small-Crowd-and-Traffic-Video-Footages</a> by parsafaramarzi (MIT); <a href="https://huggingface.co/datasets/hamimmahmud0/DRINF">DRINF: Dhaka Road Intersection Nadir Footage</a> by Hamim Mahmud, doi:10.57967/hf/10301 (<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>). Trailer credits: <a href="https://github.com/mkturkcan/tachymetry/blob/main/docs/media/CREDITS.md">CREDITS.md</a>.</p>
     </div>
     <div class="links">
       <a href="https://github.com/mkturkcan/tachymetry">GitHub</a>
       <a href="docs/">Documentation</a>
-      <a href="https://huggingface.co/mehmetkeremturkcan/UrbanOmniDetect-2">UrbanOmniDetect-2</a>
+      <a href="https://huggingface.co/facebook/sam3">SAM 3</a>
       <a href="https://mehmetkeremturkcan.com/">Website</a>
     </div>
   </div>
