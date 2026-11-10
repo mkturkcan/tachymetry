@@ -6,7 +6,7 @@ import os
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-__all__ = ["Device", "discover_devices", "plan_workers"]
+__all__ = ["worker_gb", "Device", "discover_devices", "plan_workers"]
 
 
 @dataclass
@@ -72,6 +72,16 @@ def parse_devices(spec: str | Sequence[str] | None) -> list[Device]:
         else:
             raise RuntimeError(f"device {n!r} not available; found {[d.name for d in found]}")
     return out
+
+
+def worker_gb(cfg) -> float:
+    """GPU memory one worker process needs, by detector (measured peaks plus headroom).
+
+    SAM 3 peaks at about 7.3 GB with batch 8 in BF16; RF-DETR-Seg L and
+    UrbanOmniDetect-2 X stay below 4 GB.
+    """
+    name = str(getattr(getattr(cfg, "detector", None), "name", "")).lower()
+    return 9.0 if name.startswith("sam3") else 6.0
 
 
 def plan_workers(

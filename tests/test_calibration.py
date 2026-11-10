@@ -123,3 +123,23 @@ def test_dash_regularity_checks_the_horizon():
     assert marking_regularity(cam, lines) < 1e-6
     wrong = Camera.from_pose((1280, 720), focal=1100.0, height=9.0, pitch=15.0, yaw=90.0)
     assert marking_regularity(wrong, lines) > 0.05
+
+
+def test_fov_and_vanishing_point_camera_recovers_pitch_and_roll():
+    """A known field of view and the image of ground (and vertical) directions give pitch and roll."""
+    from tachymetry.calib.auto import _from_fov_and_vp
+    from tachymetry.calib.lines import VanishingPoint
+    from tachymetry.geometry.lens import IdentityLens
+
+    size = (1920, 1080)
+    hfov = float(2 * np.degrees(np.arctan(960 / 1400.0)))
+    for roll in (-4.0, 3.0):
+        cam = Camera.from_pose(size, focal=1400.0, height=10, pitch=15.0, yaw=70.0, roll=roll)
+
+        def vp(d, cam=cam):
+            p = cam.K @ cam.R @ np.array(d, float)
+            return VanishingPoint(p / np.linalg.norm(p), np.zeros(0, bool), 1.0)
+
+        for horiz, vert in (([vp([1, 0, 0]), vp([0, 1, 0])], None), ([vp([1, 0, 0])], vp([0, 0, 1]))):
+            _, pitch, r = _from_fov_and_vp(size, hfov, horiz, vert, IdentityLens(size)).camera.angles
+            assert abs(pitch - 15.0) < 0.05 and abs(r - roll) < 0.05

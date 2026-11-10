@@ -28,7 +28,7 @@ from typing import Any
 
 from ..config import PipelineConfig
 from ..io.video import find_videos
-from .devices import discover_devices, parse_devices, plan_workers
+from .devices import discover_devices, parse_devices, plan_workers, worker_gb
 
 __all__ = ["run_batch", "BatchReport", "output_dir_for"]
 
@@ -213,7 +213,7 @@ def run_batch(
         )
     pending = sorted([j for j in jobs if j["status"] == "pending"], key=lambda j: -j["size"])
     devs = parse_devices(devices) if devices != "auto" else discover_devices()
-    slots = plan_workers(devs, workers_per_device, n_jobs=max(1, len(pending)))
+    slots = plan_workers(devs, workers_per_device, n_jobs=max(1, len(pending)), gb_per_worker=worker_gb(cfg))
     report = BatchReport(out_root, jobs, slots)
     t0 = time.time()
     for j in jobs:

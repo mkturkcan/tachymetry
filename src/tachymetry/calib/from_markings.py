@@ -27,7 +27,7 @@ import numpy as np
 from ..geometry.camera import Camera
 from ..geometry.lens import Lens
 
-__all__ = ["DashedLine", "dashed_lines", "marking_regularity"]
+__all__ = ["DashedLine", "dashed_lines", "marking_regularity", "road_region"]
 
 
 @dataclass
@@ -47,17 +47,25 @@ def dashed_lines(
     min_dashes: int = 4,
     max_lines: int = 16,
     lens: Lens | None = None,
-    cr_tol: float = 0.08,
+    cr_tol: float = 0.06,
+    region: np.ndarray | None = None,
 ) -> list[DashedLine]:
-    """Dashed lane lines in a traffic-free image (rectified first when ``lens`` is given)."""
+    """Dashed lane lines in a traffic-free image (rectified first when ``lens`` is given).
+
+    ``region`` (boolean, image-sized) restricts the search, e.g. to the road surface swept by
+    vehicles (:func:`road_region`); regular structures off the road (mast arms, facades) are
+    otherwise mistaken for dash chains.
+    """
     import cv2
 
     from .lines import marking_mask
 
     if lens is not None and not lens.is_identity:
         image = lens.rectify_image(image)
+        if region is not None:
+            region = lens.rectify_image(region.astype(np.uint8) * 255) > 127
     h, w = image.shape[:2]
-    mask = marking_mask(image).astype(np.uint8)
+    mask = marking_mask(image, region=region).astype(np.uint8)
     n, lab, st, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
     cand = []  # (centre, unit axis, end a, end b, length)
     for i in range(1, n):
@@ -114,9 +122,23 @@ def dashed_lines(
         b = np.array([ends[k][1] for k in order])
         wt = np.array([cand[best[k]][4] for k in order])
         for s, e in _regular_runs(a @ d, cr_tol):
-            if e - s >= min_dashes:
+            if e - s >= min_dashes and _perspective_order(a[s:e] @ d, wt[s:e]):
                 lines.append(DashedLine(a[s:e], b[s:e], wt[s:e]))
     return lines
+
+
+def _perspective_order(t: np.ndarray, length: np.ndarray) -> bool:
+    """Equal ground dashes seen in perspective: image gaps and dash lengths shrink toward one end."""
+    gaps = np.diff(t)
+    if np.any(gaps <= 0):
+        return False
+    dg = np.diff(gaps)
+    if not (np.all(dg < 0) or np.all(dg > 0)):
+        return False
+    # dash lengths follow the gaps (both shrink with distance), allowing one exception for worn paint
+    dl = np.diff(length)
+    agree = np.sign(dl) == np.sign(dg[0])
+    return int((~agree).sum()) <= 1
 
 
 def _cross_ratio(t: np.ndarray) -> float:
@@ -170,3 +192,24 @@ def marking_regularity(cam: Camera, lines: Sequence[DashedLine]) -> float:
         return float("inf")
     r = np.concatenate(parts)
     return float(np.sqrt(np.mean(r**2)))
+
+
+def road_region(dets, min_score: float = 0.5, grow: float = 0.04) -> np.ndarray | None:
+    """Image region swept by vehicle ground contacts: the convex hull of the bottom-centres of
+    confident vehicle detections, dilated by ``grow`` times the image width. ``None`` without detections."""
+    import cv2
+
+    if dets is None or not len(dets):
+        return None
+    names = np.array(dets.class_names)
+    veh = np.isin(names[dets.cls], ["car", "bus", "truck", "motorcycle"]) & (dets.score >= min_score)
+    if veh.sum() < 10:
+        return None
+    b = dets.xyxy[veh]
+    pts = np.column_stack([(b[:, 0] + b[:, 2]) / 2, b[:, 3]]).astype(np.float32)
+    w, h = dets.image_size
+    out = np.zeros((h, w), np.uint8)
+    cv2.fillConvexPoly(out, cv2.convexHull(pts).astype(np.int32), 1)
+    k = max(3, int(grow * w)) | 1
+    out = cv2.dilate(out, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
+    return out.astype(bool)

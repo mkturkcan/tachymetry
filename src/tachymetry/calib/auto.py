@@ -1,23 +1,27 @@
 """Automatic calibration: candidate methods, evidence fusion and selection.
 
 :func:`calibrate_auto` runs the applicable methods on a video's traffic-free
-background image and its detections:
+background image and its detections. Orientation candidates:
 
-``cuboids``  vehicle-footprint rectification (needs a cuboid detector),
-``lines``    vanishing points of road markings and vertical structures,
-``depth``    monocular metric depth plus road segmentation (optional extras),
-``geocalib`` single-image gravity and focal length (optional extra).
+``lines``     vanishing points of road markings and vertical structures,
+``fov+vp``    a known field of view (``CalibrationConfig.hfov_deg``) and the main
+              ground vanishing point,
+``geocalib``  single-image gravity and focal length (GeoCalib, installed separately),
+``depth``     monocular metric depth plus road segmentation (optional extras),
+``cuboids``   vehicle-footprint rectification (needs UrbanOmniDetect-2 cuboids);
+              with vanishing points also a **fused** maximum-likelihood candidate.
 
-When both cuboid footprints and vanishing points are available, a **fused**
-candidate refines the camera by maximum likelihood over all evidence at once:
-footprint rectangularity and size consistency, horizontal vanishing points
-constrained to the ground plane, and the vertical vanishing point constrained
-to the ground normal. No assumption is made that streets meet at right angles.
+A given field of view is authoritative: candidates whose focal length differs
+from it by more than 10 % are dropped. Candidates are ranked by method-independent
+consistency: vanishing-point residuals, footprint geometry when cuboids exist, and
+the regularity of dashed lane markings (:mod:`tachymetry.calib.from_markings`)
+when chains of five or more dashes are found on the road surface.
 
-Candidates are ranked by method-independent consistency (footprint right
-angles, size-versus-range slope, vanishing-point residuals); all candidates are
-kept in ``result.details["candidates"]`` and can be previewed side by side with
-:func:`tachymetry.calib.preview.compare`.
+The metric scale of the selected camera comes from a scale cue when one is given,
+else from vehicle silhouettes when the detections carry instance masks
+(:mod:`tachymetry.calib.from_silhouettes`), else from cuboid footprints. All
+candidates are kept in ``result.details["candidates"]`` and can be previewed side
+by side with :func:`tachymetry.calib.preview.compare`.
 """
 
 from __future__ import annotations
@@ -360,17 +364,18 @@ def calibrate_auto(
     if not candidates:
         raise CalibrationError("automatic calibration failed: " + "; ".join(f"{k}: {v}" for k, v in errors.items()))
 
-    from .from_markings import dashed_lines, marking_regularity
+    from .from_markings import dashed_lines, marking_regularity, road_region
 
     try:
-        dashes = dashed_lines(background, lens=lens_obj)
+        # only chains of five or more dashes (two independent cross-ratio tests) are trusted
+        dashes = [ln for ln in dashed_lines(background, lens=lens_obj, region=road_region(detections)) if len(ln) >= 5]
     except Exception:  # pragma: no cover - the check is optional
         dashes = []
     ranked = []
     for c in candidates:
         cam = c.camera
         cons = consistency(cam, quads, wts, horiz, vertical)  # raw quads: the camera carries the lens
-        if len(dashes) >= 2:
+        if dashes:
             # scale-free check: dash lengths and periods must not change along the road
             reg = marking_regularity(Camera(cam.image_size, cam.K, cam.R, cam.t), dashes)
             cons["dash_regularity"] = reg
@@ -432,21 +437,22 @@ def _from_fov_and_vp(
     vps = sorted((v for v in horiz if v.finite), key=lambda v: -v.support)
     if not vps:
         raise CalibrationError("no finite ground vanishing point")
-    roll = 0.0
+    # tilt of the horizon in the image (clockwise positive, image y pointing down); the camera roll is its negative
+    tilt = 0.0
     if len(vps) >= 2:
         a, b = vps[0].xy, vps[1].xy
-        roll = math.degrees(math.atan2(b[1] - a[1], b[0] - a[0]))
-        roll = (roll + 90.0) % 180.0 - 90.0
+        tilt = math.degrees(math.atan2(b[1] - a[1], b[0] - a[0]))
+        tilt = (tilt + 90.0) % 180.0 - 90.0
     elif vertical is not None and vertical.finite:
         v = vertical.xy
-        roll = -math.degrees(math.atan2(v[0] - cx, v[1] - cy))
-    # rotate the main vanishing point by -roll about the principal point; its height then gives the pitch
+        tilt = -math.degrees(math.atan2(v[0] - cx, v[1] - cy))
+    # undo the tilt about the principal point; the height of the main vanishing point then gives the pitch
     p = vps[0].xy - np.array([cx, cy])
-    cr, sr = math.cos(math.radians(-roll)), math.sin(math.radians(-roll))
+    cr, sr = math.cos(math.radians(-tilt)), math.sin(math.radians(-tilt))
     q = np.array([cr * p[0] - sr * p[1], sr * p[0] + cr * p[1]])
     pitch = math.degrees(math.atan2(-q[1], f))
     if not 0.5 < pitch < 89.5:
         raise CalibrationError(f"the vanishing point implies a pitch of {pitch:.1f} deg")
-    cam = Camera.from_pose(size, focal=f, height=1.0, pitch=pitch, yaw=90.0, roll=roll, lens=lens)
+    cam = Camera.from_pose(size, focal=f, height=1.0, pitch=pitch, yaw=90.0, roll=-tilt, lens=lens)
     cam.meta.update({"calibration_method": "fov+vp", "metric": False})
-    return CalibrationResult(cam, "fov+vp", details={"hfov_deg": hfov_deg, "roll_deg": roll})
+    return CalibrationResult(cam, "fov+vp", details={"hfov_deg": hfov_deg, "roll_deg": -tilt})

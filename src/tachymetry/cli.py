@@ -173,7 +173,9 @@ def cmd_calibrate(args: argparse.Namespace) -> int:
     out = args.out or "camera.json"
     res.details.pop("candidate_cameras", None)
     res.save(out)
-    _print(f"[bold]{res.summary()}[/bold]\nCamera: {out}")
+    from rich.markup import escape
+
+    _print(f"[bold]{escape(res.summary())}[/bold]\nCamera: {escape(str(out))}")
     img, _ = _load_image_or_background(args.source)
     _write_preview(
         img, res.camera, args.preview or str(Path(out).with_suffix("")) + "_preview.jpg", f"Calibration: {res.method}"

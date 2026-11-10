@@ -7,7 +7,8 @@ Methods
 ``cuboids``   :func:`calibrate_from_cuboids` from learned vehicle cuboids (UrbanOmniDetect-2)
 ``auto``      :func:`calibrate_auto` fuses the available cues and ranks the candidates
 ``depth``     monocular metric depth plus road segmentation (``pip install "tachymetry[depth]"``)
-``geocalib``  single-image gravity and focal length (``pip install "tachymetry[geocalib]"``)
+``geocalib``  single-image gravity and focal length (GeoCalib, installed separately:
+              ``pip install git+https://github.com/cvg/GeoCalib.git``)
 """
 
 from __future__ import annotations
