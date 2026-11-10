@@ -206,7 +206,11 @@ def cmd_devices(args: argparse.Namespace) -> int:
     devs = discover_devices()
     for d in devs:
         _print(f"  {d}")
-    _print(f"Worker plan ({args.workers_per_device} per device): {plan_workers(devs, args.workers_per_device)}")
+    from .batch.devices import worker_gb
+    from .config import PipelineConfig
+
+    plan = plan_workers(devs, args.workers_per_device, gb_per_worker=worker_gb(PipelineConfig()))
+    _print(f"Worker plan for the default detector ({args.workers_per_device} per device): {plan}")
     return 0
 
 

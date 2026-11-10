@@ -383,7 +383,9 @@ def calibrate_auto(
         c.score = cons["score"]
         c.details["consistency"] = cons
         ranked.append(c)
-    ranked.sort(key=lambda c: -(c.score or 0))
+    # with a known field of view, the candidate built from it is preferred: the lines candidate's own
+    # vanishing-point residual is zero by construction, so the consistency score cannot separate the two
+    ranked.sort(key=lambda c: (not (cfg.hfov_deg and c.method == "fov+vp"), -(c.score or 0)))
     best = ranked[0]
     try:
         cam, sinfo = _metric_scale(best.camera, quads, wts, cfg, cue, detections)
