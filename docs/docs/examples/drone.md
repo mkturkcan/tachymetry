@@ -110,13 +110,14 @@ print(run.report["timings"])
 DRINF: Dhaka Road Intersection Nadir Footage by Hamim Mahmud (Hugging Face, doi:10.57967/hf/10301); 30 s excerpt from 2:20, CC BY 4.0, https://huggingface.co/datasets/hamimmahmud0/DRINF
 f=2825.2px (hfov 68.4 deg), height=111.70 m, pitch=90.00 deg, roll=0.00 deg, yaw=90.0 deg, lens=identity
 ground sampling distance 3.95 cm/px
-{'motorcycle': 222, 'car': 121, 'bicycle': 1, 'person': 38, 'truck': 13}
-{'detect_s': 46.98, 'calibrate_s': 17.89, 'track_s': 104.52, 'total_s': 170.09}
+{'motorcycle': 208, 'car': 45, 'bicycle': 21, 'person': 32, 'truck': 8}
+{'detect_s': 47.47, 'calibrate_s': 17.28, 'track_s': 100.95, 'total_s': 166.56}
 ```
 
-On one NVIDIA RTX PRO 6000 GPU, SAM 3 detection took 47 s for the 360 analysed frames. The background median and the camera took 18 s, and tracking 105 s, most of it the mask geometry of 134 vehicle tracks on the CPU. The class counts are the detector's labels for accepted tracks.
+On one NVIDIA RTX PRO 6000 GPU, SAM 3 detection took 47 s for the 360 analysed frames. The background median and the camera took 17 s, and tracking 101 s, most of it the mask geometry of the vehicle tracks on the CPU. The class counts are those of the accepted tracks ([class vote](../guide/tracking.md#class-vote)).
 
-- **Rickshaws.** SAM 3's class-evidence prompts label most cycle-rickshaws and auto-rickshaws of this traffic `motorcycle`, which gives 222 motorcycle tracks against 1 bicycle track ([Limitations](../limitations.md#mixed-traffic-and-class-dependent-scale)).
+- **Two-wheelers and rickshaws.** 175 motorcycles are classed from their `motorcycle` evidence. Cycle-rickshaws and rickshaw vans receive almost no evidence from any class prompt; their car fits stay at the smallest car, and the size rule makes them two-wheelers (18 bicycles, and motorcycles where `motorcycle` scored them above `bike`). CNG auto-rickshaws with `car` or `van` evidence are cars ([Limitations](../limitations.md#mixed-traffic-and-class-dependent-scale)).
+- **Riders.** 34 person tracks are riders, 31 of them on a tracked two-wheeler, and 3 fast person tracks without a two-wheeler become cyclists ([Verdicts](../guide/verdicts.md#riders-inferred-cyclists-and-passengers)).
 - **Small road users.** In steep views, persons and two-wheelers are placed at their mask centroid projected at a class height, not at their lowest mask point (`hygiene.steep_view_deg`, 60° to 80° of depression). Their lowest point is a foot or a wheel, far from the centre seen from above.
 
 ## Command line
@@ -152,7 +153,7 @@ for w in caught:
 
 ```text
 auto:lines f=10074.4px (hfov 21.6 deg), height=1.00 m, pitch=2.78 deg, roll=0.17 deg, yaw=-4.7 deg, lens=identity {'scale': 'relative'}
-warning: car silhouettes do not fit this camera (cost 2.01)
+warning: car silhouettes do not fit this camera (cost 2.07)
 warning: dashed lane markings change length along the road under this camera (spread 0.47 in log units): its pitch or focal length is likely wrong
 ```
 

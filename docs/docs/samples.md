@@ -75,19 +75,19 @@ One run per clip with the default configuration (SAM 3, 15 Hz) and the camera or
 
 | Name | Camera | Tracks | Tracks by class | Median speed (km/h) | p85 speed (km/h) |
 |---|---|---|---|---|---|
-| `intersection-day` | f = 2182 px, height 27.7 m, pitch 17.9° | 49 | 28 car, 9 truck, 2 bus, 2 bicycle, 8 person | 24.8 | 35.0 |
-| `intersection-day-2` | shared camera | 49 | 35 car, 7 truck, 5 bus, 2 person | 31.1 | 43.1 |
-| `intersection-day-3` | shared camera | 117 | 59 car, 17 truck, 3 bus, 3 bicycle, 35 person | 25.7 | 41.8 |
+| `intersection-day` | f = 2182 px, height 27.4 m, pitch 17.9° | 50 | 30 car, 8 truck, 2 bus, 2 bicycle, 8 person | 24.7 | 34.5 |
+| `intersection-day-2` | shared camera | 49 | 34 car, 7 truck, 6 bus, 2 person | 31.1 | 43.1 |
+| `intersection-day-3` | shared camera | 115 | 57 car, 18 truck, 3 bus, 3 bicycle, 34 person | 25.7 | 41.8 |
 | `intersection-turn` | shared camera | 32 | 27 car, 2 truck, 3 person | 20.3 | 27.6 |
 | `intersection-night` | shared camera | 8 | 8 car | 50.1 | 65.6 |
-| `motorway-overpass` | f = 1131 px, height 8.1 m, pitch 11.8° | 70 | 61 car, 9 truck | 59.6 | 76.3 |
-| `dhaka-roundabout` | f = 2825 px, height 111.7 m, pitch 90° | 395 | 121 car, 13 truck, 222 motorcycle, 1 bicycle, 38 person | 11.9 | 15.9 |
+| `motorway-overpass` | f = 1131 px, height 8.4 m, pitch 11.8° | 70 | 61 car, 9 truck | 61.8 | 78.7 |
+| `dhaka-roundabout` | f = 2825 px, height 111.7 m, pitch 90° | 314 | 45 car, 8 truck, 208 motorcycle, 21 bicycle, 32 person | 10.8 | 16.6 |
 
-The shared intersection camera is the automatic calibration of `intersection-day`: f = 2182 px, 27.7 m high, pitched 17.9° down, roll −0.18°.
+The shared intersection camera is an earlier automatic calibration of `intersection-day`: f = 2182 px, 27.7 m high, pitched 17.9° down, roll −0.18°. The clip's current automatic calibration is 1 % lower ([one camera, several clips](guide/calibration.md#one-camera-several-clips)).
 
-- **Truck labels.** The truck counts of the intersection clips come from SAM 3's class-evidence prompts. In `intersection-day`, all nine truck tracks are pickups, one of them towing a trailer.
-- **Two-wheelers in mixed traffic.** In the straight-down clip, cycle-rickshaws and auto-rickshaws are mostly labelled motorcycle ([Limitations](limitations.md#mixed-traffic-and-class-dependent-scale)).
-- **Motorway speeds.** Moving vehicles on the motorway have a median speed of 59.6 km/h. An earlier cuboid-based calibration of this clip, without a known field of view, gave about 95 km/h; under that camera the dashes of the same chain grow from 3.35 m to 6.28 m along the road (spread 0.165). The dash check is what exposes such a calibration.
+- **Truck labels.** Vehicle classes come from SAM 3's class-evidence prompts, voted over each track ([class vote](guide/tracking.md#class-vote)). The `truck` prompt scores pickups higher than `car` (0.7 to 0.9 against 0.5 to 0.7), so the eight truck tracks of `intersection-day` are seven pickups and a utility trailer.
+- **Two-wheelers in mixed traffic.** In the straight-down clip, 175 motorcycles are classed from `motorcycle` evidence. Cycle-rickshaws and rickshaw vans receive almost no evidence from any prompt; their car fits stay at the smallest car, so the size rule makes them two-wheelers (18 bicycles, 33 motorcycles). Three bicycles are cyclists inferred from fast person tracks, and 34 persons are riders on two-wheelers ([Limitations](limitations.md#mixed-traffic-and-class-dependent-scale)).
+- **Motorway speeds.** Moving vehicles on the motorway have a median speed of 61.8 km/h. Under the selected camera (8.4 m high), the five dashes of the checked chain measure 2.85 to 3.16 m with periods of 8.9 to 9.4 m, the 3 m dashes and 6 m gaps of the markings. An earlier cuboid-based calibration of this clip, without a known field of view, gave about 95 km/h; under that camera the dashes of the same chain grow from 3.35 m to 6.28 m along the road (spread 0.165). The dash check is what exposes such a calibration.
 
 <figure markdown="span">
   ![A divided expressway seen from an overpass with tracked vehicles and speeds](../media/gallery/motorway-overpass.jpg)

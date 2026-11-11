@@ -45,10 +45,10 @@ Detection recall degrades at night. Runs of the default pipeline on two clips of
 
 | Clip | Duration | Detections | Tracks kept | Tracks by class |
 |---|---|---|---|---|
-| `intersection-day` | 31.0 s | 23,443 | 49 | 28 car, 9 truck, 2 bus, 2 bicycle, 8 person |
-| `intersection-night` | 18.5 s | 2,010 | 8 | 8 car |
+| `intersection-day` | 31.0 s | 23,491 | 50 | 30 car, 8 truck, 2 bus, 2 bicycle, 8 person |
+| `intersection-night` | 18.5 s | 2,011 | 8 | 8 car |
 
-Traffic volumes differ between the recordings, so the comparison is indicative only. On the infrared night clip, no pedestrian or cyclist track was kept. Calibrated on its own, the night clip gives a camera 33.4 m high at a pitch of 22.2°, against 27.7 m and 17.9° for the day clip ([Calibration verification](guide/calibration.md#calibration-verification)), because road markings are visible mainly where they are lit. For cameras that record in both conditions, calibrate on daytime footage and pass the camera file to the night runs, as the sample registry does.
+Traffic volumes differ between the recordings, so the comparison is indicative only. On the infrared night clip, no pedestrian or cyclist track was kept. Calibrated on its own, the night clip gives a camera 34.4 m high at a pitch of 22.2°, against 27.4 m and 17.9° for the day clip ([Calibration verification](guide/calibration.md#calibration-verification)), because road markings are visible mainly where they are lit. For cameras that record in both conditions, calibrate on daytime footage and pass the camera file to the night runs, as the sample registry does.
 
 ## Moving, PTZ and re-zoomed cameras
 
@@ -70,7 +70,7 @@ Process straight-down footage with a known camera: pitch 90°, the height from t
 
 ## Mixed traffic and class-dependent scale
 
-The class scheme has six road classes (person, bicycle, car, motorcycle, bus, truck), and regional vehicle types fall outside it. On the straight-down sample, SAM 3's class-evidence prompts label most cycle-rickshaws and auto-rickshaws `motorcycle`, which gives 222 motorcycle tracks against 1 bicycle track. Counts by class and the class-dependent parameters (the person and two-wheeler speed gates, the dimension priors) apply to these vehicles as labelled.
+The class scheme has six road classes (person, bicycle, car, motorcycle, bus, truck), and regional vehicle types fall outside it. On the straight-down sample, cycle-rickshaws and rickshaw vans receive almost no evidence from any class prompt; their car fits stay at the smallest car, so the size rule makes them two-wheelers (18 bicycles, and motorcycles where the `motorcycle` prompt scored them higher than `bike`), and CNG auto-rickshaws with `car` or `van` evidence remain cars ([class vote](guide/tracking.md#class-vote)). The two carriages of a passing train are labelled `truck`. Counts by class and the class-dependent parameters (the person and two-wheeler speed gates, the dimension priors) apply to these vehicles as labelled.
 
 The vehicle-size scale assumes that the `car` class is dominated by passenger cars ([Metric scale](guide/calibration.md#metric-scale)): the silhouette scale fits a rigid passenger-car model, and the cuboid footprint scale a median footprint of 4.6 m by 1.85 m. Where a detector maps other vehicles to `car`, such as three-wheelers of about 2.6 m or microcars, the scale inherits their size, and all distances and speeds are multiplied by the ratio of the model to their dimensions. In such traffic, supply the scale from elsewhere:
 
@@ -122,7 +122,7 @@ A scene with a single marked direction and no vertical structure, such as a stra
 
 ## Per-clip variance of automatic calibration
 
-Automatic calibration of one clip is a single estimate with clip-dependent evidence: visible markings, traffic, lighting. The five intersection samples come from one camera pose; their backgrounds register within 4.2 px, except the infrared night clip at 12.4 px. Calibrated separately with the same 47.5° field of view, they give camera heights from 26.3 to 33.4 m, pitches from 17.6° to 22.2° and rolls from −2.5° to 3.6° ([Calibration verification](guide/calibration.md#calibration-verification)). A height error enters all distances and speeds in proportion. For a fixed camera, calibrate once on the clip with the clearest evidence and pass the camera file to its other clips, as the sample registry does with `assets/cameras/svbrd-intersection.json`; compare speeds between sites only after checking their calibrations.
+Automatic calibration of one clip is a single estimate with clip-dependent evidence: visible markings, traffic, lighting. The five intersection samples come from one camera pose; their backgrounds register within 4.2 px, except the infrared night clip at 12.4 px. Calibrated separately with the same 47.5° field of view, they give camera heights from 26.6 to 34.4 m, pitches from 17.6° to 22.2° and rolls from −2.5° to 3.6° ([Calibration verification](guide/calibration.md#calibration-verification)). A height error enters all distances and speeds in proportion. For a fixed camera, calibrate once on the clip with the clearest evidence and pass the camera file to its other clips, as the sample registry does with `assets/cameras/svbrd-intersection.json`; compare speeds between sites only after checking their calibrations.
 
 ## Runtime of the mask geometry
 

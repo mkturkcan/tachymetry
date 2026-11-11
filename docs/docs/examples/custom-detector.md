@@ -4,7 +4,7 @@ The pipeline accepts object detectors that map frames to boxes in the road-user 
 
 ## The detector contract
 
-A `Detector` is called with a list of BGR `uint8` images (`H × W × 3`, as decoded by OpenCV) and returns one tuple per image, with four elements, or five when it segments:
+A `Detector` is called with a list of BGR `uint8` images (`H × W × 3`, as decoded by OpenCV) and returns one tuple per image, with four elements, five when it segments, or six with class evidence:
 
 | Element | Shape and type | Meaning |
 |---|---|---|
@@ -13,6 +13,7 @@ A `Detector` is called with a list of BGR `uint8` images (`H × W × 3`, as deco
 | `cls` | `(N,)` `int16` | index into `class_names` |
 | `cuboid` | `(N, 8, 3)` `float32` or `None` | projected cuboid corners `x, y, confidence`: corners 0 to 3 on the ground with 0 and 3 forming the front face and 0-1 a long side, corners 4 to 7 above them; NaN for untrusted cuboids |
 | `masks` (optional) | list of `N` entries, or `None` | one instance mask per detection as `(x0, y0, mask)` with a boolean `mask` cropped to the box (`tachymetry.detections.crop_mask` crops a full-frame mask), or `None` for a detection without one |
+| `evidence` (optional) | `(N, E)` `float32` | class evidence per detection, with the column names in the attribute `evidence_names`; with the columns of `tachymetry.detect.sam3.EVIDENCE_COLUMNS`, track classes, riders and passengers are decided as for SAM 3 ([class vote](../guide/tracking.md#class-vote)) |
 
 Set the class attributes `class_names` (use `tachymetry.config.ROAD_CLASSES` so that class priors, super-classes, colours and calibration apply), `provides_cuboids`, `provides_masks` and `name`. Boxes with scores down to `TrackerConfig.low_conf = 0.10` are useful: they extend existing tracks in the second association stage but never start one ([Association](../guide/tracking.md#online-association)).
 
@@ -71,15 +72,15 @@ print(run.report["timings"])
 ```
 
 ```text
-{'tracks': 58, 'by_class': {'car': 37, 'person': 14, 'motorcycle': 1, 'truck': 3, 'bus': 2, 'bicycle': 1}, 'moving_by_class': {'car': 23, 'motorcycle': 1, 'person': 10, 'bus': 2, 'bicycle': 1}, 'parked_by_class': {'car': 14, 'truck': 3}, 'rejected': {'rider': 2, 'duplicate': 22, 'invalid': 1, 'ghost': 5}, 'vehicle_speed_kmh': {'median': 23.89, 'p85': 34.09, 'max': 50.17}}
-{'detect_s': 9.14, 'calibrate_s': 6.24, 'track_s': 5.54, 'total_s': 21.2}
+{'tracks': 57, 'by_class': {'car': 37, 'person': 14, 'motorcycle': 1, 'truck': 2, 'bus': 2, 'bicycle': 1}, 'moving_by_class': {'car': 22, 'motorcycle': 1, 'person': 10, 'bus': 2, 'bicycle': 1}, 'parked_by_class': {'car': 15, 'truck': 2}, 'rejected': {'rider': 2, 'duplicate': 21, 'invalid': 1, 'ghost': 7}, 'vehicle_speed_kmh': {'median': 24.81, 'p85': 35.78, 'max': 50.91}}
+{'detect_s': 9.25, 'calibrate_s': 6.17, 'track_s': 5.5, 'total_s': 21.12}
 ```
 
 Three details of this example matter in general:
 
-* **Camera.** A box-only detector provides no instance masks, so automatic calibration has no vehicle-silhouette scale ([Detectors without masks](../guide/detection.md#detectors-without-masks)). The example reuses the camera that the default pipeline calibrated in the [end-to-end example](intersection.md); `calibrate_s` is then only the background estimation. Alternatively give a metric cue, e.g. `cfg.calibration.scale = "height=27.2"`, or calibrate manually.
+* **Camera.** A box-only detector provides no instance masks, so automatic calibration has no vehicle-silhouette scale ([Detectors without masks](../guide/detection.md#detectors-without-masks)). The example reuses the camera that the default pipeline calibrated in the [end-to-end example](intersection.md); `calibrate_s` is then only the background estimation. Alternatively give a metric cue, e.g. `cfg.calibration.scale = "height=27.6"`, or calibrate manually.
 * **Cache key.** The detection cache key is computed from `cfg.detector` and `rate_hz`, not from the detector object. A distinct `detector.name`, or a fresh output directory, prevents the pipeline from reusing detections of another detector cached in the same directory.
-* **Duplicates.** torchvision applies non-maximum suppression per label, so one vehicle often yields overlapping `car` and `truck` boxes. The tracker gates by super-class, so both boxes enter one association problem, and the duplicate verdict removed 22 tracks in this run ([Verdicts](../guide/verdicts.md#duplicates)). Cross-label suppression inside the detector (for example `nms_by_group`) removes them earlier.
+* **Duplicates.** torchvision applies non-maximum suppression per label, so one vehicle often yields overlapping `car` and `truck` boxes. The tracker gates by super-class, so both boxes enter one association problem, and the duplicate verdict removed 21 tracks in this run ([Verdicts](../guide/verdicts.md#duplicates)). Cross-label suppression inside the detector (for example `nms_by_group`) removes them earlier.
 
 Without masks, vehicle centres come from the box-contact model with class priors instead of the mask geometry; [Vehicle footprints from masks](../guide/footprints.md#synthetic-occlusion) compares the two paths on a synthetic occlusion. A detector that segments returns the optional fifth element, and its vehicles then take the mask path.
 

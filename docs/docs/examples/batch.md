@@ -25,16 +25,16 @@ tachymetry run videos/ --out runs --devices cuda:1 --camera intersection.camera.
 ```
 
 ```text
-Tachymetry: 2 of 2 videos processed in 117 s
+Tachymetry: 2 of 2 videos processed in 116 s
 ┏━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━┓
 ┃ video                 ┃ status ┃ tracks ┃ moving vehicles ┃ parked ┃ pedestrians ┃ median km/h ┃ seconds ┃
 ┡━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━┩
-│ intersection-day.mp4  │ done   │     49 │              22 │     17 │           7 │       24.83 │  115.14 │
-│ intersection-turn.mp4 │ done   │     32 │              11 │     18 │           2 │       20.33 │   51.49 │
+│ intersection-day.mp4  │ done   │     49 │              22 │     17 │           7 │       24.83 │  113.94 │
+│ intersection-turn.mp4 │ done   │     32 │              11 │     18 │           2 │       20.33 │    50.6 │
 └───────────────────────┴────────┴────────┴─────────────────┴────────┴─────────────┴─────────────┴─────────┘
 ```
 
-With free memory well above 18 GB (two SAM 3 workers of 9 GB each), `plan_workers` started two worker processes on the GPU, one per clip, each with its own SAM 3 model. The batch took 117 s of wall time for 167 s of per-video processing (detection, tracking and export; no rendering, and no calibration since the camera is given). Without `--devices`, all available GPUs are used. The output root holds one directory per video, named after the file stem, plus the batch summaries. With a given camera, `camera.json` is a copy of it and no calibration report or preview is written:
+With free memory well above 18 GB (two SAM 3 workers of 9 GB each), `plan_workers` started two worker processes on the GPU, one per clip, each with its own SAM 3 model. The batch took 116 s of wall time for 165 s of per-video processing (detection, tracking and export; no rendering, and no calibration since the camera is given). Without `--devices`, all available GPUs are used. The output root holds one directory per video, named after the file stem, plus the batch summaries. With a given camera, `camera.json` is a copy of it and no calibration report or preview is written:
 
 ```text
 runs/
@@ -46,8 +46,8 @@ runs/
 
 ```text
 video,status,out_dir,tracks,vehicles_moving,pedestrians,median_speed_kmh,seconds,device,error
-videos/intersection-day.mp4,done,runs/intersection-day,49,22,7,24.83,115.14,cuda:1,
-videos/intersection-turn.mp4,done,runs/intersection-turn,32,11,2,20.33,51.49,cuda:1,
+videos/intersection-day.mp4,done,runs/intersection-day,49,22,7,24.83,113.94,cuda:1,
+videos/intersection-turn.mp4,done,runs/intersection-turn,32,11,2,20.33,50.6,cuda:1,
 ```
 
 Add `--render` for an `overlay.mp4` per video, `--formats csv,json,geojson` for more exports, and `--set KEY=VALUE` (repeatable) for configuration fields ([Configuration](../guide/configuration.md)).
@@ -100,7 +100,7 @@ print(samples.groupby(["video", "class"]).track_id.nunique().unstack(fill_value=
 intersection-turn      32          27.7095      47.5       20.33
 class              bicycle  bus  car  person  truck
 video
-intersection-day         2    2   28       8      9
+intersection-day         2    2   29       8      8
 intersection-turn        0    0   27       3      2
 ```
 

@@ -30,10 +30,10 @@ print(run.report["timings"])
 ```text
 svbrd-llm-roadside-video-av by Ryan-xiangyu-ut (Hugging Face), CC BY 4.0, https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av
 {'calibration.hfov_deg': 47.5}
-f=2181.8px (hfov 47.5 deg), height=27.21 m, pitch=17.88 deg, roll=-0.01 deg, yaw=134.0 deg, lens=identity
+f=2181.8px (hfov 47.5 deg), height=27.62 m, pitch=17.88 deg, roll=-0.01 deg, yaw=134.0 deg, lens=identity
 auto:fov+vp
-{'tracks': 50, 'by_class': {'person': 8, 'car': 29, 'bus': 2, 'bicycle': 2, 'truck': 9}, 'moving_by_class': {'bus': 2, 'car': 17, 'bicycle': 2, 'person': 7, 'truck': 3}, 'parked_by_class': {'car': 12, 'truck': 6}, 'rejected': {'rider': 2, 'ghost': 2, 'duplicate': 1}, 'vehicle_speed_kmh': {'median': 24.65, 'p85': 34.62, 'max': 58.59}}
-{'detect_s': 55.88, 'calibrate_s': 23.29, 'track_s': 41.34, 'render_s': 24.5, 'total_s': 145.22}
+{'tracks': 49, 'by_class': {'person': 8, 'car': 29, 'bus': 2, 'bicycle': 2, 'truck': 8}, 'moving_by_class': {'bus': 2, 'car': 17, 'bicycle': 2, 'person': 7, 'truck': 3}, 'parked_by_class': {'car': 12, 'truck': 5}, 'rejected': {'rider': 2, 'ghost': 1, 'duplicate': 1}, 'vehicle_speed_kmh': {'median': 24.83, 'p85': 34.91, 'max': 59.32}}
+{'detect_s': 55.1, 'calibrate_s': 24.84, 'track_s': 42.71, 'render_s': 24.81, 'total_s': 147.68}
 ```
 
 The run uses the default detector, SAM 3, whose instance masks give the vehicle footprints ([Vehicle footprints from masks](../guide/footprints.md)) and the metric scale of the calibration. `tachymetry demo` applies the sample's overrides itself; with `tm.track`, the field of view is passed as `calibration__hfov_deg`.
@@ -41,7 +41,7 @@ The run uses the default detector, SAM 3, whose instance masks give the vehicle 
 Calibration:
 
 * *Candidate.* The known field of view (47.5°) and the main ground vanishing point give the orientation (`fov+vp`, [Automatic calibration](../guide/auto-calibration.md)): a camera pitched 17.9° down.
-* *Scale.* The vehicle silhouettes place it 27.2 m above the road. The camera packaged for the five intersection clips, calibrated once, is 27.7 m high; see [Camera calibration](../guide/calibration.md) for the spread between calibrations of one camera.
+* *Scale.* The vehicle silhouettes place it 27.6 m above the road. The camera packaged for the five intersection clips, calibrated once, is 27.7 m high; see [Camera calibration](../guide/calibration.md) for the spread between calibrations of one camera.
 
 The run directory now holds the files described in [Outputs](../guide/outputs.md):
 
@@ -91,33 +91,32 @@ print(counts)
 
 ```text
 state    moving  parked  stationary
-class
+class                              
 bicycle       2       0           0
 bus           2       0           0
 car          17      12           0
 person        7       0           1
-truck         3       6           0
- id  class   verdict                reason
-  7 person     rider  riding two-wheeler 6
- 29 person     ghost             too short
- 33  truck duplicate       duplicate of 23
- 43 person     rider riding two-wheeler 41
- 46    car     ghost             too short
-count    2177.0
-mean       25.2
-std         9.6
-min         3.2
+truck         3       5           0
+ id  class   verdict                          reason
+  7 person     rider bike detection under the person
+ 28 person     ghost                       too short
+ 32  truck duplicate                 duplicate of 22
+ 42 person     rider bike detection under the person
+count    2182.0
+mean       25.4
+std         9.9
+min         3.0
 15%        15.0
-50%        24.6
-85%        34.6
-max        58.6
+50%        24.8
+85%        34.9
+max        59.3
 {'+x': 8, '-x': 2}
 ```
 
 Notes on the result:
 
-* The two riders are the persons on the two bicycles; they are counted once, as cyclists ([Verdicts](../guide/verdicts.md#riders-inferred-cyclists-and-passengers)).
-* Twelve parked cars and six parked trucks are reported with zero speed; they do not enter the speed statistics.
+* The two riders are the persons on the two bicycles: a `bike` detection lies under each of them, and they are counted once, as cyclists ([Verdicts](../guide/verdicts.md#riders-inferred-cyclists-and-passengers)). The bicycles themselves are classed from their `bike` evidence ([class vote](../guide/tracking.md#class-vote)).
+* Twelve parked cars and five parked trucks (pickups) are reported with zero speed; they do not enter the speed statistics.
 * The world frame of an automatic calibration has $+x$ along the best-supported lane-line direction. Without cuboid footprints the origin stays below the camera, so the main road runs along $x$ at $y \approx 41$ to $53$ m in this clip (traffic in $+x$ near 42 m, in $-x$ near 52 m). For counts at a specific location, define the screen line in this frame, or calibrate manually against a georeferenced reference to work in map coordinates ([Manual calibration](../guide/manual-calibration.md)).
 * The spot speeds are samples at 15 Hz, so longer tracks weigh more. For one value per vehicle use `tracks_summary.csv` (`speed_median_kmh`, `speed_p85_kmh`).
 
@@ -137,7 +136,7 @@ print(run.report["timings"], run.summary()["vehicle_speed_kmh"])
 ```
 
 ```text
-{'detect_s': 0.03, 'calibrate_s': 0.01, 'track_s': 40.92, 'total_s': 41.18} {'median': 24.81, 'p85': 34.85, 'max': 57.8}
+{'detect_s': 0.03, 'calibrate_s': 0.01, 'track_s': 41.49, 'total_s': 41.75} {'median': 25.09, 'p85': 35.25, 'max': 59.22}
 ```
 
-A shorter smoothing window follows speed changes faster at the cost of more noise ([Bird's-eye view and speed](../guide/bev-speed.md#speed)); on this clip the median and 85th-percentile vehicle speeds move by 0.16 and 0.23 km/h.
+A shorter smoothing window follows speed changes faster at the cost of more noise ([Bird's-eye view and speed](../guide/bev-speed.md#speed)); on this clip the median and 85th-percentile vehicle speeds move by 0.26 and 0.34 km/h.

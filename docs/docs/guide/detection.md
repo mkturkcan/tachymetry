@@ -68,7 +68,7 @@ RF-DETR resizes each frame to a square without preserving the aspect ratio, as i
 
 The gain comes from small, distant and densely parked vehicles. In an earlier run of the same comparison, an input of 576 × 1008 that keeps the 16:9 aspect ratio found fewer than the 1008 square.
 
-Score scales differ between back-ends. On `intersection-day`, the median score of the vehicle detections kept at the default thresholds was 0.82 for SAM 3 (two-level prompts; 20,742 vehicle detections of the default run), and in an earlier comparison 0.30 for RF-DETR-Seg L, 0.35 for RF-DETR L and 0.67 for UrbanOmniDetect-2 X. The share scoring at least 0.5 was 0.95, 0.19, 0.25 and 0.66. RF-DETR scores parked and distant vehicles mostly between 0.15 and 0.5, hence its [score profile](#score-profiles). The tracking thresholds (`TrackerConfig.high_conf`, `FilterConfig.ghost_min_score`, `FilterConfig.ghost_parked_score`) refer to these scores.
+Score scales differ between back-ends. On `intersection-day`, the median score of the vehicle detections kept at the default thresholds was 0.81 for SAM 3 (two-level prompts; 21,001 vehicle detections of the default run), and in an earlier comparison 0.30 for RF-DETR-Seg L, 0.35 for RF-DETR L and 0.67 for UrbanOmniDetect-2 X. The share scoring at least 0.5 was 0.95, 0.19, 0.25 and 0.66. RF-DETR scores parked and distant vehicles mostly between 0.15 and 0.5, hence its [score profile](#score-profiles). The tracking thresholds (`TrackerConfig.high_conf`, `FilterConfig.ghost_min_score`, `FilterConfig.ghost_parked_score`) refer to these scores.
 
 ## Class taxonomy
 

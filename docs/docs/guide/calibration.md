@@ -221,7 +221,7 @@ The check constrains only the horizon. When all dashed lines are parallel, all c
 
 On the motorway sample, one chain of five dashes is found, between 23 and 58 m from the camera. Its regularity under two cameras:
 
-- **Automatic camera** ($f$ = 1131 px from the 59° field of view, pitch 11.8°, roll −1.5°, height 8.1 m from the silhouette scale): $\rho$ = 0.019. The dashes measure 2.76 to 3.07 m with periods of 8.71 to 9.00 m.
+- **Automatic camera** ($f$ = 1131 px from the 59° field of view, pitch 11.8°, roll −1.5°, height 8.4 m from the silhouette scale): $\rho$ = 0.019. The dashes measure 2.85 to 3.16 m with periods of 8.90 to 9.38 m, close to the 3 m dashes and 9 m periods of the markings.
 - **Earlier calibration from UrbanOmniDetect-2 cuboids** ($f$ = 2072 px, pitch 9.8°, height 15.3 m): $\rho$ = 0.165. The same dashes grow from 3.35 m at the far end to 6.28 m at the near end.
 
 Changing the pitch of the automatic camera by ±2° gives $\rho$ = 0.065 and 0.086; changing its field of view to 50° or 68° at the same pitch gives 0.096 and 0.059. All of these remain below the warning threshold.
@@ -247,13 +247,13 @@ Each clip was then calibrated separately with `calibrate_auto(background, detect
 
 | Clip | Selected | Height (m) | Pitch (deg) | Roll (deg) | Silhouette cost | Without the field of view: height (m), $f$ (px) |
 |---|---|---|---|---|---|---|
-| `intersection-day` | `fov+vp` | 27.71 | 17.89 | −0.18 | 0.70 | 18.68, 1777 |
-| `intersection-day-2` | `fov+vp` | 26.62 | 17.63 | 0.23 | 0.69 | 19.74, 1836 |
-| `intersection-day-3` | `fov+vp` | 30.89 | 18.84 | 1.48 | 0.42 | 17.74, 1733 |
-| `intersection-turn` | `fov+vp` | 26.30 | 20.66 | 3.60 | 0.84 | 19.55, 1768 |
-| `intersection-night` | `lines` ($f$ = 2197 px) | 33.39 | 22.20 | −2.47 | 0.28 | 33.39, 2197 |
+| `intersection-day` | `fov+vp` | 27.44 | 17.89 | −0.18 | 0.75 | 18.54, 1777 |
+| `intersection-day-2` | `fov+vp` | 26.57 | 17.63 | 0.23 | 0.41 | 19.70, 1836 |
+| `intersection-day-3` | `fov+vp` | 30.91 | 18.84 | 1.48 | 0.37 | 17.65, 1733 |
+| `intersection-turn` | `fov+vp` | 30.40 | 20.66 | 3.60 | 0.82 | 19.64, 1768 |
+| `intersection-night` | `lines` ($f$ = 2197 px) | 34.40 | 22.20 | −2.47 | 0.26 | 34.40, 2197 |
 
-With the same field of view, the heights span 26.3 to 33.4 m, the pitches 17.6° to 22.2° and the rolls −2.5° to 3.6° for one camera pose. Without the field of view, the `lines` candidate of the daytime clips gives focal lengths 16 to 21 % shorter and heights of 17.7 to 19.7 m. The samples therefore share one camera. `intersection-day` is calibrated with its 47.5° field of view. The other four load the packaged camera `tachymetry/assets/cameras/svbrd-intersection.json` ($f$ = 2182 px, height 27.7 m, pitch 17.9°, roll −0.18°) through `tachymetry.data.sample_camera`.
+With the same field of view, the heights span 26.6 to 34.4 m, the pitches 17.6° to 22.2° and the rolls −2.5° to 3.6° for one camera pose. Without the field of view, the `lines` candidate of the daytime clips gives focal lengths 16 to 21 % shorter and heights of 17.7 to 19.7 m. The samples therefore share one camera. `intersection-day` is calibrated with its 47.5° field of view. The other four load the packaged camera `tachymetry/assets/cameras/svbrd-intersection.json` ($f$ = 2182 px, height 27.7 m, pitch 17.9°, roll −0.18°) through `tachymetry.data.sample_camera`, an earlier calibration of `intersection-day` whose lane widths (3.43 to 3.45 m) and dash lengths (2.7 to 3.1 m) match the markings; the current calibration of the clip is 1 % lower.
 
 <figure markdown="span">
   ![Automatic calibration of the public intersection clip](../../media/calib_auto.jpg)

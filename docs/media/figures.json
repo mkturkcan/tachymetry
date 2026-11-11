@@ -1,26 +1,26 @@
 {
  "clip": {
-  "hero_time_s": 29.466666666666665,
-  "viewer_time_s": 19.133333333333333,
+  "hero_time_s": 29.2,
+  "viewer_time_s": 19.0,
   "summary": {
-   "tracks": 49,
+   "tracks": 50,
    "by_class": {
     "person": 8,
-    "car": 28,
+    "car": 30,
     "bus": 2,
     "bicycle": 2,
-    "truck": 9
+    "truck": 8
    },
    "moving_by_class": {
     "bus": 2,
-    "car": 17,
+    "car": 18,
     "bicycle": 2,
     "person": 7,
     "truck": 3
    },
    "parked_by_class": {
-    "car": 11,
-    "truck": 6
+    "car": 12,
+    "truck": 5
    },
    "rejected": {
     "rider": 2,
@@ -28,67 +28,67 @@
     "duplicate": 1
    },
    "vehicle_speed_kmh": {
-    "median": 24.83,
-    "p85": 34.99,
-    "max": 59.33
+    "median": 24.67,
+    "p85": 34.45,
+    "max": 57.72
    }
   },
-  "camera": "f=2181.8px (hfov 47.5 deg), height=27.71 m, pitch=17.89 deg, roll=-0.18 deg, yaw=133.8 deg, lens=identity"
+  "camera": "f=2181.8px (hfov 47.5 deg), height=27.44 m, pitch=17.89 deg, roll=-0.18 deg, yaw=133.8 deg, lens=identity"
  },
  "raw_vs_clean": {
-  "frame": 574,
-  "raw_boxes_in_frame": 52,
-  "raw_associations": 120,
-  "tachymetry_tracks": 49
+  "frame": 570,
+  "raw_boxes_in_frame": 54,
+  "raw_associations": 123,
+  "tachymetry_tracks": 50
  },
  "calibration_clip": {
   "auto": {
    "method": "auto:fov+vp",
-   "camera": "f=2181.8px (hfov 47.5 deg), height=27.71 m, pitch=17.89 deg, roll=-0.18 deg, yaw=133.8 deg, lens=identity",
+   "camera": "f=2181.8px (hfov 47.5 deg), height=27.44 m, pitch=17.89 deg, roll=-0.18 deg, yaw=133.8 deg, lens=identity",
    "focal_px": 2181.765963769613,
-   "height_m": 27.709480445935142,
+   "height_m": 27.4351363346101,
    "pitch_deg": 17.892957180575934,
    "roll_deg": -0.1844990532755718,
    "scale": {
     "scale": "vehicle silhouettes",
-    "factor": 27.70948044593515,
-    "cost": 0.6979929590630961,
-    "n_masks": 84,
-    "n_tracklets": 23
+    "factor": 27.435136334610107,
+    "cost": 0.7532183649275704,
+    "n_masks": 111,
+    "n_tracklets": 30
    },
-   "seconds": 17.9
+   "seconds": 18.4
   },
   "lines": {
    "method": "auto:lines",
-   "camera": "f=1777.3px (hfov 56.7 deg), height=18.68 m, pitch=18.13 deg, roll=-3.10 deg, yaw=127.6 deg, lens=identity",
+   "camera": "f=1777.3px (hfov 56.7 deg), height=18.54 m, pitch=18.13 deg, roll=-3.10 deg, yaw=127.6 deg, lens=identity",
    "focal_px": 1777.349852825967,
-   "height_m": 18.682418374300415,
+   "height_m": 18.542823196413174,
    "pitch_deg": 18.128510115162406,
    "roll_deg": -3.0973840235938224,
    "scale": {
     "scale": "vehicle silhouettes",
-    "factor": 18.682418374300415,
-    "cost": 1.0751742508006197,
-    "n_masks": 84,
-    "n_tracklets": 23
+    "factor": 18.542823196413174,
+    "cost": 1.111919438381295,
+    "n_masks": 111,
+    "n_tracklets": 30
    },
-   "seconds": 17.7
+   "seconds": 18.8
   },
   "depth": {
    "method": "auto:depth",
-   "camera": "f=1792.5px (hfov 56.3 deg), height=30.54 m, pitch=22.92 deg, roll=-3.48 deg, yaw=90.0 deg, lens=identity",
+   "camera": "f=1792.5px (hfov 56.3 deg), height=28.98 m, pitch=22.92 deg, roll=-3.48 deg, yaw=90.0 deg, lens=identity",
    "focal_px": 1792.4893264127572,
-   "height_m": 30.539564870252452,
+   "height_m": 28.980067854148,
    "pitch_deg": 22.918989318586082,
    "roll_deg": -3.4837468278634014,
    "scale": {
     "scale": "vehicle silhouettes",
-    "factor": 29.20084493598744,
-    "cost": 0.7442215046656157,
-    "n_masks": 84,
-    "n_tracklets": 23
+    "factor": 27.709709396274533,
+    "cost": 0.8047631313038944,
+    "n_masks": 111,
+    "n_tracklets": 30
    },
-   "seconds": 17.2
+   "seconds": 12.8
   }
  },
  "synthetic_calibration": {
@@ -624,25 +624,25 @@
  },
  "gallery": {
   "intersection-day": {
-   "time_s": 29.47,
+   "time_s": 29.2,
    "calibration": "auto:fov+vp",
-   "camera": "f=2181.8px (hfov 47.5 deg), height=27.71 m, pitch=17.89 deg, roll=-0.18 deg, yaw=133.8 deg, lens=identity",
+   "camera": "f=2181.8px (hfov 47.5 deg), height=27.44 m, pitch=17.89 deg, roll=-0.18 deg, yaw=133.8 deg, lens=identity",
    "size": [
     1920,
     1080
    ],
-   "tracks": 49,
+   "tracks": 50,
    "by_class": {
     "person": 8,
-    "car": 28,
+    "car": 30,
     "bus": 2,
     "bicycle": 2,
-    "truck": 9
+    "truck": 8
    },
    "vehicle_speed_kmh": {
-    "median": 24.83,
-    "p85": 34.99,
-    "max": 59.33
+    "median": 24.67,
+    "p85": 34.45,
+    "max": 57.72
    },
    "attribution": "svbrd-llm-roadside-video-av by Ryan-xiangyu-ut (Hugging Face), CC BY 4.0, https://huggingface.co/datasets/Ryan-xiangyu-ut/svbrd-llm-roadside-video-av"
   },
@@ -656,13 +656,13 @@
    ],
    "tracks": 49,
    "by_class": {
-    "car": 35,
+    "car": 34,
     "truck": 7,
-    "bus": 5,
+    "bus": 6,
     "person": 2
    },
    "vehicle_speed_kmh": {
-    "median": 31.11,
+    "median": 31.05,
     "p85": 43.13,
     "max": 58.83
    },
@@ -676,11 +676,11 @@
     1920,
     1080
    ],
-   "tracks": 117,
+   "tracks": 115,
    "by_class": {
-    "person": 35,
-    "car": 59,
-    "truck": 17,
+    "person": 34,
+    "car": 57,
+    "truck": 18,
     "bus": 3,
     "bicycle": 3
    },
@@ -734,7 +734,7 @@
   "motorway-overpass": {
    "time_s": 5.68,
    "calibration": "auto:fov+vp",
-   "camera": "f=1131.2px (hfov 59.0 deg), height=8.13 m, pitch=11.83 deg, roll=-1.49 deg, yaw=-1.3 deg, lens=identity",
+   "camera": "f=1131.2px (hfov 59.0 deg), height=8.38 m, pitch=11.83 deg, roll=-1.49 deg, yaw=-1.3 deg, lens=identity",
    "size": [
     1280,
     720
@@ -745,32 +745,32 @@
     "car": 61
    },
    "vehicle_speed_kmh": {
-    "median": 59.64,
-    "p85": 76.3,
-    "max": 92.55
+    "median": 61.82,
+    "p85": 78.66,
+    "max": 93.53
    },
    "attribution": "Small-Crowd-and-Traffic-Video-Footages by parsafaramarzi (Hugging Face), MIT, https://huggingface.co/datasets/parsafaramarzi/Small-Crowd-and-Traffic-Video-Footages"
   },
   "dhaka-roundabout": {
-   "time_s": 19.69,
+   "time_s": 18.77,
    "calibration": "known",
    "camera": "f=2825.2px (hfov 68.4 deg), height=111.70 m, pitch=90.00 deg, roll=0.00 deg, yaw=90.0 deg, lens=identity",
    "size": [
     3840,
     2160
    ],
-   "tracks": 395,
+   "tracks": 314,
    "by_class": {
-    "motorcycle": 222,
-    "car": 121,
-    "bicycle": 1,
-    "person": 38,
-    "truck": 13
+    "motorcycle": 208,
+    "car": 45,
+    "bicycle": 21,
+    "person": 32,
+    "truck": 8
    },
    "vehicle_speed_kmh": {
-    "median": 11.88,
-    "p85": 15.86,
-    "max": 50.19
+    "median": 10.8,
+    "p85": 16.62,
+    "max": 36.91
    },
    "attribution": "DRINF: Dhaka Road Intersection Nadir Footage by Hamim Mahmud (Hugging Face, doi:10.57967/hf/10301); 30 s excerpt from 2:20, CC BY 4.0, https://huggingface.co/datasets/hamimmahmud0/DRINF"
   }
@@ -811,23 +811,23 @@
  },
  "dash_check": {
   "sample": "motorway-overpass",
-  "camera": "f=1131.2px (hfov 59.0 deg), height=8.13 m, pitch=11.83 deg, roll=-1.49 deg, yaw=-1.3 deg, lens=identity",
-  "regularity": 0.018732499546035845,
+  "camera": "f=1131.2px (hfov 59.0 deg), height=8.38 m, pitch=11.83 deg, roll=-1.49 deg, yaw=-1.3 deg, lens=identity",
+  "regularity": 0.018732499546035886,
   "lines": [
    {
     "dashes": 5,
     "length_m": [
-     2.97,
-     2.76,
-     2.81,
-     2.98,
-     3.07
+     3.06,
+     2.85,
+     2.89,
+     3.07,
+     3.16
     ],
     "period_m": [
-     9.11,
-     8.76,
-     8.64,
-     8.66
+     9.38,
+     9.03,
+     8.9,
+     8.92
     ]
    }
   ]
