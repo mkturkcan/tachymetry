@@ -58,10 +58,10 @@ Output (Linux, NumPy 2.4, OpenCV 4.13; 45 s on a CPU, most of it simulating the 
 
 ```text
 manual    [manual       ] focal  -0.04 %   pitch  +0.03 deg   roll  -0.05 deg   height   7.99 m
-lines     [lines        ] focal  -2.67 %   pitch  +0.43 deg   roll  +0.33 deg   height   8.00 m
-masks     [auto:lines   ] focal  -2.67 %   pitch  +0.43 deg   roll  +0.33 deg   height   7.61 m
+lines     [lines        ] focal  -0.39 %   pitch  -0.01 deg   roll  -0.09 deg   height   8.00 m
+masks     [auto:lines   ] focal  -0.39 %   pitch  -0.01 deg   roll  -0.09 deg   height   7.71 m
 masks+fov [auto:fov+vp  ] focal  +0.00 %   pitch  -0.11 deg   roll  -0.09 deg   height   7.75 m
-cuboids   [auto:lines   ] focal  -2.67 %   pitch  +0.43 deg   roll  +0.33 deg   height   7.93 m
+cuboids   [auto:lines   ] focal  -0.39 %   pitch  -0.01 deg   roll  -0.09 deg   height   7.95 m
 ```
 
 No chain of five or more dashes lies on the road surface of this scene, so the [dash check](../guide/calibration.md#dash-regularity) does not apply.
@@ -69,15 +69,15 @@ No chain of five or more dashes lies on the road surface of this scene, so the [
 How each estimate is obtained:
 
 - **manual** fits the physical camera to 12 correspondences, chooses the lens model by 10-fold cross-validation, and inherits its metric scale from the world coordinates ([Manual calibration](../guide/manual-calibration.md)).
-- **lines** recovers focal length, pitch and roll from the vanishing points of the painted markings and the vertical structures. Its height is the scale cue (`scale="height=8"`), so its height error is zero by construction and its accuracy is visible in the focal length and angles.
+- **lines** recovers focal length, pitch and roll from the vanishing points of the painted markings and the vertical structures. The 15 pole edges of the scene do not contradict right-angled streets, so the two street directions give the focal length ([Focal length and rotation](../guide/auto-calibration.md#road-markings-and-vanishing-points)). Its height is the scale cue (`scale="height=8"`), so its height error is zero by construction and its accuracy is visible in the focal length and angles.
 - **masks** is the default path of `tachymetry run` with a segmenting detector. Without cuboids or a field of view, `lines` is the only candidate.
-    - The metric scale comes from the vehicle silhouettes ([Automatic calibration](../guide/auto-calibration.md#metric-scale-from-vehicle-silhouettes)): factor 7.61 from 92 masks of 28 tracklets, mean cost 0.47.
+    - The metric scale comes from the vehicle silhouettes ([Automatic calibration](../guide/auto-calibration.md#metric-scale-from-vehicle-silhouettes)): factor 7.71 from 92 masks of 28 tracklets, mean cost 0.47.
     - The silhouette model of the calibration (beltline at 63 % of the height, cabin 55 % by 75 %) differs from the simulated car shape above, as a real car population would.
-    - The height error (−4.9 %) contains the error of the `lines` orientation, which the silhouette scale inherits.
-- **masks+fov** adds the true 70° field of view. The candidate built from it, `fov+vp` ($f$ = 914 px, pitch 31.89°, roll 1.41°), is selected: with a known field of view it is preferred over `lines` ($f$ = 890 px), whose vanishing-point residual is zero by construction and therefore cannot be compared with it on that score. The focal length is then the true one, the pitch error drops to −0.11° and the scale error to +2.4 %.
-- **cuboids** is the UrbanOmniDetect-2 path. The candidates scored `lines` 0.348, `cuboids` 0.279 and `fused` 0.270 ([Ranking](../guide/auto-calibration.md#ranking)); `lines` was selected and scaled from 351 trusted car footprints to 7.93 m (−0.9 %).
+    - The height error (−3.6 %) is close to the one with the true field of view below (−3.1 %), so it comes mostly from the difference between the two car shapes; the silhouette scale also inherits any error of the `lines` orientation.
+- **masks+fov** adds the true 70° field of view. The candidate built from it, `fov+vp` ($f$ = 914 px, pitch 31.89°, roll 1.41°), is selected, as a known field of view makes it the choice over `lines` ($f$ = 910.5 px). The focal length is then the true one; the pitch error is −0.11° and the scale error +2.4 %.
+- **cuboids** is the UrbanOmniDetect-2 path. The candidates scored `lines` 0.326, `cuboids` 0.279 and `fused` 0.270 ([Ranking](../guide/auto-calibration.md#ranking)); `lines` was selected and scaled from 351 trusted car footprints to 7.95 m (−0.6 %).
 
-Without a field of view, the automatic methods selected the `lines` orientation, which underestimates the focal length by 2.7 % and overestimates the pitch by 0.43 degrees; they differ only in the metric scale. With the field of view, `fov+vp` removes the focal-length error. The table below measures the consequence on the ground plane directly.
+Without a field of view, the automatic methods selected the `lines` orientation (focal length −0.39 %, pitch −0.01°); they differ only in the metric scale. With the field of view, `fov+vp` has the true focal length by construction. The table below measures the consequence on the ground plane directly.
 
 ## Measured errors
 

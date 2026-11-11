@@ -111,13 +111,13 @@
    },
    "lines": {
     "method": "lines",
-    "camera": "f=889.6px (hfov 71.5 deg), height=8.00 m, pitch=32.43 deg, roll=1.83 deg, yaw=55.5 deg, lens=identity",
-    "focal_pct": -2.672496982748546,
-    "pitch_deg": 0.4282142943284484,
-    "roll_deg": 0.32998653491018515,
-    "height_m": -8.881784197001252e-16,
-    "scale_pct": -1.8364884269457593,
-    "ground_rms_m": 0.28631360907445885,
+    "camera": "f=910.5px (hfov 70.2 deg), height=8.00 m, pitch=31.99 deg, roll=1.41 deg, yaw=54.9 deg, lens=identity",
+    "focal_pct": -0.38528453756709935,
+    "pitch_deg": -0.008982482915190104,
+    "roll_deg": -0.09090951348320098,
+    "height_m": 0.0,
+    "scale_pct": -0.7369588599855592,
+    "ground_rms_m": 0.10027039317307405,
     "n_eval": 2304,
     "cv_rmse_m": null,
     "scale": null,
@@ -125,30 +125,30 @@
    },
    "auto": {
     "method": "auto:lines",
-    "camera": "f=889.6px (hfov 71.5 deg), height=7.61 m, pitch=32.43 deg, roll=1.83 deg, yaw=55.5 deg, lens=identity",
-    "focal_pct": -2.672496982748546,
-    "pitch_deg": 0.4282142943284484,
-    "roll_deg": 0.3299865349101896,
-    "height_m": -0.38926232670403316,
-    "scale_pct": 3.184228164882108,
-    "ground_rms_m": 0.41388362042305565,
+    "camera": "f=910.5px (hfov 70.2 deg), height=7.71 m, pitch=31.99 deg, roll=1.41 deg, yaw=54.9 deg, lens=identity",
+    "focal_pct": -0.38528453756709935,
+    "pitch_deg": -0.008982482915190104,
+    "roll_deg": -0.09090951348320098,
+    "height_m": -0.28708000593801586,
+    "scale_pct": 2.957677472536724,
+    "ground_rms_m": 0.3525444631303644,
     "n_eval": 2304,
     "cv_rmse_m": null,
     "scale": {
      "scale": "vehicle silhouettes",
-     "factor": 7.610737673295965,
-     "cost": 0.4682424000271259,
+     "factor": 7.712919994061987,
+     "cost": 0.4657840727705056,
      "n_masks": 92,
      "n_tracklets": 28
     },
     "candidates": [
      {
       "method": "lines",
-      "score": 0.9999999999999979,
-      "camera": "f=889.6px (hfov 71.5 deg), height=1.00 m, pitch=32.43 deg, roll=1.83 deg, yaw=55.5 deg, lens=identity",
+      "score": 0.9476753489495203,
+      "camera": "f=910.5px (hfov 70.2 deg), height=1.00 m, pitch=31.99 deg, roll=1.41 deg, yaw=54.9 deg, lens=identity",
       "consistency": {
-       "vp_residual_deg": 6.3611093629270335e-15,
-       "score": 0.9999999999999979
+       "vp_residual_deg": 0.16122988288070478,
+       "score": 0.9476753489495203
       }
      }
     ]
@@ -183,44 +183,44 @@
      },
      {
       "method": "lines",
-      "score": 0.9999999999999979,
-      "camera": "f=889.6px (hfov 71.5 deg), height=1.00 m, pitch=32.43 deg, roll=1.83 deg, yaw=55.5 deg, lens=identity",
+      "score": 0.9476753489495203,
+      "camera": "f=910.5px (hfov 70.2 deg), height=1.00 m, pitch=31.99 deg, roll=1.41 deg, yaw=54.9 deg, lens=identity",
       "consistency": {
-       "vp_residual_deg": 6.3611093629270335e-15,
-       "score": 0.9999999999999979
+       "vp_residual_deg": 0.16122988288070478,
+       "score": 0.9476753489495203
       }
      }
     ]
    },
    "auto_cuboids": {
     "method": "auto:lines",
-    "camera": "f=889.6px (hfov 71.5 deg), height=7.93 m, pitch=32.43 deg, roll=1.83 deg, yaw=55.5 deg, lens=identity",
-    "focal_pct": -2.672496982748546,
-    "pitch_deg": 0.4282142943284484,
-    "roll_deg": 0.3299865349101896,
-    "height_m": -0.07083983924185677,
-    "scale_pct": -0.9594866716188033,
-    "ground_rms_m": 0.2097317458586046,
+    "camera": "f=910.5px (hfov 70.2 deg), height=7.95 m, pitch=31.99 deg, roll=1.41 deg, yaw=54.9 deg, lens=identity",
+    "focal_pct": -0.38528453756709935,
+    "pitch_deg": -0.008982482915190104,
+    "roll_deg": -0.09090951348320098,
+    "height_m": -0.052218903842709,
+    "scale_pct": -0.08477592518727484,
+    "ground_rms_m": 0.04455235581566755,
     "n_eval": 2304,
     "cv_rmse_m": null,
     "scale": {
-     "scale": 7.929160160758142,
+     "scale": 7.947781096157293,
      "n": 351,
-     "n_width_based": 152,
+     "n_width_based": 157,
      "n_length_based": 298,
-     "scale_width_only": 7.688271359402702,
-     "scale_length_only": 7.990213132940211
+     "scale_width_only": 7.816289694854494,
+     "scale_length_only": 8.081532652712639
     },
     "candidates": [
      {
       "method": "lines",
-      "score": 0.3483661640561204,
-      "camera": "f=889.6px (hfov 71.5 deg), height=1.00 m, pitch=32.43 deg, roll=1.83 deg, yaw=55.5 deg, lens=identity",
+      "score": 0.32594621731121104,
+      "camera": "f=910.5px (hfov 70.2 deg), height=1.00 m, pitch=31.99 deg, roll=1.41 deg, yaw=54.9 deg, lens=identity",
       "consistency": {
-       "footprint_right_angle_deg": 8.918175668139945,
-       "size_range_slope": 0.024402538499978886,
-       "vp_residual_deg": 6.3611093629270335e-15,
-       "score": 0.3483661640561204
+       "footprint_right_angle_deg": 8.867331735898667,
+       "size_range_slope": 0.027081963137289503,
+       "vp_residual_deg": 0.16122988288070478,
+       "score": 0.32594621731121104
       }
      },
      {

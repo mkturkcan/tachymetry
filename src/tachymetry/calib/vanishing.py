@@ -19,7 +19,7 @@ from ..geometry.camera import CalibrationError, Camera
 from ..geometry.lens import IdentityLens, Lens
 from .lines import Segments, VanishingPoint, estimate_vanishing_points
 
-__all__ = ["focal_from_vps", "camera_from_vps", "select_orthogonal_pair", "classify_vertical"]
+__all__ = ["focal_from_vps", "camera_from_vps", "select_orthogonal_pair", "classify_vertical", "vertical_consistency"]
 
 
 def focal_from_vps(v1: np.ndarray, v2: np.ndarray, pp: np.ndarray) -> float | None:
@@ -85,6 +85,74 @@ def select_orthogonal_pair(
             if best is None or score > best[3]:
                 best = (vps[i], vps[j], f, score)
     return None if best is None else best[:3]
+
+
+def vertical_consistency(
+    segs: Segments,
+    vertical: VanishingPoint,
+    v1: VanishingPoint,
+    v2: VanishingPoint,
+    focal: float,
+    image_size: tuple[int, int],
+    threshold_deg: float = 1.5,
+    level: float = 5.99,
+    sigma_px: float = 1.0,
+) -> dict:
+    """Test right-angled streets against the vertical evidence.
+
+    Two orthogonal ground directions imply a vertical vanishing point, the image of the normal
+    of their plane. The near-vertical segments of ``segs`` that support the measured ``vertical``
+    are fitted by weighted least squares on their angular residuals, and the implied point is
+    compared with the fit by a likelihood-ratio test with two degrees of freedom (``level`` = 5.99
+    is the 95 % quantile). The direction error of a segment of length ``L`` is taken as
+    ``sqrt(2) * sigma_px / L`` (endpoint noise plus the departure of real poles and facades from
+    the vertical), inflated when the residuals are larger than that. A far vertical vanishing point
+    is poorly constrained along its distance from the image centre, so its focal length is often
+    less precise than that of the street pair; this test tells whether the vertical contradicts
+    the street pair.
+
+    Returns ``{"n", "statistic", "rejected"}``; with fewer than four supporting segments the test
+    cannot reject.
+    """
+    from scipy.optimize import minimize
+
+    from .lines import _angular_residual
+
+    w, h = image_size
+    pp = np.array([(w - 1) / 2, (h - 1) / 2])
+    K = np.array([[focal, 0, pp[0]], [0, focal, pp[1]], [0, 0, 1.0]])
+    Ki = np.linalg.inv(K)
+    normal = np.cross(_direction(v1.point, Ki), _direction(v2.point, Ki))
+    implied = K @ normal
+    d = segs.directions
+    sv = segs.subset(np.abs(d[:, 1]) > math.cos(math.radians(25)))
+    if len(sv):
+        sv = sv.subset(_angular_residual(sv, vertical.point) < math.radians(threshold_deg))
+    n = len(sv)
+    if n < 4:
+        return {"n": n, "statistic": 0.0, "rejected": False}
+    wt = sv.lengths**2 / (2.0 * sigma_px**2)  # inverse variance of each segment's direction
+
+    def cost(v: np.ndarray) -> float:
+        return float(np.sum(wt * _angular_residual(sv, v) ** 2))
+
+    # minimise over the direction of the homogeneous point (finite and infinite points alike)
+    scale = np.array([w, w, 1.0])
+
+    def to_point(ab: np.ndarray) -> np.ndarray:
+        a, b = ab
+        u = np.array([math.sin(a) * math.cos(b), math.sin(a) * math.sin(b), math.cos(a)])
+        return np.array([u[0] * scale[0] + pp[0] * u[2], u[1] * scale[1] + pp[1] * u[2], u[2]])
+
+    p0 = vertical.point
+    u0 = np.array([p0[0] - pp[0] * p0[2], p0[1] - pp[1] * p0[2], p0[2]]) / scale
+    u0 = u0 / np.linalg.norm(u0) * (1 if u0[2] >= 0 else -1)
+    ab0 = np.array([math.acos(np.clip(u0[2], -1, 1)), math.atan2(u0[1], u0[0])])
+    best = minimize(lambda ab: cost(to_point(ab)), ab0, method="Nelder-Mead", options={"xatol": 1e-7, "fatol": 1e-12})
+    s_min = min(float(best.fun), cost(vertical.point))
+    inflation = max(1.0, s_min / (n - 2))  # residuals larger than the noise model
+    stat = (cost(implied) - s_min) / inflation
+    return {"n": n, "statistic": float(stat), "rejected": bool(stat > level)}
 
 
 def camera_from_vps(

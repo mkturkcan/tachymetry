@@ -44,7 +44,14 @@ $$
 f^2 = -(v_1 - c)\cdot(v_2 - c)
 $$
 
-(`focal_from_vps`). The preferred solution pairs each horizontal vanishing point with the vertical one, which are orthogonal whatever the road direction. Candidates with a horizontal field of view outside 15 to 130 degrees are discarded, the best-supported one is used, and the two best focal lengths are averaged (weighted by support) when they agree within 10 %. This solution makes no assumption that streets meet at right angles. Only without a usable vertical vanishing point are two horizontal vanishing points assumed orthogonal (`select_orthogonal_pair`, scored by $\sqrt{s_i s_j}$ times $|\cos \angle(n_{ij}, d_z)|^8$ when a vertical direction exists), which is recorded as `details["assumes_orthogonal_streets"]`. With a single road direction and no vertical structure, the focal length is not observable and the `lines` candidate fails.
+(`focal_from_vps`). Two solutions are available.
+
+- **Vertical solution.** Each horizontal vanishing point paired with the vertical one, which are orthogonal whatever the road direction, gives a focal length. Candidates with a horizontal field of view outside 15 to 130 degrees are discarded, the best-supported one is used, and the two best focal lengths are averaged (weighted by support) when they agree within 10 %. This solution makes no assumption that streets meet at right angles, but a far vertical vanishing point is poorly constrained along its distance from the image centre, and the focal length inherits that uncertainty.
+- **Street pair.** The best pair of horizontal vanishing points that are orthogonal for a plausible focal length (`select_orthogonal_pair`, scored by $\sqrt{s_i s_j}$ times $|\cos \angle(n_{ij}, d_z)|^8$ when a vertical direction exists).
+
+The street pair is used when the vertical segments do not contradict it (`vertical_consistency`). The pair implies a vertical vanishing point, the image of the normal of its plane. It is compared with the weighted least-squares fit of the near-vertical segments that support the measured vertical, by a likelihood-ratio test with two degrees of freedom at the 95 % level. The direction error of a segment of length $L$ is taken as $\sqrt{2}\,\sigma / L$ with $\sigma$ = 1 px, which covers endpoint noise and the departure of real poles and facades from the vertical; it is inflated when the residuals are larger. When the test rejects the pair, or without a pair, the vertical solution is used; without a usable vertical vanishing point, the pair is used untested. `details["orthogonality_test"]` reports the test and `details["assumes_orthogonal_streets"]` is set whenever the pair is used.
+
+On the synthetic intersection, 15 short pole edges do not reject the pair, whose focal length is within 0.4 % of the truth; the vertical solution would underestimate it by 2.7 %. On the public intersection clips, 31 to 46 pole and facade segments reject the pair, and the vertical solution is used. With a single road direction and no vertical structure, the focal length is not observable and the `lines` candidate fails.
 
 The rotation follows from the back-projected directions $d_x = K^{-1} v_x / \lVert K^{-1} v_x \rVert$ (the main road, world $+x$) and $d_z$ (vertical, oriented towards the top of the image), with $d_x$ orthogonalised against $d_z$ and oriented into the scene, $d_y = d_z \times d_x$ and $R = [d_x\ d_y\ d_z]$ projected onto $SO(3)$ (`camera_from_vps`). The camera is placed at height 1 and rejected unless $0° < \vartheta < 90°$. The `lines` score is the support of the main vanishing point as a fraction of the marking-segment length.
 
@@ -126,13 +133,13 @@ $$
 S = e^{-a / 10°}\; e^{-|\beta| / 0.15}\; e^{-c / 3°}\; e^{-\rho / 0.1} \times \begin{cases} 1 & 10° \le \mathrm{HFOV} \le 125° \\ 0.1 & \text{otherwise} \end{cases},
 $$
 
-with factors omitted when their evidence is missing; when such chains exist but $\rho$ is undefined for a camera (dash ends above its horizon), the factor is 0.5. The candidate with the highest $S$ is selected, except that a given field of view makes the `fov+vp` candidate the choice whenever it exists. With instance masks instead of cuboids, the footprint terms are absent, so the ranking rests on the vanishing-point residual and the dash regularity. The `lines` camera is computed from the same vanishing points that enter $c$, so its $c$ is close to zero by construction.
+with factors omitted when their evidence is missing; when such chains exist but $\rho$ is undefined for a camera (dash ends above its horizon), the factor is 0.5. The candidate with the highest $S$ is selected, except that a given field of view makes the `fov+vp` candidate the choice whenever it exists. With instance masks instead of cuboids, the footprint terms are absent, so the ranking rests on the vanishing-point residual and the dash regularity. A `lines` camera from the vertical solution is computed from the same vanishing points that enter $c$, so its $c$ is close to zero by construction; one from the street pair is not.
 
 In the [synthetic walkthrough](../examples/synthetic-calibration.md) (true camera: $f$ = 914 px, pitch 32°, roll 1.5°):
 
-- **Instance masks** give one candidate, `lines` ($f$ = 890 px, score 1.0).
-- **With the true 70° field of view** the `fov+vp` candidate is added ($f$ = 914 px, pitch 31.89°, roll 1.41°) and selected. `lines` lies within 10 % of the field of view and is kept, but its vanishing-point residual is zero by construction, so its score (1.0 against 0.95) cannot rank it against the camera built from the known field of view.
-- **With cuboid detections** the candidates scored `lines` 0.348, `cuboids` 0.279 ($f$ = 869 px) and `fused` 0.270 ($f$ = 883 px), and `lines` was selected.
+- **Instance masks** give one candidate, `lines` from the street pair ($f$ = 910.5 px, pitch 31.99°, score 0.948).
+- **With the true 70° field of view** the `fov+vp` candidate is added ($f$ = 914 px, pitch 31.89°, roll 1.41°, score 0.949) and selected, as a given field of view makes it the choice. `lines` lies within 10 % of the field of view and is kept.
+- **With cuboid detections** the candidates scored `lines` 0.326, `cuboids` 0.279 ($f$ = 869 px) and `fused` 0.270 ($f$ = 883 px), and `lines` was selected.
 
 No chain of five or more dashes lies on the road surface of that scene, so no dash factor enters these scores.
 

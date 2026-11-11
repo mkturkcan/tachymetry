@@ -105,6 +105,39 @@ def test_tan_lens_is_recovered_from_straight_lines():
     assert abs(res.camera.pitch - cam.pitch) < 1.0
 
 
+def test_vertical_consistency_separates_right_angles_from_oblique_streets():
+    """Pole edges accept a right-angled street pair and reject streets meeting at 70 degrees."""
+    from tachymetry.calib.lines import Segments, VanishingPoint
+    from tachymetry.calib.vanishing import focal_from_vps, vertical_consistency
+
+    size = (1280, 720)
+    cam = Camera.from_pose(size, focal=900, height=8, pitch=30, yaw=20, roll=0.5)
+
+    def vp(d):
+        p = cam.K @ cam.R @ np.asarray(d, float)
+        return VanishingPoint(p / np.linalg.norm(p), np.zeros(0, bool), 1.0)
+
+    vert = vp([0, 0, 1])
+    v = vert.xy
+    rng = np.random.default_rng(0)
+    segs = []
+    for x in np.linspace(80, 1200, 12):  # 120 px pole edges across the image, endpoint noise 0.3 px
+        top = np.array([x, rng.uniform(40, 400)])
+        d = (v - top) / np.linalg.norm(v - top)
+        segs.append([*top, *(top + 120 * d)])
+    segs = Segments(np.array(segs) + rng.normal(0, 0.3, (12, 4)))
+    pp = np.array([(size[0] - 1) / 2, (size[1] - 1) / 2])
+
+    vx, vy = vp([1, 0, 0]), vp([0, 1, 0])
+    right = vertical_consistency(segs, vert, vx, vy, focal_from_vps(vx.point, vy.point, pp), size)
+    a = np.radians(70)
+    vo = vp([np.cos(a), np.sin(a), 0])
+    f_oblique = focal_from_vps(vx.point, vo.point, pp)  # the focal length right angles would imply
+    oblique = vertical_consistency(segs, vert, vx, vo, f_oblique, size)
+    assert right["n"] == 12 and not right["rejected"]
+    assert oblique["rejected"]
+
+
 def test_dash_regularity_checks_the_horizon():
     """Dash chains are recognised by their cross-ratio, and are regular only under a correct horizon."""
     from tachymetry.calib.from_markings import DashedLine, _regular_runs, marking_regularity

@@ -47,6 +47,7 @@ First public release, licensed under the Apache License 2.0. Detector weights ar
 - Automatic calibration:
     - Orientation comes from road-marking and vertical vanishing points, from a known horizontal field of view with the main ground vanishing point (`calibration.hfov_deg`, `tachymetry calibrate --hfov`), or from the optional depth-plus-segmentation and GeoCalib back-ends.
     - A given field of view is authoritative: candidates more than 10 % away from its focal length are dropped.
+    - From road markings, the focal length comes from two orthogonal street directions unless the vertical segments reject right angles by a likelihood-ratio test (`vertical_consistency`), and from one street direction and the vertical otherwise. A far vertical vanishing point fixes the focal length poorly, so this solution no longer depends on the few short pole edges of a scene.
     - The metric scale comes from car silhouettes in the instance masks, or from cuboid footprints with UrbanOmniDetect-2.
 - A dash-regularity check ranks the candidates and warns about irregular dashes. Dashed lane lines are searched on the road surface swept by vehicles, from the cross-ratio of their dash starts and their perspective order. Chains of five or more dashes compare their ground lengths and periods along the road.
 - Automatic calibrations that place the camera more than 250 m above the ground raise a warning, which is also stored in `camera.meta["warnings"]`.

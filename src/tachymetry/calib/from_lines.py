@@ -3,7 +3,10 @@
 Pipeline: plumb-line lens estimate on the traffic-free background, painted
 marking extraction, LSD segments, vanishing points of the two ground
 directions (lane lines, crosswalk stripes, kerbs, stop lines) and of the
-vertical (poles, facades), then rotation and focal length from orthogonality.
+vertical (poles, facades), then rotation and focal length: from the two ground
+directions when the vertical does not contradict right-angled streets
+(:func:`~tachymetry.calib.vanishing.vertical_consistency`), from one ground
+direction and the vertical otherwise.
 The metric scale comes from a :class:`ScaleCue`.
 """
 
@@ -20,7 +23,7 @@ from ..geometry.lens import IdentityLens, Lens
 from .lines import Segments, detect_segments, estimate_lens_vp_consistency, marking_mask
 from .result import CalibrationResult
 from .scale import scale_from_distance, scale_from_lane_spacing, scale_to_height
-from .vanishing import camera_from_vps, select_orthogonal_pair, vanishing_points_from_segments
+from .vanishing import camera_from_vps, select_orthogonal_pair, vanishing_points_from_segments, vertical_consistency
 
 __all__ = ["ScaleCue", "calibrate_from_lines", "apply_scale_cue"]
 
@@ -165,15 +168,23 @@ def calibrate_from_lines(
 
     cam = None
     main = None
+    pair = select_orthogonal_pair(horiz, size, vertical)
     if vertical is not None and horiz:
-        # preferred: a ground direction and the vertical give the focal length without assuming
-        # that the streets meet at right angles
+        # A ground direction and the vertical give the focal length without assuming that the
+        # streets meet at right angles, but a far vertical vanishing point fixes it poorly; the
+        # street pair is used instead when the vertical segments do not contradict it.
         cands = []
         for vp in horiz:
             f = focal_from_vps(vp.point, vertical.point, pp)
             if f is not None and f_lo <= f <= f_hi:
                 cands.append((vp.support, vp, f))
-        if cands:
+        details["focal_candidates"] = [c[2] for c in cands]
+        use_pair = False
+        if cands and pair is not None:
+            test = vertical_consistency(all_segs, vertical, pair[0], pair[1], pair[2], size, threshold_deg)
+            details["orthogonality_test"] = test
+            use_pair = not test["rejected"]
+        if cands and not use_pair:
             cands.sort(key=lambda c: -c[0])
             _, main, f = cands[0]
             fs = [c[2] for c in cands[:2]]
@@ -181,16 +192,17 @@ def calibrate_from_lines(
                 f = float(np.average(fs, weights=[c[0] for c in cands[:2]]))
             cam = camera_from_vps(main.point, None, size, v_z=vertical.point, focal=f, lens=lens_obj)
             details["solution"] = "ground direction + vertical (no orthogonality assumption)"
-            details["focal_candidates"] = [c[2] for c in cands]
     if cam is None:
-        pair = select_orthogonal_pair(horiz, size, vertical)
         if pair is None:
             raise CalibrationError("could not find two independent vanishing directions; use another method")
         vx, vy, f = pair
         main = vx if vx.support >= vy.support else vy
         other = vy if main is vx else vx
         cam = camera_from_vps(main.point, other.point, size, v_z=None, focal=f, lens=lens_obj)
-        details["solution"] = "two ground directions assumed orthogonal"
+        if "orthogonality_test" in details:
+            details["solution"] = "two orthogonal ground directions, consistent with the vertical"
+        else:
+            details["solution"] = "two ground directions assumed orthogonal"
         details["assumes_orthogonal_streets"] = True
     vx = main
     cam, sinfo = apply_scale_cue(cam, cue, mark_segs.subset(main.inliers))
