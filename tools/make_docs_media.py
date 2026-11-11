@@ -255,7 +255,11 @@ def calib_figures(run: Any, out: Path, stats: dict, device: str, work: Path | No
     hfov = data.sample_overrides("intersection-day").get("calibration.hfov_deg")
     stats["calibration_clip"] = {}
     for name, cfg, title in (
-        ("auto", CalibrationConfig(hfov_deg=hfov), f"Automatic: known {hfov:g} deg field of view + ground vanishing point"),
+        (
+            "auto",
+            CalibrationConfig(hfov_deg=hfov),
+            f"Automatic: known {hfov:g} deg field of view + ground vanishing point",
+        ),
         ("lines", CalibrationConfig(methods=("lines",)), "Road markings and vertical vanishing points"),
         ("depth", CalibrationConfig(methods=("depth",)), "Monocular metric depth + road segmentation"),
     ):
@@ -291,8 +295,11 @@ def dash_figure(run: Any, out: Path, stats: dict) -> None:
     cam, bg = run.camera, run.background
     rect = not cam.lens.is_identity  # dash ends are in rectified pixels when the camera has a lens
     # as in automatic calibration: chains on the road surface swept by vehicles, five dashes or more
-    lines = [ln for ln in dashed_lines(bg, lens=cam.lens if rect else None, region=road_region(run.detections))
-             if len(ln) >= 5]
+    lines = [
+        ln
+        for ln in dashed_lines(bg, lens=cam.lens if rect else None, region=road_region(run.detections))
+        if len(ln) >= 5
+    ]
     img = cam.lens.rectify_image(bg) if rect else bg.copy()
     scale = max(1, int(round(img.shape[0] / 720)))
     rows = []
@@ -307,10 +314,20 @@ def dash_figure(run: Any, out: Path, stats: dict) -> None:
             cv2.line(img, p, q, col, 3 * scale, cv2.LINE_AA)
             if np.isfinite(lengths[i]):
                 m = (0.5 * (a[i] + b[i])).astype(int)
-                draw_text(img, f"{lengths[i]:.1f}", (int(m[0]) + 8 * scale, int(m[1]) - 9 * scale), size=13 * scale,
-                          color=TEXT)
-        rows.append({"dashes": len(a), "length_m": [round(float(v), 2) for v in lengths],
-                     "period_m": [round(float(v), 2) for v in periods]})
+                draw_text(
+                    img,
+                    f"{lengths[i]:.1f}",
+                    (int(m[0]) + 8 * scale, int(m[1]) - 9 * scale),
+                    size=13 * scale,
+                    color=TEXT,
+                )
+        rows.append(
+            {
+                "dashes": len(a),
+                "length_m": [round(float(v), 2) for v in lengths],
+                "period_m": [round(float(v), 2) for v in periods],
+            }
+        )
     reg = float(marking_regularity(cam, lines)) if len(lines) else float("nan")
     sub = f"{len(lines)} dash chains, spread {reg:.3f} (log units) under {cam.describe().split(', lens')[0]}"
     save(titled(img, "Dash check: ground lengths of lane dashes (m)", sub), out / "calib_dashes.jpg", 1920)
@@ -466,8 +483,20 @@ def synthetic_figures(out: Path, stats: dict) -> None:
 
 
 # ----------------------------------------------------------------------------- occlusion (mask geometry)
-def _road_agent(aid: int, cls: str, dims: tuple, s0: float, s1: float, offset: float, v: float, t0: float,
-                u: np.ndarray, n_hat: np.ndarray, c0: np.ndarray, rate: float) -> Any:
+def _road_agent(
+    aid: int,
+    cls: str,
+    dims: tuple,
+    s0: float,
+    s1: float,
+    offset: float,
+    v: float,
+    t0: float,
+    u: np.ndarray,
+    n_hat: np.ndarray,
+    c0: np.ndarray,
+    rate: float,
+) -> Any:
     import math
 
     from tachymetry.synthetic.traffic import Agent
@@ -498,8 +527,9 @@ def occlusion_figures(out: Path, stats: dict) -> None:
     from tachymetry.tracking.builder import build_tracks
 
     rate = 15.0
-    cam = Camera.from_pose((1280, 720), focal=1100.0, height=12.0, pitch=25.0, yaw=45.0, roll=0.5,
-                           position=(-14.0, -14.0))
+    cam = Camera.from_pose(
+        (1280, 720), focal=1100.0, height=12.0, pitch=25.0, yaw=45.0, roll=0.5, position=(-14.0, -14.0)
+    )
     u = np.array([math.cos(-math.pi / 4), math.sin(-math.pi / 4)])
     n_hat = np.array([-u[1], u[0]])
     c0 = np.array([-14.0, -14.0]) + 40.0 * np.array([math.cos(math.pi / 4), math.sin(math.pi / 4)])
@@ -507,11 +537,21 @@ def occlusion_figures(out: Path, stats: dict) -> None:
     car = _road_agent(1, "car", (4.6, 1.8, 1.45), 30.0, -30.0, 1.75, 8.0, 0.5, u, n_hat, c0, rate)
     p = cam.ground_to_image((c0 + 4.0 * u - 1.75 * n_hat)[None])[0]
     tree = tree_occluder((p[0], p[1] + 35), 95, seed=1)
-    spec = TrafficSpec(duration_s=8.5, rate_hz=rate, masks=True, occluders=(tree,), ghost_rate=0.0, miss_prob=0.03,
-                       flicker_prob=0.0, seed=7)
+    spec = TrafficSpec(
+        duration_s=8.5,
+        rate_hz=rate,
+        masks=True,
+        occluders=(tree,),
+        ghost_rate=0.0,
+        miss_prob=0.03,
+        flicker_prob=0.0,
+        seed=7,
+    )
     ds = render_detections(cam, [bus, car], spec)
-    paths = {"masks": build_tracks(ds, cam, PipelineConfig())[0],
-             "boxes": build_tracks(replace(ds, masks=None), cam, PipelineConfig())[0]}
+    paths = {
+        "masks": build_tracks(ds, cam, PipelineConfig())[0],
+        "boxes": build_tracks(replace(ds, masks=None), cam, PipelineConfig())[0],
+    }
 
     def bus_track(trs: list) -> tuple:
         for tr in trs:
@@ -540,15 +580,27 @@ def occlusion_figures(out: Path, stats: dict) -> None:
         err = np.linalg.norm(tr.xy[k] - bus.xy[j], axis=1)
         hd = np.degrees(np.abs((tr.heading[k] - bus.heading[j] + np.pi / 2) % np.pi - np.pi / 2))
         res[key] = (tr, j, k, err, hd)
-        entry[key] = {"samples": int(k.sum()), "centre_median_m": float(np.median(err)), "centre_max_m": float(err.max()),
-                      "heading_max_deg": float(hd.max()), "length_m": float(tr.length), "width_m": float(tr.width),
-                      "geometry": tr.meta.get("geometry", {}).get("source"),
-                      "occluded_samples": tr.meta.get("geometry", {}).get("occluded_samples")}
-        rows.append(f"| {label} | {int(k.sum())} | {np.median(err):.2f} | {err.max():.2f} | {hd.max():.1f} | "
-                    f"{tr.length:.2f} | {tr.width:.2f} |")
+        entry[key] = {
+            "samples": int(k.sum()),
+            "centre_median_m": float(np.median(err)),
+            "centre_max_m": float(err.max()),
+            "heading_max_deg": float(hd.max()),
+            "length_m": float(tr.length),
+            "width_m": float(tr.width),
+            "geometry": tr.meta.get("geometry", {}).get("source"),
+            "occluded_samples": tr.meta.get("geometry", {}).get("occluded_samples"),
+        }
+        rows.append(
+            f"| {label} | {int(k.sum())} | {np.median(err):.2f} | {err.max():.2f} | {hd.max():.1f} | "
+            f"{tr.length:.2f} | {tr.width:.2f} |"
+        )
     rows.append("| Ground truth | | | | | 12.00 | 2.55 |")
-    table = ["| Path | Samples | Centre error, median (m) | Centre error, max (m) | Heading error, max (deg) | "
-             "Length (m) | Width (m) |", "|---|---|---|---|---|---|---|", *rows]
+    table = [
+        "| Path | Samples | Centre error, median (m) | Centre error, max (m) | Heading error, max (deg) | "
+        "Length (m) | Width (m) |",
+        "|---|---|---|---|---|---|---|",
+        *rows,
+    ]
     (out / "occlusion_bus.md").write_text("\n".join(table) + "\n")
     print("\n".join(table))
 
@@ -562,13 +614,17 @@ def occlusion_figures(out: Path, stats: dict) -> None:
     panels = []
     for i in moments:
         t = float(bus.t[i])
-        f = int(np.argmin(np.abs(ds.processed_frames / rate - t)))
         parts_b = agent_parts("bus", bus.xy[i, 0], bus.xy[i, 1], bus.heading[i], bus.L, bus.W, bus.H)
         jc = int(round((t - car.t[0]) * rate))
         agents = [(0, parts_b, depth(bus.xy[i]))]
         if 0 <= jc < len(car.t):
-            agents.append((1, agent_parts("car", car.xy[jc, 0], car.xy[jc, 1], car.heading[jc], car.L, car.W, car.H),
-                           depth(car.xy[jc])))
+            agents.append(
+                (
+                    1,
+                    agent_parts("car", car.xy[jc, 0], car.xy[jc, 1], car.heading[jc], car.L, car.W, car.H),
+                    depth(car.xy[jc]),
+                )
+            )
         label = render_label_image(cam, agents, (tree,))
         img = np.full((720, 1280, 3), (58, 54, 52), np.uint8)
         from tachymetry.calib.preview import draw_ground_grid
@@ -581,8 +637,15 @@ def occlusion_figures(out: Path, stats: dict) -> None:
         def quad(xy: np.ndarray, heading: float, L: float, W: float) -> np.ndarray:
             return cam.ground_to_image(box_corners(np.asarray(xy, float), float(heading), L, W, 0.0)[:4, :2])
 
-        cv2.polylines(img, [np.round(quad(bus.xy[i], bus.heading[i], bus.L, bus.W) * 4).astype(np.int32)], True,
-                      (240, 240, 240), 3, cv2.LINE_AA, shift=2)
+        cv2.polylines(
+            img,
+            [np.round(quad(bus.xy[i], bus.heading[i], bus.L, bus.W) * 4).astype(np.int32)],
+            True,
+            (240, 240, 240),
+            3,
+            cv2.LINE_AA,
+            shift=2,
+        )
         notes = []
         for key, col, name in (("boxes", AMBER, "boxes only"), ("masks", CYAN, "masks")):
             tr, j, k, err, hd = res[key]
@@ -599,16 +662,22 @@ def occlusion_figures(out: Path, stats: dict) -> None:
         # crop to the stretch of road around the tree (the full frame shows mostly empty ground)
         cu, cv_ = int(round(p[0])), int(round(p[1]))
         x0, y0 = max(0, cu - 560), max(0, cv_ - 250)
-        img = np.ascontiguousarray(img[y0:y0 + 420, x0:x0 + 1120])
+        img = np.ascontiguousarray(img[y0 : y0 + 420, x0 : x0 + 1120])
         draw_text(img, f"t = {t:.1f} s, {100 * vis[i]:.0f} % of the bus visible", (22, 18), size=36, color=TEXT)
         for n_i, line in enumerate(notes):
             draw_text(img, line, (22, 66 + 40 * n_i), size=32, color=AMBER if line.startswith("boxes") else CYAN)
         panels.append(img)
     legend = "white: ground truth   amber: boxes only   cyan: instance masks"
-    save(titled(hstack(panels, 10), "Bus passing behind a tree crown (synthetic masks)", legend), out / "occlusion_bus.jpg",
-         1920)
-    stats["occlusion_bus"] = {"paths": entry, "moments_s": [float(bus.t[i]) for i in moments],
-                              "visible_share": [float(vis[i]) for i in moments]}
+    save(
+        titled(hstack(panels, 10), "Bus passing behind a tree crown (synthetic masks)", legend),
+        out / "occlusion_bus.jpg",
+        1920,
+    )
+    stats["occlusion_bus"] = {
+        "paths": entry,
+        "moments_s": [float(bus.t[i]) for i in moments],
+        "visible_share": [float(vis[i]) for i in moments],
+    }
 
 
 # ----------------------------------------------------------------------------- lens rectification
@@ -769,15 +838,22 @@ def social_card(out: Path) -> None:
 
 
 # ----------------------------------------------------------------------------- scene gallery
-GALLERY = ("intersection-day", "intersection-day-2", "intersection-day-3", "intersection-turn",
-           "intersection-night", "motorway-overpass", "dhaka-roundabout")
+GALLERY = (
+    "intersection-day",
+    "intersection-day-2",
+    "intersection-day-3",
+    "intersection-turn",
+    "intersection-night",
+    "motorway-overpass",
+    "dhaka-roundabout",
+)
 
 
 _RUNS: dict[str, Any] = {}
 
 
 def run_named_sample(name: str, work: Path, device: str) -> Any:
-    """Run the pipeline on a registered sample with its known camera and overrides, if it has them (once per process)."""
+    """Run the pipeline on a registered sample with its known camera and overrides, if any (once per process)."""
     if name not in _RUNS:
         _RUNS[name] = _run_named_sample(name, work, device)
     return _RUNS[name]

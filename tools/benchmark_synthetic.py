@@ -112,8 +112,10 @@ def run_masks(seeds: tuple[int, ...] = (0, 1, 2), duration: float = 60.0) -> dic
         w, h = cam.image_size
         for seed in seeds:
             # two tree crowns in front of the road, placed in image space relative to the frame size
-            occ = (tree_occluder((0.30 * w, 0.62 * h), 0.07 * w, seed=seed),
-                   tree_occluder((0.72 * w, 0.55 * h), 0.06 * w, seed=seed + 100))
+            occ = (
+                tree_occluder((0.30 * w, 0.62 * h), 0.07 * w, seed=seed),
+                tree_occluder((0.72 * w, 0.55 * h), 0.06 * w, seed=seed + 100),
+            )
             spec = TrafficSpec(duration_s=duration, seed=seed, masks=True, occluders=occ)
             ds, agents = simulate(cam, spec)
             cfg0 = PipelineConfig()
@@ -121,8 +123,10 @@ def run_masks(seeds: tuple[int, ...] = (0, 1, 2), duration: float = 60.0) -> dic
             ids = associate(ds, obs, cfg0)
             naive = [_Naive(int(k), *v) for k, v in naive_speeds(ds, cam, ids).items()]
             rows = {"Baseline: bottom-centre, frame differencing": evaluate(naive, agents, spec.rate_hz).row()}
-            for name, dets in (("Tachymetry, boxes only (masks discarded)", replace(ds, masks=None)),
-                               ("Tachymetry, instance masks (default)", ds)):
+            for name, dets in (
+                ("Tachymetry, boxes only (masks discarded)", replace(ds, masks=None)),
+                ("Tachymetry, instance masks (default)", ds),
+            ):
                 t0 = time.time()
                 tracks, _ = build_tracks(dets, cam, PipelineConfig())
                 r = evaluate(tracks, agents, spec.rate_hz).row()
@@ -135,15 +139,36 @@ def run_masks(seeds: tuple[int, ...] = (0, 1, 2), duration: float = 60.0) -> dic
 
 
 def summarise_masks(results: dict) -> str:
-    keys = ["pos_med_m", "speed_mae_kmh", "speed_p95_kmh", "heading_med_deg", "heading_p95_deg", "length_mae_m",
-            "width_mae_m", "id_switches", "false_tracks", "seconds"]
-    heads = ["Position error (m, median)", "Speed MAE (km/h)", "Speed p95 (km/h)", "Heading error (deg, median)",
-             "Heading error (deg, p95)", "Length MAE (m)", "Width MAE (m)", "ID switches", "False tracks",
-             "Track time (s)"]
+    keys = [
+        "pos_med_m",
+        "speed_mae_kmh",
+        "speed_p95_kmh",
+        "heading_med_deg",
+        "heading_p95_deg",
+        "length_mae_m",
+        "width_mae_m",
+        "id_switches",
+        "false_tracks",
+        "seconds",
+    ]
+    heads = [
+        "Position error (m, median)",
+        "Speed MAE (km/h)",
+        "Speed p95 (km/h)",
+        "Heading error (deg, median)",
+        "Heading error (deg, p95)",
+        "Length MAE (m)",
+        "Width MAE (m)",
+        "ID switches",
+        "False tracks",
+        "Track time (s)",
+    ]
     lines = []
     for cam, rows in results["rows"].items():
-        lines.append(f"\n**{cam}, instance masks with two tree occluders**, mean over {len(results['seeds'])} seeds "
-                     f"of {results['duration_s']:.0f} s\n")
+        lines.append(
+            f"\n**{cam}, instance masks with two tree occluders**, mean over {len(results['seeds'])} seeds "
+            f"of {results['duration_s']:.0f} s\n"
+        )
         lines.append("| Variant | " + " | ".join(heads) + " |")
         lines.append("|" + "---|" * (len(heads) + 1))
         for name, rs in rows.items():
