@@ -116,7 +116,7 @@ max        58.6
 
 Notes on the result:
 
-* The two riders are the persons on the two bicycles; they are counted once, as cyclists ([Verdicts](../guide/verdicts.md#riders-and-inferred-cyclists)).
+* The two riders are the persons on the two bicycles; they are counted once, as cyclists ([Verdicts](../guide/verdicts.md#riders-inferred-cyclists-and-passengers)).
 * Twelve parked cars and six parked trucks are reported with zero speed; they do not enter the speed statistics.
 * The world frame of an automatic calibration has $+x$ along the best-supported lane-line direction. Without cuboid footprints the origin stays below the camera, so the main road runs along $x$ at $y \approx 41$ to $53$ m in this clip (traffic in $+x$ near 42 m, in $-x$ near 52 m). For counts at a specific location, define the screen line in this frame, or calibrate manually against a georeferenced reference to work in map coordinates ([Manual calibration](../guide/manual-calibration.md)).
 * The spot speeds are samples at 15 Hz, so longer tracks weigh more. For one value per vehicle use `tracks_summary.csv` (`speed_median_kmh`, `speed_p85_kmh`).

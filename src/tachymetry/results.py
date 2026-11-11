@@ -64,6 +64,7 @@ SUMMARY_FIELDS = [
     "speed_max_kmh",
     "moving_share",
     "mean_score",
+    "class_rule",
 ]
 
 
@@ -211,6 +212,8 @@ class TrackSet:
                     "heading_deg": np.round(np.degrees(tr.heading), 1).tolist(),
                     "flags": tr.flags.tolist(),
                     "bbox": np.round(tr.bbox, 1).tolist(),
+                    **({"class_shares": tr.meta["class_shares"]} if "class_shares" in tr.meta else {}),
+                    **{k: tr.meta[m] for k, m in (("rider_id", "rider"), ("partner_id", "partner")) if m in tr.meta},
                 }
             )
         Path(path).write_text(json.dumps(doc, default=_json_default), encoding="utf-8")

@@ -7,9 +7,9 @@ Run on the output of :mod:`tachymetry.tracking.hygiene`, in this order:
    next within a radius that grows with the gap; heading and speed must agree;
    a track that left through the image border is never continued.
 2. **Duplicates**: two concurrent tracks of one object (part-and-whole boxes).
-3. **Passengers / reflections**: person boxes contained in a vehicle box.
-4. **Riders**: persons on a bicycle or motorcycle are one road user; fast
-   "pedestrians" without a detected bicycle become cyclists.
+3. **Riders**: persons on a bicycle or motorcycle are one road user with it; fast
+   "pedestrians" without a detected two-wheeler become cyclists.
+4. **Passengers / reflections**: person boxes contained in a vehicle box.
 5. **Shadows**: person tracks moving in lockstep with a vehicle.
 6. **Ghosts**: short-lived or low-confidence tracks that never go anywhere.
 """
@@ -20,7 +20,8 @@ from collections.abc import Callable
 
 import numpy as np
 
-from ..config import FilterConfig
+from ..config import SUPER_CLASS, FilterConfig
+from ..detections import DetectionSet
 from .model import Flags, Track
 
 __all__ = ["stitch_candidates", "mark_duplicates", "mark_passengers_and_riders", "mark_shadows", "mark_ghosts"]
@@ -148,29 +149,60 @@ def mark_duplicates(tracks: list[Track], cfg: FilterConfig) -> int:
     return n
 
 
-def mark_passengers_and_riders(tracks: list[Track], cfg: FilterConfig) -> dict[str, int]:
+def mark_passengers_and_riders(
+    tracks: list[Track], cfg: FilterConfig, dets: DetectionSet | None = None
+) -> dict[str, int]:
+    """Person tracks that are not pedestrians. The first rule that applies decides.
+
+    1. **Rider**, on a two-wheeler, when any of these holds:
+
+       a. a confident ``bike`` detection overlaps the person's box (``bike_ride``
+          evidence of SAM 3, :mod:`tachymetry.detect.sam3`) in more than
+          ``rider_share`` of its detections, at least ``rider_min_frames``;
+       b. the person's box overlaps the box of a two-wheeler track, enlarged by
+          15 % on each side, by more than ``rider_overlap`` of its own area in more
+          than ``rider_share`` of their common frames (at least
+          ``rider_min_frames``);
+       c. its ground position lies within ``rider_distance_m`` of a vehicle or
+          two-wheeler track in more than half of its sampled frames (every second
+          detection, at least ``rider_colocation_min`` samples);
+       d. its median speed exceeds ``rider_speed_kmh``. A person moving that fast
+          for at least ``cyclist_min_duration_s`` with no partner from b or c
+          becomes a cyclist (class ``bicycle``) instead: a two-wheeler that no
+          prompt detected.
+
+    2. **Passenger**, when the person's box lies inside a vehicle detection box of
+       the same frame (intersection over the person's area above
+       ``passenger_ioa``) in more than ``passenger_share`` of its detections:
+       occupants of cars and buses, and reflections. Without ``dets`` the boxes of
+       the vehicle tracks are used.
+    """
     counts = {"passenger": 0, "rider": 0, "cyclist_inferred": 0}
     persons = [tr for tr in tracks if tr.is_ok and tr.super_cls == "person"]
     vehicles = [tr for tr in tracks if tr.is_ok and tr.super_cls == "vehicle"]
     wheels = [tr for tr in tracks if tr.is_ok and tr.super_cls == "two_wheeler"]
+    ride = dets.evidence_column("bike_ride") if dets is not None else None
+    veh_boxes: dict[int, np.ndarray] = {}
+    if dets is not None and len(dets):
+        sup = np.array([SUPER_CLASS.get(c, c) for c in dets.class_names])[dets.cls]
+        rows_v = np.flatnonzero(sup != "person")
+        for f in np.unique(dets.frame[rows_v]):
+            veh_boxes[int(f)] = dets.xyxy[rows_v[dets.frame[rows_v] == f]].astype(np.float64)
     for p in persons:
-        n_obs = int(((p.flags & Flags.OBSERVED) > 0).sum())
-        if n_obs == 0:
+        obs = (p.flags & Flags.OBSERVED) > 0
+        if not obs.any():
             continue
-        # passengers: the person's box sits inside a vehicle box for most of its life
-        inside = np.zeros(len(p), bool)
-        for v in vehicles:
-            ip, iv = _common(p, v)
-            if len(ip):
-                inside[ip] |= _ioa(p.bbox[ip], v.bbox[iv]) > cfg.passenger_ioa
-        if inside.mean() > cfg.passenger_share:
-            p.verdict, p.reason = "passenger", "box contained in a vehicle box"
-            counts["passenger"] += 1
-            continue
-        # riders: overlaps an expanded two-wheeler box, or rides along with one on the ground
+        reason = ""
+        partner: Track | None = None
+        # a. bike evidence under the person
+        if ride is not None:
+            r = ride[p.rows[obs]] > 0
+            if r.sum() >= cfg.rider_min_frames and r.mean() > cfg.rider_share:
+                reason = "bike detection under the person"
+        # b. overlap with a tracked two-wheeler
         for wtr in wheels:
             ip, iw = _common(p, wtr)
-            if len(ip) < 4:
+            if len(ip) < cfg.rider_min_frames:
                 continue
             wb = wtr.bbox[iw].copy()
             ex = 0.15 * (wb[:, 2] - wb[:, 0])
@@ -179,20 +211,67 @@ def mark_passengers_and_riders(tracks: list[Track], cfg: FilterConfig) -> dict[s
             wb[:, 2] += ex
             wb[:, 1] -= ey
             wb[:, 3] += ey
-            over = _ioa(p.bbox[ip], wb) > cfg.rider_overlap
-            close = np.linalg.norm(p.xy[ip] - wtr.xy[iw], axis=1) < cfg.rider_distance_m
-            if over.mean() > cfg.rider_share or (len(ip) >= 5 and close.mean() > 0.5):
-                p.verdict, p.reason = "rider", f"riding two-wheeler {wtr.id}"
-                wtr.meta["rider"] = p.id
-                counts["rider"] += 1
+            if (_ioa(p.bbox[ip], wb) > cfg.rider_overlap).mean() > cfg.rider_share:
+                partner, reason = wtr, reason or f"on two-wheeler {wtr.id}"
                 break
-        if p.is_ok:
-            mv = p.speed_kmh[p.speed_kmh > 3.0]
-            if len(mv) and p.duration >= 2.0 and np.median(mv) > 15.0:
+        # c. co-located with a vehicle or two-wheeler on the ground
+        if partner is None:
+            sample = np.zeros(len(p), bool)
+            sample[np.flatnonzero(obs)[::2]] = True
+            present = np.zeros(len(p), bool)  # some vehicle is in the scene at this sample
+            hit = np.zeros(len(p), bool)  # ... and one of them within rider_distance_m
+            hits: dict[int, int] = {}
+            for v in wheels + vehicles:
+                ip, iv = _common(p, v)
+                keep = sample[ip]
+                if not keep.any():
+                    continue
+                ip, iv = ip[keep], iv[keep]
+                close = np.linalg.norm(p.xy[ip] - v.xy[iv], axis=1) < cfg.rider_distance_m
+                present[ip] = True
+                hit[ip[close]] = True
+                if close.any():
+                    hits[v.id] = int(close.sum())
+            tot = int(present.sum())
+            if tot >= cfg.rider_colocation_min and hit.sum() / tot > 0.5:
+                vid = max(hits, key=hits.get)
+                partner = next(v for v in wheels + vehicles if v.id == vid)
+                reason = reason or f"co-located with {partner.cls} {partner.id}"
+        # d. cycling speed
+        fast = len(p.speed_kmh) > 0 and float(np.median(p.speed_kmh)) > cfg.rider_speed_kmh
+        if not reason and fast:
+            if p.duration >= cfg.cyclist_min_duration_s:
                 p.cls, p.super_cls = "bicycle", "two_wheeler"
                 p.length, p.width, p.height = 1.75, 0.6, 1.6
                 p.meta["inferred"] = "person moving at cycling speed"
+                p.meta["class_rule"] = "inferred"
                 counts["cyclist_inferred"] += 1
+                continue
+            reason = "moves at cycling speed"
+        if reason:
+            p.verdict, p.reason = "rider", reason
+            if partner is not None:
+                partner.meta["rider"] = p.id
+                p.meta["partner"] = partner.id
+            counts["rider"] += 1
+            continue
+        # 2. passengers: the box sits inside a vehicle box for most of the person's detections
+        inside = np.zeros(len(p), bool)
+        if dets is not None:
+            for k in np.flatnonzero(obs):
+                vb = veh_boxes.get(int(p.frame[k]))
+                if vb is not None:
+                    inside[k] = bool(
+                        (_ioa(np.repeat(p.bbox[k : k + 1], len(vb), axis=0), vb) > cfg.passenger_ioa).any()
+                    )
+        else:
+            for v in vehicles:
+                ip, iv = _common(p, v)
+                if len(ip):
+                    inside[ip] |= _ioa(p.bbox[ip], v.bbox[iv]) > cfg.passenger_ioa
+        if inside[obs].mean() > cfg.passenger_share:
+            p.verdict, p.reason = "passenger", "box contained in a vehicle box"
+            counts["passenger"] += 1
     return counts
 
 

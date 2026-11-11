@@ -87,13 +87,23 @@ def _to_cxcywh(b: np.ndarray) -> np.ndarray:
 class ByteTracker:
     """Online tracker. Call :meth:`step` once per processed frame, in time order."""
 
-    def __init__(self, cfg: TrackerConfig, class_names: tuple[str, ...], image_size: tuple[int, int]):
+    def __init__(
+        self,
+        cfg: TrackerConfig,
+        class_names: tuple[str, ...],
+        image_size: tuple[int, int],
+        groups: dict[str, str] | None = None,
+    ):
+        """``groups`` overrides the association group of each class (default: its super-class)."""
         self.cfg = cfg
         self.class_names = class_names
         self.image_size = image_size
         self.tracks: list[_Track] = []
         self.next_id = 1
-        self._sup = [SUPER_CLASS.get(c, c) if cfg.super_class_gating else c for c in class_names]
+        if groups is not None and cfg.super_class_gating:
+            self._sup = [groups.get(c, SUPER_CLASS.get(c, c)) for c in class_names]
+        else:
+            self._sup = [SUPER_CLASS.get(c, c) if cfg.super_class_gating else c for c in class_names]
 
     # ------------------------------------------------------------- Kalman
     @staticmethod

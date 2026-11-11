@@ -45,7 +45,7 @@ New tracks start with $P_0 = \operatorname{diag}\big((h/10)^2 I_4, (10\,h/160/\D
 
 **Gates.** A pair is forbidden (cost $10^6$) when one of the following holds:
 
-1. the detection's super-class differs from the track's (`super_class_gating = True`);
+1. the detection's association group differs from the track's (`super_class_gating = True`). The groups are the super-classes `vehicle`, `two_wheeler` and `person`; with SAM 3, whose detections carry class evidence, vehicles and two-wheelers form one group, because a detection's class is then a single-frame vote and the class of the track is decided from all its frames ([class vote](#class-vote)), as in a video tracker that follows each `vehicle` object regardless of class;
 2. IoU is below the stage minimum (0 in stage 1, `min_iou_low = 0.20` in stage 2);
 3. $|\ln(A_\text{det}/A_\text{track})| > 0.92$ (area ratio outside 0.40 to 2.5) or $|\ln(a_\text{det}/a_\text{track})| > 0.79$ for the aspect ratios $a = w/h$ (ratio outside 0.45 to 2.2) (*fixed*);
 4. with a camera, both ground contacts finite: $\lVert g_\text{det} - g_\text{track} \rVert > v_{\max}\,\Delta t + 1\,\text{m} + 5\,\text{gsd}$, where $\Delta t$ is the time since the track's last ground update and `max_speed_mps = {vehicle: 50, two_wheeler: 20, person: 7}` m/s. This metric plausibility gate removes the identity swap between a parked car and a car passing in front of it.
@@ -64,9 +64,25 @@ Rows with `valid = False` are removed, and when a track holds two detections in 
 
 ### Class vote
 
-The class of a track is the label with the largest summed weight $s \cdot \sqrt{A} \cdot \kappa$, with detection score $s$, box area $A$ and centrality
-$\kappa = \operatorname{clip}\!\big(1 - 0.8\,|x_m - W/2| / (W/2), 0.05, 1\big)\cdot\big(0.4 + 0.6\,\operatorname{clip}(y_2 / H, 0, 1)\big)$,
-so central, near-field views dominate (`class_vote`). The vote is repeated for each segment after splitting.
+Each detection gets a view weight $w = \sqrt{A}\cdot\max(\kappa, 0.05)$, with box area $A$ and centrality
+$\kappa = \big(1 - 0.8\,|x_m - W/2| / (W/2)\big)\cdot\big(0.4 + 0.6\,\operatorname{clip}(y_2 / H, 0, 1)\big)$,
+so that large, central, near-field views dominate and the far field, where vehicles look alike, barely votes (`view_weights`).
+The class of a track then follows from its detections (`class_vote`); the vote is repeated for each segment after splitting.
+
+**With class evidence (SAM 3).** Every detection carries the score $e_p$ of the best-matching detection of each class prompt $p$ ([SAM 3 prompts](detection.md#sam-3-prompts)). The share of prompt $p$ is
+
+$$
+S_p = \frac{\sum_i w_i\, e_{p,i}}{\sum_i w_i},
+$$
+
+summed over all detections of the track, those without a match included, so a hesitant far-field match counts little and a confident near-field one dominates. The slots of the vote are two-wheeler, `bus`, `truck`, `car`, `van` and `suv` (ties in this order); a detection's two-wheeler score is the larger of its `bike` and `motorcycle` evidence, since the `bike` prompt alone misses many motorcycles in some views (in the straight-down sample, `motorcycle` evidence is found on 51 % of the vehicle detections and `bike` evidence on 17 %). The class is the argmax slot, with `car`, `van` and `suv` folded into `car` and a two-wheeler a motorcycle when $S_\text{motorcycle} > S_\text{bike}$ and a bicycle otherwise, provided the largest share reaches 0.20 (`CLASS_SHARE_MIN`). Below it the evidence is too weak (far-field-only tracks), and two fallbacks apply in turn:
+
+1. **bike flag**: when a confident `bike` detection lies within more than half of the track's detections (`bike_cover` evidence, at least 4 detections), the track is a two-wheeler;
+2. **size**: otherwise the track is fitted as a car, and its fitted size decides: a fit that reaches 6.7 m, close to the car length bound, is fitted again as a truck and kept as one if that fit is longer than 8.0 m; a fit that stays at the smallest car (length at most 3.15 m and width at most 1.65 m, the lower bounds of the car box) is smaller than any car, and the track becomes a two-wheeler (`size_small`: a motorcycle when its `motorcycle` share exceeds its `bike` share, else a bicycle). In the straight-down sample, 56 tracks have no usable evidence; their car fits stay at 3.05 × 1.55 m, and they are cycle-rickshaws, rickshaw vans and motorcycles, which become two-wheelers (18 bicycles, 33 motorcycles) instead of cars.
+
+`meta["class_rule"]` (`evidence`, `bike_flag`, `size` or `size_small`, and `inferred` for [inferred cyclists](verdicts.md#riders-inferred-cyclists-and-passengers)) and `meta["class_shares"]` record the decision; they are exported as `class_rule` and `class_shares` ([Outputs](outputs.md)).
+
+**Without class evidence** (RF-DETR, UrbanOmniDetect-2), the per-detection labels vote with the weight $s \cdot w$, with the detection score $s$ (`meta["class_rule"] = "detections"`).
 
 ### Presplit at gaps and teleports
 

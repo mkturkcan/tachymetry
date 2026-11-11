@@ -78,21 +78,92 @@ class HygieneStats:
         return dict(self.__dict__)
 
 
-def class_vote(dets: DetectionSet, rows: np.ndarray, image_size: tuple[int, int]) -> tuple[str, dict[str, float]]:
-    """Class by weighted vote: score x sqrt(box area) x centrality (central, near-field views dominate)."""
+#: Lowest weighted evidence share that decides the class of a track (detectors with class evidence).
+CLASS_SHARE_MIN = 0.20
+#: Two-wheeler flag of a vehicle track: share of its detections covered by a confident bike detection,
+#: and the least number of such detections.
+BIKE_FLAG_SHARE = 0.5
+BIKE_FLAG_MIN_FRAMES = 4
+#: Unresolved tracks whose car fit reaches this length are fitted again as trucks (size fallback).
+SIZE_FALLBACK_CAR_L = 6.7
+#: ... and are trucks when that fit is longer than this.
+SIZE_FALLBACK_TRUCK_L = 8.0
+#: Unresolved tracks whose car fit stays at the lower bounds of a car (length and width at most these)
+#: are smaller than any car, and become two-wheelers (the small-vehicle size rule).
+SIZE_FALLBACK_SMALL_LW = (3.15, 1.65)
+
+
+def view_weights(dets: DetectionSet, rows: np.ndarray, image_size: tuple[int, int]) -> np.ndarray:
+    """Quality weight of each detection for class votes: sqrt(box area) times centrality.
+
+    ``centrality = (1 - 0.8 |x_mid - W/2| / (W/2)) (0.4 + 0.6 y_bottom / H)``, so that large,
+    mid-frame, near-field views dominate and far-field views, where vehicles look alike, barely vote.
+    """
     w, h = image_size
     b = dets.xyxy[rows].astype(np.float64)
     area = np.maximum((b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1]), 1.0)
     xm = 0.5 * (b[:, 0] + b[:, 2])
-    central = np.clip(1 - 0.8 * np.abs(xm - w / 2) / (w / 2), 0.05, 1) * (0.4 + 0.6 * np.clip(b[:, 3] / h, 0, 1))
-    wt = dets.score[rows] * np.sqrt(area) * central
+    central = (1 - 0.8 * np.clip(np.abs(xm - w / 2) / (w / 2), 0, 1)) * (0.4 + 0.6 * np.clip(b[:, 3] / h, 0, 1))
+    return np.sqrt(area) * np.maximum(central, 0.05)
+
+
+def class_vote(dets: DetectionSet, rows: np.ndarray, image_size: tuple[int, int]) -> tuple[str, dict[str, Any]]:
+    """Class of a track from its detections. Returns ``(class, info)``.
+
+    With class evidence (SAM 3), each detection votes for every class prompt with
+    its view weight (:func:`view_weights`) times the score of the matching evidence
+    detection, and the shares are the votes divided by the total weight of the track,
+    frames without a match included. The class is the argmax over the shares of the
+    slots two-wheeler, ``bus``, ``truck``, ``car``, ``van`` and ``suv``
+    (:data:`~tachymetry.detect.sam3.CLASS_PROMPTS`; a detection's two-wheeler score is
+    the larger of its ``bike`` and ``motorcycle`` evidence; ``car``, ``van`` and ``suv``
+    fold into ``car``; a two-wheeler is a motorcycle when the ``motorcycle`` share
+    exceeds the ``bike`` share, else a bicycle) when that share reaches
+    :data:`CLASS_SHARE_MIN`.
+    Otherwise a track with a confident bike detection covering more than half of
+    its detections (at least four) is a two-wheeler, and any other track a car,
+    subject to the size fallback of :func:`process_raw_track`: a car fit at the car
+    length bound is refitted as a truck, and one at the smallest car (see
+    :data:`SIZE_FALLBACK_SMALL_LW`) makes the track a two-wheeler (``info["rule"]`` is
+    ``"evidence"``, ``"bike_flag"`` or ``"size"``; ``meta["class_rule"]`` becomes
+    ``"size_small"`` in the last case).
+
+    Without evidence, the per-detection classes vote with the view weight times the
+    detection score (``info["rule"] == "detections"``).
+    """
+    names = dets.class_names
+    wt = view_weights(dets, rows, image_size)
+    cls_rows = [names[int(c)] for c in dets.cls[rows]]
+    if dets.evidence is not None and dets.evidence_names and "person" not in cls_rows:
+        from ..detect.sam3 import CLASS_PROMPTS, EVIDENCE_COLUMNS, class_scores, fold_class
+
+        ev = np.zeros((len(rows), len(EVIDENCE_COLUMNS)), np.float64)
+        for j, n in enumerate(EVIDENCE_COLUMNS):
+            if n in dets.evidence_names:
+                ev[:, j] = dets.evidence[rows, dets.evidence_names.index(n)]
+        total = max(float(wt.sum()), 1e-9)
+        slots = (wt[:, None] * class_scores(ev)).sum(axis=0) / total
+        col = {n: k for k, n in enumerate(EVIDENCE_COLUMNS)}
+        bike = float((wt * ev[:, col["bike"]]).sum() / total)
+        moto = float((wt * ev[:, col["motorcycle"]]).sum() / total)
+        shares = {("two_wheeler" if p == "bike" else p): round(float(v), 4) for p, v in zip(CLASS_PROMPTS, slots)}
+        shares.update(bike=round(bike, 4), motorcycle=round(moto, 4))
+        info: dict[str, Any] = {"shares": shares}
+        if float(slots.max()) >= CLASS_SHARE_MIN:
+            info["rule"] = "evidence"
+            return str(fold_class(slots, bike, moto)), info
+        cover = ev[:, col["bike_cover"]] > 0
+        if cover.sum() >= BIKE_FLAG_MIN_FRAMES and cover.mean() > BIKE_FLAG_SHARE:
+            info["rule"] = "bike_flag"
+            return ("motorcycle" if moto > bike else "bicycle"), info
+        info["rule"] = "size"
+        return "car", info
     votes: dict[str, float] = {}
-    for c, v in zip(dets.cls[rows], wt):
-        name = dets.class_names[int(c)]
+    for name, v in zip(cls_rows, dets.score[rows] * wt):
         votes[name] = votes.get(name, 0.0) + float(v)
     tot = sum(votes.values()) or 1.0
-    shares = {k: v / tot for k, v in sorted(votes.items(), key=lambda kv: -kv[1])}
-    return next(iter(shares)), shares
+    shares_d = {k: v / tot for k, v in sorted(votes.items(), key=lambda kv: -kv[1])}
+    return next(iter(shares_d)), {"rule": "detections", "shares": shares_d}
 
 
 def _box_centres(b: np.ndarray) -> np.ndarray:
@@ -674,9 +745,30 @@ def process_raw_track(rows: np.ndarray, ctx: TrackContext, stats: HygieneStats |
         if len(seg) < 3:
             stats.dropped_short += 1
             continue
-        seg_cls, _ = class_vote(d, seg, ctx.image_size)
+        seg_cls, info = class_vote(d, seg, ctx.image_size)
         tr = _build(seg, ctx, seg_cls, stats)
+        rule = info.get("rule")
+        if tr is not None and rule == "size" and tr.length >= SIZE_FALLBACK_CAR_L:
+            # no class evidence and a car fit at its length bound: a heavy vehicle the prompts did not see well
+            alt = _build(seg, ctx, "truck", HygieneStats())
+            if alt is not None and alt.length > SIZE_FALLBACK_TRUCK_L:
+                tr = alt
+        elif (
+            tr is not None
+            and rule == "size"
+            and tr.length <= SIZE_FALLBACK_SMALL_LW[0]
+            and tr.width <= SIZE_FALLBACK_SMALL_LW[1]
+        ):
+            # no class evidence and a car fit at the smallest car: a two-wheeler (or a pedal three-wheeler)
+            sh = info.get("shares", {})
+            small = "motorcycle" if sh.get("motorcycle", 0.0) > sh.get("bike", 0.0) else "bicycle"
+            alt = _build(seg, ctx, small, HygieneStats())
+            if alt is not None:
+                tr, rule = alt, "size_small"
         if tr is not None:
+            tr.meta["class_rule"] = rule
+            if "shares" in info and info.get("rule") != "detections":
+                tr.meta["class_shares"] = info["shares"]
             out.append(tr)
     return out
 

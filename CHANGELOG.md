@@ -8,7 +8,8 @@ First public release, licensed under the Apache License 2.0. Detector weights ar
 
 - SAM 3 (`sam3`, the default) through Hugging Face `transformers`, with a two-level prompt scheme.
     - The detection prompts `vehicle` and `person` give the tracked boxes and instance masks, at a score threshold of 0.40.
-    - The class-evidence prompts `car`, `van`, `suv`, `bus`, `truck`, `bike` and `motorcycle` run in the same pass. A vehicle takes the class of the best overlapping evidence that scores at least 0.20 (car, van and suv fold into car), and is a car otherwise.
+    - The class-evidence prompts `car`, `van`, `suv`, `bus`, `truck`, `bike` and `motorcycle` run in the same pass. Every detection stores, per prompt, the best score of the evidence detections it overlaps (IoU above 0.5, scores from 0.35 or 0.40), and two flags from confident `bike` detections: one lying within the detection (`bike_cover`) and one under a person (`bike_ride`).
+    - The class of a track is the argmax of these scores weighted over its frames by box size and centrality, so that near-field views decide; car, van and suv fold into car, and the motorcycle score splits two-wheelers. Tracks without clear evidence fall back to the bike flag and then to the fitted size: a car fit at the car length bound is refitted as a truck, and one at the smallest car makes the track a two-wheeler. Vehicles and two-wheelers associate as one group.
     - Two-wheeler evidence that no vehicle detection covers is kept as a detection of its own.
     - The `facebook/sam3` checkpoint is gated. A missing approval raises a `PermissionError` that explains the access request and `hf auth login`.
 - RF-DETR alternatives with Apache-2.0 weights: `rfdetr-seg-{n,s,m,l}` (boxes and instance masks) and `rfdetr-{n,s,m,l}` (boxes).
@@ -39,7 +40,7 @@ First public release, licensed under the Apache License 2.0. Detector weights ar
     - footprint centres and gap-aware zero-phase smoothing; gap bridges that contradict the motion on both sides are not differentiated;
     - presplit and identity-switch splitting, end trimming of truncated, far-field, low-confidence and partly visible ends, and Hampel repair;
     - parked-vehicle detection with hold-still, and physical-validity checks.
-- Cross-track verdicts: fragment stitching, duplicates, passengers, riders, shadows and ghosts. The score thresholds of the static parked-vehicle ghost rule are configurable (`filters.ghost_parked_score`, `filters.ghost_parked_cuboid_score`).
+- Cross-track verdicts: fragment stitching, duplicates, riders, inferred cyclists, passengers, shadows and ghosts. A person is a rider when a confident bike lies under it, when it overlaps a tracked two-wheeler, when it stays within 1.2 m of a vehicle or two-wheeler, or when its median speed exceeds 12 km/h; riders are tested before passengers, whose boxes lie inside a vehicle detection. The score thresholds of the static parked-vehicle ghost rule are configurable (`filters.ghost_parked_score`, `filters.ghost_parked_cuboid_score`).
 
 ### Calibration
 

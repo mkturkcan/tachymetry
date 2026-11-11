@@ -39,7 +39,10 @@ def detect_video(
         for (idx, t, _), res in zip(buf, outs):
             xyxy, score, cls, cub = res[:4]
             masks = res[4] if len(res) > 4 else None  # detectors without masks may return four elements
-            frames.append(FrameDetections(idx, t, xyxy, score, cls, cub, None if masks is None else list(masks)))
+            evidence = res[5] if len(res) > 5 else None  # class evidence (SAM 3)
+            frames.append(
+                FrameDetections(idx, t, xyxy, score, cls, cub, None if masks is None else list(masks), evidence)
+            )
         buf.clear()
         if progress is not None:
             progress(len(frames), expected)
@@ -58,4 +61,5 @@ def detect_video(
         "seconds": round(time.time() - t0, 2),
         "source": str(source.path),
     }
-    return DetectionSet.from_frames(frames, detector.class_names, source.size, source.fps, meta)
+    evidence_names = tuple(getattr(detector, "evidence_names", ()) or ())
+    return DetectionSet.from_frames(frames, detector.class_names, source.size, source.fps, meta, evidence_names)

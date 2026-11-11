@@ -22,7 +22,7 @@ __all__ = [
     "empty_output",
 ]
 
-#: Per-image detector output: ``(xyxy, score, class_index, cuboid_or_None, masks_or_None)``.
+#: Per-image detector output: ``(xyxy, score, class_index, cuboid_or_None, masks_or_None[, evidence])``.
 DetectorOutput = tuple[np.ndarray, np.ndarray, np.ndarray, "np.ndarray | None", "list[MaskCrop | None] | None"]
 
 #: Contiguous COCO class index (80 classes, as in Ultralytics checkpoints) -> road-user name.
@@ -39,12 +39,14 @@ class Detector:
     ``int16`` indices into :attr:`class_names`, projected cuboid corners
     ``(N, 8, 3)`` or ``None``, and one instance-mask crop per detection
     (:func:`~tachymetry.detections.crop_mask`) or ``None``. Four-element
-    tuples without masks are accepted as well.
+    tuples without masks are accepted as well. A sixth element, class evidence
+    ``(N, E)`` with columns :attr:`evidence_names`, is optional (SAM 3).
     """
 
     class_names: tuple[str, ...] = ROAD_CLASSES
     provides_cuboids: bool = False
     provides_masks: bool = False
+    evidence_names: tuple[str, ...] = ()  #: columns of the optional class evidence
     name: str = "detector"
 
     def __call__(self, images: Sequence[np.ndarray]) -> list[DetectorOutput]:

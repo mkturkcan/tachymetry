@@ -21,8 +21,16 @@ __all__ = ["associate", "build_tracks"]
 
 
 def associate(dets: DetectionSet, obs: GroundObservations | None, cfg: PipelineConfig) -> np.ndarray:
-    """Track id for every detection row (``-1`` for unassociated detections)."""
-    tracker = ByteTracker(cfg.tracker, dets.class_names, dets.image_size)
+    """Track id for every detection row (``-1`` for unassociated detections).
+
+    With class evidence (SAM 3), vehicles and two-wheelers form one association group: their
+    per-frame classes are single-frame votes, and the class of a track is decided from all of
+    its frames (:func:`~tachymetry.tracking.hygiene.class_vote`).
+    """
+    groups = None
+    if dets.evidence is not None and dets.evidence_names:
+        groups = {c: ("person" if c == "person" else "vehicle") for c in dets.class_names}
+    tracker = ByteTracker(cfg.tracker, dets.class_names, dets.image_size, groups=groups)
     ids = np.full(len(dets), -1, np.int64)
     if len(dets) == 0:
         return ids
@@ -102,7 +110,7 @@ def build_tracks(dets: DetectionSet, camera: Camera, cfg: PipelineConfig) -> tup
     if cfg.filters.enabled:
         verdicts = {
             "duplicates": mark_duplicates(tracks, cfg.filters),
-            **mark_passengers_and_riders(tracks, cfg.filters),
+            **mark_passengers_and_riders(tracks, cfg.filters, dets),
             "shadows": mark_shadows(tracks, cfg.filters),
             "ghosts": mark_ghosts(tracks, cfg.filters),
         }

@@ -36,10 +36,16 @@ ProgressFn = Callable[[str, int, int], None]
 MAX_PLAUSIBLE_HEIGHT_M = 250.0
 
 
+#: Version of the stored detection format; part of the cache key, so that older caches are detected again.
+#: 2: SAM 3 detections carry class evidence (``detections.npz`` ``evidence``).
+DETECTIONS_VERSION = 2
+
+
 def _detector_key(cfg: PipelineConfig) -> str:
     d = cfg.detector
     blob = json.dumps(
         {
+            "version": DETECTIONS_VERSION,
             "name": d.name,
             "weights": d.weights,
             "imgsz": d.imgsz,

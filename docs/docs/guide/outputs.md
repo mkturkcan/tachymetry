@@ -70,10 +70,11 @@ One row per track including rejected ones (`results.SUMMARY_FIELDS`, from `Track
 | `speed_mean_kmh`, `speed_median_kmh`, `speed_p85_kmh`, `speed_max_kmh` | km/h | over samples faster than 3 km/h (0 if none) |
 | `moving_share` | | fraction of samples faster than 3 km/h |
 | `mean_score` | | mean detection score |
+| `class_rule` | | how the class was decided ([class vote](tracking.md#class-vote)): `evidence`, `bike_flag`, `size` or `size_small` with SAM 3, `detections` with the other back-ends, `inferred` for cyclists inferred from person tracks |
 
 ## `tracks.json`
 
-Format `tachymetry.tracks/1`: an object with `format`, `fps`, `meta` (source, fps, frame count, size, duration), `summary` (as `TrackSet.summary()`), `camera` (as `camera.json`) and `tracks`, a list with one object per `ok` track holding all `Track.summary()` fields (the columns above plus `start_xy` and `end_xy`) and the per-sample arrays `t`, `frame`, `xy`, `speed_kmh`, `heading_deg`, `flags` (bit mask) and `bbox`.
+Format `tachymetry.tracks/1`: an object with `format`, `fps`, `meta` (source, fps, frame count, size, duration), `summary` (as `TrackSet.summary()`), `camera` (as `camera.json`) and `tracks`, a list with one object per `ok` track holding all `Track.summary()` fields (the columns above plus `start_xy` and `end_xy`) and the per-sample arrays `t`, `frame`, `xy`, `speed_kmh`, `heading_deg`, `flags` (bit mask) and `bbox`. With SAM 3, `class_shares` holds the weighted evidence share of each class prompt. A two-wheeler or vehicle that carries a rider has `rider_id`, and a cyclist inferred from a person track nothing more; rejected rider tracks (with `include_rejected`) name their two-wheeler or vehicle in `partner_id`.
 
 ## GeoJSON, MOT and Parquet
 
@@ -112,7 +113,7 @@ Format `tachymetry.camera/1` (`Camera.to_dict`):
 
 ## `detections.npz`
 
-NumPy archive of the `DetectionSet`: `frame` (M,), `time` (M,), `xyxy` (M, 4), `score` (M,), `cls` (M,) indices into `class_names`, `cuboid` (M, 8, 3) corner `x, y, confidence` with NaN for untrusted cuboids (cuboid detectors only), `processed_frames`, `image_size`, `fps` and `meta` (the detector description).
+NumPy archive of the `DetectionSet`: `frame` (M,), `time` (M,), `xyxy` (M, 4), `score` (M,), `cls` (M,) indices into `class_names`, `cuboid` (M, 8, 3) corner `x, y, confidence` with NaN for untrusted cuboids (cuboid detectors only), `processed_frames`, `image_size`, `fps` and `meta` (the detector description). With SAM 3, `evidence` (M, 9) float16 holds the class evidence of each detection, with the column names in `evidence_names` ([SAM 3 prompts](detection.md#sam-3-prompts)).
 
 Instance masks of segmenting detectors are stored as a `MaskStore` (`detections.MaskStore`): each mask is cropped to its box (plus 2 pixels) and bit-packed with `np.packbits`. The archive then holds `mask_bits` (concatenated packed bytes), `mask_offset` (M,) byte offset of each mask, or −1 for a detection without one, `mask_origin` (M, 2) the crop's top-left pixel `(x0, y0)`, and `mask_shape` (M, 2) its `(h, w)`. `DetectionSet.masks.crop(i)` returns `(x0, y0, mask)` and `masks.full(i, image_size)` the full-frame mask. `detections.json` holds the cache key and the detector description. For the public sample clip with SAM 3: 23,443 detections in 465 processed frames, all with masks, in 10.1 MB of packed mask bits.
 

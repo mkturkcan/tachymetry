@@ -28,8 +28,18 @@ The RF-DETR XLarge and 2XLarge models are not offered. `DetectorConfig.weights` 
 SAM 3 is prompted on two levels (`detect/sam3.py`):
 
 * **Detection prompts**: `vehicle` and `person` (`SAM3_PROMPTS`). Their results are the detections that are tracked, with boxes and instance masks, kept above `conf` = 0.40 (`SAM3_CONF`). The score is the class probability times the presence probability.
-* **Class-evidence prompts**: `car`, `van`, `suv`, `bus`, `truck`, `bike` and `motorcycle` (`SAM3_EVIDENCE`), kept above 0.20, run in the same forward pass. A vehicle detection takes the class of the highest-scoring evidence detection that overlaps it, measured as intersection over the smaller box of at least 0.6. `car`, `van` and `suv` fold into `car`, and `bike` is a bicycle unless `motorcycle` scores higher. The evidence score must reach 0.20 (`SAM3_EVIDENCE_MIN`); otherwise the vehicle is a car.
-* **Unclaimed two-wheelers**: `bike` or `motorcycle` evidence that no vehicle detection covers, scored at least `conf`, is kept as a detection of its own, so cyclists that the `vehicle` prompt misses are counted.
+* **Class-evidence prompts**: `car`, `van`, `suv`, `bus`, `truck`, `bike` and `motorcycle` (`SAM3_EVIDENCE`) run in the same forward pass. Their results vote for the class of the detections they overlap; they are not tracked themselves, except for unclaimed two-wheelers (below).
+* **Unclaimed two-wheelers**: `bike` or `motorcycle` evidence that no vehicle detection covers (intersection over the smaller box below 0.6), scored at least `conf`, is kept as a detection of its own, so cyclists that the `vehicle` prompt misses are counted.
+
+**Evidence vectors.** Every kept detection carries a vector (`EVIDENCE_COLUMNS`, stored as `evidence` in `detections.npz`):
+
+| Column | Value |
+|---|---|
+| `car`, `van`, `suv`, `bus`, `truck`, `bike`, `motorcycle` | highest score among that prompt's detections whose box has an IoU above 0.5 with the detection's box (`SAM3_EVIDENCE_IOU`), counting only scores of at least 0.35 for `car`, `van` and `suv` and at least 0.40 for the others (`SAM3_EVIDENCE_MIN`); 0 without a match |
+| `bike_cover` | highest score of a `bike` detection scoring at least 0.5 that lies within the detection's box (intersection over the bike box above 0.6) |
+| `bike_ride` | highest score of a `bike` detection scoring at least 0.5 whose box, enlarged by 15 % on each side, covers more than 0.30 of the detection's box (for persons: a bicycle or motorcycle under them) |
+
+The class of a track is decided from these vectors over all its frames, weighted toward large, central, near-field views ([class vote](tracking.md#class-vote)): the argmax over the two-wheeler (the larger of `bike` and `motorcycle`), `bus`, `truck`, `car`, `van` and `suv` shares, with `car`, `van` and `suv` folded into `car`; `motorcycle` against `bike` splits two-wheelers into motorcycles and bicycles. The `bike_cover` and `bike_ride` columns separate two-wheelers and their riders from cars and pedestrians ([Verdicts](verdicts.md#riders-inferred-cyclists-and-passengers)). The class stored with each detection is the same rule applied to a single frame, and a `vehicle` detection without evidence is a car.
 
 The image encoder runs once per frame and the prompt-conditioned decoder once per (frame, prompt) pair, eight pairs per pass (`PAIRS_PER_PASS`). SAM 3 is a set predictor without non-maximum suppression; duplicates are removed by mask overlap (step 6 below).
 
@@ -44,7 +54,7 @@ Score scales differ between back-ends, and some tracking thresholds refer to the
 | Back-end | Network input (`imgsz = None`) | `conf = None` |
 |---|---|---|
 | RF-DETR, RF-DETR-Seg | square, twice the training resolution and at most 1008 pixels, rounded up to the patch grid: `rfdetr-seg-l` 1008, `rfdetr-seg-m` 864, `rfdetr-seg-s` 768, `rfdetr-seg-n` 624, `rfdetr-l`, `-m`, `-s` 1024, `rfdetr-n` 768 | 0.15 |
-| SAM 3 | 1008 × 1008, fixed (`imgsz` is not used) | 0.40 for the detection prompts, 0.20 for the evidence prompts (class probability times presence probability) |
+| SAM 3 | 1008 × 1008, fixed (`imgsz` is not used) | 0.40 for the detection prompts; the evidence prompts use their own floors, 0.35 or 0.40 (class probability times presence probability) |
 | UrbanOmniDetect-2 | letterboxed, long side 960 | 0.10 |
 
 RF-DETR resizes each frame to a square without preserving the aspect ratio, as in its training; an explicit `imgsz` sets the side of that square and is rounded up to a multiple of the patch size times the number of attention windows (24 for `rfdetr-seg-s/m/l`, 12 for `rfdetr-seg-n`, 32 for the detection models). The released RF-DETR-Seg L runs at 504 pixels. On 24 frames each of the sample clips `intersection-day` and `motorway-overpass`, the share of confident UrbanOmniDetect-2 X detections (score at least 0.5) that RF-DETR-Seg L also found (box IoU at least 0.5, same super-class, score at least 0.3) was:
@@ -65,10 +75,10 @@ Score scales differ between back-ends. On `intersection-day`, the median score o
 All back-ends map their labels into `ROAD_CLASSES = ("person", "bicycle", "car", "motorcycle", "bus", "truck")` (`config.py`) by name; labels outside it (traffic lights, aircraft, animals) are dropped, and `DetectorConfig.classes` restricts the classes that are kept.
 
 * **RF-DETR** checkpoints use sparse COCO category ids; `COCO_CATEGORY_TO_ROAD = {1: person, 2: bicycle, 3: car, 4: motorcycle, 6: bus, 8: truck}`. Each of the model's queries yields at most one detection, its highest-scoring kept class, so one object never appears as both `car` and `truck` from the same query.
-* **SAM 3** detects with the `vehicle` and `person` prompts and takes vehicle classes from the class-evidence prompts ([SAM 3 prompts](#sam-3-prompts)); `DetectorConfig.classes` removes evidence prompts of classes that are not kept.
+* **SAM 3** detects with the `vehicle` and `person` prompts and takes vehicle classes from the class-evidence prompts ([SAM 3 prompts](#sam-3-prompts)); `DetectorConfig.classes` removes evidence prompts of classes that are not kept (their evidence columns stay 0).
 * **UrbanOmniDetect-2** checkpoints name their labels like the 80 COCO classes; `COCO_TO_ROAD = {0: person, 1: bicycle, 2: car, 3: motorcycle, 5: bus, 7: truck}` covers COCO-indexed heads without names.
 
-Association and verdicts use three super-classes, `SUPER_CLASS`: `vehicle` (car, bus, truck), `two_wheeler` (bicycle, motorcycle) and `person`. Label flicker inside a super-class (car and truck, typically) therefore never splits a track; the final class of a track is decided offline by a weighted vote ([Association and track hygiene](tracking.md#class-vote)).
+Association and verdicts use three super-classes, `SUPER_CLASS`: `vehicle` (car, bus, truck), `two_wheeler` (bicycle, motorcycle) and `person`. Label flicker inside a super-class (car and truck, typically) therefore never splits a track. With SAM 3, vehicles and two-wheelers also associate with each other, since their per-frame classes are single-frame votes; the final class of a track is decided offline by a weighted vote ([Association and track hygiene](tracking.md#class-vote)).
 
 ## Instance masks
 
@@ -83,8 +93,8 @@ For UrbanOmniDetect-2, `DetectionSet.cuboid` holds an `(N, 8, 3)` array of `x, y
 The built-in back-ends apply these steps to each image, in this order (`detect/postprocess.py`, `prefilter` and `refine`). Defaults are from `DetectorConfig`.
 
 1. **Inference** at the input size above with the model threshold `conf`, in reduced precision on CUDA when `half = True` (FP16; SAM 3 in BF16 where the GPU supports it), `batch = 8` frames per call (`detect_video`).
-2. **Class mapping and selection** into `ROAD_CLASSES`; labels outside `classes` are dropped. For SAM 3, this is the class assignment from the evidence prompts (`assign_classes`).
-3. **Class floors** `class_conf = {person: 0.40, bicycle: 0.50, motorcycle: 0.50}`: detections of these classes below their floor are dropped. Other classes keep everything above `conf`.
+2. **Class mapping and selection** into `ROAD_CLASSES`; labels outside `classes` are dropped. For SAM 3, this is the single-frame class from the evidence vectors (`assign_classes`).
+3. **Class floors** `class_conf = {person: 0.40, bicycle: 0.50, motorcycle: 0.50}`: detections of these classes below their floor are dropped. Other classes keep everything above `conf`. For SAM 3 the floor follows the prompt that made the detection: a `vehicle` detection is kept at the vehicle threshold whatever class its evidence suggests, and only unclaimed two-wheelers are held to the two-wheeler floors.
 4. **Width limit**: boxes wider than `max_box_width_frac` of the image width are dropped (default 1.01, i.e. disabled).
 5. **Near-duplicate suppression** (`nms_by_group`): greedy NMS at box IoU above 0.8 (`DUPLICATE_IOU`) within each super-class, which removes double reports of one object with two labels.
 6. **Mask-duplicate suppression** (`suppress_mask_duplicates`, RF-DETR-Seg and SAM 3): of two detections of one super-class whose masks overlap with IoU above 0.5 (`MASK_DUPLICATE_IOU`), the lower-scored one is dropped. This removes the second, lower-scored mask with a looser box that set-prediction detectors (SAM 3, RF-DETR-Seg) report for some vehicles.

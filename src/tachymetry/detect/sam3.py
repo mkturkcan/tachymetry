@@ -5,12 +5,22 @@ The default detector of Tachymetry. Detection follows a two-level prompt scheme:
 * **detection prompts** ``vehicle`` and ``person`` give the boxes and instance
   masks that are tracked (score threshold 0.4);
 * **class-evidence prompts** ``car``, ``van``, ``suv``, ``bus``, ``truck``,
-  ``bike`` and ``motorcycle`` run in the same forward pass. Each vehicle
-  detection takes the class of the overlapping evidence detection with the
-  highest score (``car``, ``van`` and ``suv`` fold into ``car``; ``bike`` is a
-  bicycle unless ``motorcycle`` scores higher), provided that score reaches
-  0.20; otherwise it is a car. Two-wheeler evidence that no vehicle detection
-  covers is kept as a detection of its own, so cyclists are counted.
+  ``bike`` and ``motorcycle`` run in the same forward pass. They do not create
+  tracked objects (except two-wheelers that the ``vehicle`` prompt missed); they
+  vote for the class of the detections they overlap.
+
+Every detection carries an evidence vector (:data:`EVIDENCE_COLUMNS`): for each
+class prompt, the highest score of that prompt's detections whose box overlaps
+it with an IoU above 0.5, counted from 0.35 for ``car``, ``van`` and ``suv`` and
+from 0.40 for the others; and two two-wheeler flags from ``bike`` detections
+scoring at least 0.5: ``bike_cover`` (the bike box lies within the detection,
+intersection over the bike box above 0.6) and ``bike_ride`` (the detection,
+a person, overlaps the bike box enlarged by 15 % on each side, intersection over
+the person box above 0.3). The class of a *track* is decided from these vectors
+by a quality-weighted vote over its frames (:func:`tachymetry.tracking.hygiene.class_vote`),
+and riders and passengers are separated from pedestrians with the flags
+(:mod:`tachymetry.tracking.verdicts`). The per-detection class set here is the
+same rule applied to a single frame.
 
 The image encoder runs once per frame and the prompt-conditioned DETR decoder
 once per (frame, prompt) pair, in batches. SAM 3 is a set predictor without
@@ -38,10 +48,17 @@ __all__ = [
     "SAM3_PROMPTS",
     "SAM3_EVIDENCE",
     "SAM3_CONF",
+    "SAM3_EVIDENCE_MIN",
+    "CLASS_PROMPTS",
+    "EVIDENCE_COLUMNS",
     "SAM3_ACCESS_HELP",
     "load_sam3",
     "sam3_download",
     "assign_classes",
+    "class_evidence",
+    "class_scores",
+    "fold_class",
+    "evidence_class",
 ]
 
 SAM3_REPO = "facebook/sam3"
@@ -59,10 +76,33 @@ SAM3_EVIDENCE = {
 }
 #: Score threshold of the detection prompts (class score times presence score) when ``DetectorConfig.conf`` is ``None``.
 SAM3_CONF = 0.40
-#: Minimum evidence score for a vehicle class; below it a vehicle detection is a car.
-SAM3_EVIDENCE_MIN = 0.20
-#: Box overlap (intersection over the smaller box) that attributes evidence to a vehicle detection.
-SAM3_EVIDENCE_OVERLAP = 0.6
+#: Lowest score at which a class-evidence detection votes, per prompt.
+SAM3_EVIDENCE_MIN = {
+    "car": 0.35,
+    "van": 0.35,
+    "suv": 0.35,
+    "bus": 0.40,
+    "truck": 0.40,
+    "bike": 0.40,
+    "motorcycle": 0.40,
+}
+#: Box IoU above which an evidence detection votes for the class of a detection.
+SAM3_EVIDENCE_IOU = 0.5
+#: Lowest ``bike`` score for the two-wheeler flags ``bike_cover`` and ``bike_ride``.
+SAM3_BIKE_FLAG_MIN = 0.5
+#: ``bike_cover``: intersection over the bike box above which a bike lies within a detection.
+SAM3_BIKE_COVER = 0.6
+#: ``bike_ride``: enlargement of the bike box on each side, and intersection over the person box.
+SAM3_RIDE_EXPAND = 0.15
+SAM3_RIDE_OVERLAP = 0.3
+#: Intersection over the smaller box above which a two-wheeler evidence detection belongs to a vehicle detection.
+SAM3_CLAIM_OVERLAP = 0.6
+#: The class slots of the vote, in tie-break order. The two-wheeler slot ``bike`` takes the larger
+#: of the ``bike`` and ``motorcycle`` evidence of a detection; ``motorcycle`` against ``bike`` then
+#: splits two-wheelers into motorcycles and bicycles.
+CLASS_PROMPTS = ("bike", "bus", "truck", "car", "van", "suv")
+#: Columns of the per-detection evidence vector.
+EVIDENCE_COLUMNS = (*SAM3_EVIDENCE, "bike_cover", "bike_ride")
 #: (frame, prompt) pairs per decoder pass; bounds memory (about 8 GB at 8 pairs and batch 8, BF16).
 PAIRS_PER_PASS = 8
 
@@ -145,6 +185,8 @@ class Sam3Detector(Detector):
         evidence = {p: c for p, c in SAM3_EVIDENCE.items() if c in cfg.classes}
         self.prompts = list(detect) + list(evidence)
         self.n_detect = len(detect)
+        self._thr = [self.conf] * len(detect) + [SAM3_EVIDENCE_MIN[p] for p in evidence]
+        self.evidence_names = EVIDENCE_COLUMNS
         self._cls = np.array([ROAD_CLASSES.index(c) for c in list(detect.values()) + list(evidence.values())], np.int16)
         self.classes = sorted({*detect.values(), *evidence.values()}, key=ROAD_CLASSES.index)
         self.class_names = ROAD_CLASSES
@@ -212,10 +254,7 @@ class Sam3Detector(Detector):
                     score = res.pred_logits.float().sigmoid()
                     if res.presence_logits is not None:
                         score = score * res.presence_logits.float().sigmoid()
-                    thr = torch.as_tensor(
-                        [self.conf if p < self.n_detect else min(self.conf, SAM3_EVIDENCE_MIN) for _, p in chunk],
-                        device=score.device,
-                    ).view(-1, 1)
+                    thr = torch.as_tensor([self._thr[p] for _, p in chunk], device=score.device).view(-1, 1)
                     keep = score > thr
                     score_np, keep_np = score.cpu().numpy(), keep.cpu().numpy()
                     box_np = res.pred_boxes.float().cpu().numpy()  # (n, Q, 4) x1, y1, x2, y2 in [0, 1]
@@ -232,21 +271,32 @@ class Sam3Detector(Detector):
                         maps[i].append(res.pred_masks[k].index_select(0, sel).float().sigmoid())
                     del res
         out: list[DetectorOutput] = []
+        k_ev = len(EVIDENCE_COLUMNS)
+
+        def empty() -> DetectorOutput:
+            z = np.zeros(0, np.float32)
+            return (np.zeros((0, 4), np.float32), z, np.zeros(0, np.int16), None, [], np.zeros((0, k_ev), np.float32))
+
         for i in range(n_img):
             if not boxes[i]:
-                out.append((np.zeros((0, 4), np.float32), np.zeros(0, np.float32), np.zeros(0, np.int16), None, []))
+                out.append(empty())
                 continue
             xyxy, score, cls = np.concatenate(boxes[i]), np.concatenate(scores[i]), np.concatenate(classes[i])
             prm = np.concatenate(prompt_of[i])
             mp = torch.cat(maps[i])
-            sel = assign_classes(xyxy, score, cls, prm, self.n_detect, self.prompts, self.conf)
-            xyxy, score, cls = xyxy[sel[0]], sel[1], sel[2]
-            mp = mp.index_select(0, torch.as_tensor(sel[0], device=mp.device, dtype=torch.long))
+            person = self.class_names.index("person")
+            rows, score, cls, ev = assign_classes(xyxy, score, cls, prm, self.n_detect, self.prompts, self.conf)
+            xyxy = xyxy[rows]
+            mp = mp.index_select(0, torch.as_tensor(rows, device=mp.device, dtype=torch.long))
             if not len(xyxy):
-                out.append((np.zeros((0, 4), np.float32), np.zeros(0, np.float32), np.zeros(0, np.int16), None, []))
+                out.append(empty())
                 continue
-            idx = prefilter(xyxy, score, cls, w, self.cfg, self.class_names)
-            xyxy, score, cls = xyxy[idx], score[idx], cls[idx]
+            # class floors apply to what a prompt detected: a vehicle-prompt detection is kept at the
+            # vehicle threshold whatever class its evidence suggests (two-wheelers included)
+            vehicle_prompt = (prm[rows] < self.n_detect) & (cls != person)
+            floor_cls = np.where(vehicle_prompt, self.class_names.index("car"), cls).astype(np.int16)
+            idx = prefilter(xyxy, score, floor_cls, w, self.cfg, self.class_names)
+            xyxy, score, cls, ev = xyxy[idx], score[idx], cls[idx], ev[idx]
             masks = mask_crops(mp.index_select(0, torch.as_tensor(idx, device=mp.device)), xyxy, (w, h), 0.5)
             idx, _ = refine(
                 xyxy,
@@ -258,7 +308,7 @@ class Sam3Detector(Detector):
                 score_aware=True,
                 mask_duplicate_iou=MASK_DUPLICATE_IOU,
             )
-            out.append((xyxy[idx], score[idx], cls[idx], None, [masks[int(j)] for j in idx]))
+            out.append((xyxy[idx], score[idx], cls[idx], None, [masks[int(j)] for j in idx], ev[idx]))
         return out
 
     def describe(self) -> dict[str, Any]:
@@ -267,11 +317,77 @@ class Sam3Detector(Detector):
             "model": self.repo,
             "prompts": self.prompts[: self.n_detect],
             "evidence_prompts": self.prompts[self.n_detect :],
+            "evidence_columns": list(EVIDENCE_COLUMNS),
             "device": str(self.device),
             "imgsz": list(self.imgsz),
             "conf": self.conf,
             "half": self.half,
         }
+
+
+def _pairwise(a: np.ndarray, b: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Intersection ``(len(a), len(b))`` and the areas of the boxes ``a`` and ``b``."""
+    iw = np.clip(np.minimum(a[:, None, 2], b[None, :, 2]) - np.maximum(a[:, None, 0], b[None, :, 0]), 0, None)
+    ih = np.clip(np.minimum(a[:, None, 3], b[None, :, 3]) - np.maximum(a[:, None, 1], b[None, :, 1]), 0, None)
+    area_a = np.maximum((a[:, 2] - a[:, 0]) * (a[:, 3] - a[:, 1]), 1e-9)
+    area_b = np.maximum((b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1]), 1e-9)
+    return iw * ih, area_a, area_b
+
+
+def class_evidence(xyxy: np.ndarray, ev_xyxy: np.ndarray, ev_score: np.ndarray, ev_prompt: Sequence[str]) -> np.ndarray:
+    """Evidence vectors ``(len(xyxy), len(EVIDENCE_COLUMNS))`` of the boxes ``xyxy`` from the evidence
+    detections of the same frame (boxes ``ev_xyxy``, scores ``ev_score``, prompt names ``ev_prompt``)."""
+    out = np.zeros((len(xyxy), len(EVIDENCE_COLUMNS)), np.float32)
+    if not len(xyxy) or not len(ev_xyxy):
+        return out
+    a = np.asarray(xyxy, np.float64)
+    b = np.asarray(ev_xyxy, np.float64)
+    sc = np.asarray(ev_score, np.float64)
+    prm = np.asarray(ev_prompt)
+    inter, area_a, area_b = _pairwise(a, b)
+    iou = inter / (area_a[:, None] + area_b[None, :] - inter)
+    for j, name in enumerate(SAM3_EVIDENCE):
+        sel = (prm == name) & (sc >= SAM3_EVIDENCE_MIN[name])
+        if sel.any():
+            hit = iou[:, sel] > SAM3_EVIDENCE_IOU
+            out[:, j] = np.where(hit, sc[sel][None, :], 0.0).max(axis=1)
+    bikes = (prm == "bike") & (sc >= SAM3_BIKE_FLAG_MIN)
+    if bikes.any():
+        bb, bs = b[bikes], sc[bikes]
+        cover = inter[:, bikes] / area_b[bikes][None, :] > SAM3_BIKE_COVER
+        out[:, EVIDENCE_COLUMNS.index("bike_cover")] = np.where(cover, bs[None, :], 0.0).max(axis=1)
+        ex = SAM3_RIDE_EXPAND * (bb[:, 2:] - bb[:, :2])
+        big = np.column_stack([bb[:, :2] - ex, bb[:, 2:] + ex])
+        inter_r, area_p, _ = _pairwise(a, big)
+        ride = inter_r / area_p[:, None] > SAM3_RIDE_OVERLAP
+        out[:, EVIDENCE_COLUMNS.index("bike_ride")] = np.where(ride, bs[None, :], 0.0).max(axis=1)
+    return out
+
+
+def class_scores(ev: np.ndarray) -> np.ndarray:
+    """Scores of the class slots :data:`CLASS_PROMPTS` from evidence vectors ``(..., len(EVIDENCE_COLUMNS))``."""
+    ev = np.asarray(ev, np.float64)
+    col = {n: k for k, n in enumerate(EVIDENCE_COLUMNS)}
+    two = np.maximum(ev[..., col["bike"]], ev[..., col["motorcycle"]])
+    return np.stack([two if p == "bike" else ev[..., col[p]] for p in CLASS_PROMPTS], axis=-1)
+
+
+def fold_class(scores: np.ndarray, bike: float, motorcycle: float) -> str | None:
+    """Road class from class-slot scores (or weighted shares): the argmax over :data:`CLASS_PROMPTS`
+    (first slot on ties), with ``car``, ``van`` and ``suv`` folded into ``car`` and the two-wheeler slot
+    a ``motorcycle`` when ``motorcycle > bike``, else a ``bicycle``; ``None`` when all scores are 0."""
+    k = int(np.argmax(scores))
+    if float(scores[k]) <= 0.0:
+        return None
+    if CLASS_PROMPTS[k] == "bike":
+        return "motorcycle" if motorcycle > bike else "bicycle"
+    return SAM3_EVIDENCE[CLASS_PROMPTS[k]]
+
+
+def evidence_class(ev: np.ndarray) -> str | None:
+    """Road class from one evidence vector (:func:`fold_class` of its :func:`class_scores`)."""
+    col = {n: k for k, n in enumerate(EVIDENCE_COLUMNS)}
+    return fold_class(class_scores(ev), float(ev[col["bike"]]), float(ev[col["motorcycle"]]))
 
 
 def assign_classes(
@@ -282,53 +398,38 @@ def assign_classes(
     n_detect: int,
     prompts: Sequence[str],
     conf: float,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Classes of the detection-prompt results from the class-evidence results of the same frame.
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Rows, scores, classes and evidence vectors of one frame's detections.
 
-    Returns ``(rows, score, cls)``: the rows to keep (detection-prompt results
-    and unclaimed two-wheeler evidence), their scores and their road classes.
+    The rows kept are the detection-prompt results and the two-wheeler evidence
+    detections that no vehicle detection covers (intersection over the smaller
+    box below 0.6) and that score at least ``conf``. Each row's class is the
+    single-frame rule :func:`evidence_class`; vehicle detections without
+    evidence are cars.
     """
     names = list(ROAD_CLASSES)
     det = np.flatnonzero(prompt < n_detect)
     ev = np.flatnonzero(prompt >= n_detect)
-    out_rows, out_score, out_cls = [], [], []
-    claimed = np.zeros(len(xyxy), bool)
-    car = names.index("car")
-    for r in det:
-        if names[int(cls[r])] == "person":
-            out_rows.append(r)
-            out_score.append(score[r])
-            out_cls.append(cls[r])
-            continue
-        best_c = car
-        if len(ev):
-            b = xyxy[r]
-            e = xyxy[ev]
-            iw = np.clip(np.minimum(b[2], e[:, 2]) - np.maximum(b[0], e[:, 0]), 0, None)
-            ih = np.clip(np.minimum(b[3], e[:, 3]) - np.maximum(b[1], e[:, 1]), 0, None)
-            area = lambda q: (q[..., 2] - q[..., 0]) * (q[..., 3] - q[..., 1])  # noqa: E731
-            ov = iw * ih / np.maximum(np.minimum(area(b), area(e)), 1e-9)
-            hit = ev[ov >= SAM3_EVIDENCE_OVERLAP]
-            claimed[hit] = True
-            ev_score: dict[int, float] = {}
-            for k in hit:
-                c = int(cls[k])
-                if prompts[int(prompt[k])] == "motorcycle":
-                    c = names.index("motorcycle")
-                ev_score[c] = max(ev_score.get(c, 0.0), float(score[k]))
-            if ev_score:
-                c, s_ = max(ev_score.items(), key=lambda kv: kv[1])
-                if s_ >= SAM3_EVIDENCE_MIN:
-                    best_c = c
-        out_rows.append(r)
-        out_score.append(score[r])
-        out_cls.append(best_c)
-    # two-wheelers that the vehicle prompt missed: confident bike / motorcycle evidence covered by no vehicle
-    two = {names.index("bicycle"), names.index("motorcycle")}
-    for k in ev:
-        if not claimed[k] and int(cls[k]) in two and score[k] >= conf:
-            out_rows.append(k)
-            out_score.append(score[k])
-            out_cls.append(cls[k])
-    rows = np.asarray(out_rows, np.int64)
-    return rows, np.asarray(out_score, np.float32), np.asarray(out_cls, np.int16)
+    ev_prompt = [prompts[int(prompt[k])] for k in ev]
+    rows = list(det)
+    two = [k for k, p in zip(ev, ev_prompt) if p in ("bike", "motorcycle") and score[k] >= conf]
+    if two:
+        veh = [r for r in det if names[int(cls[r])] != "person"]
+        claimed = np.zeros(len(two), bool)
+        if veh:
+            inter, area_t, area_v = _pairwise(xyxy[two].astype(np.float64), xyxy[veh].astype(np.float64))
+            claimed = (inter / np.minimum(area_t[:, None], area_v[None, :]) >= SAM3_CLAIM_OVERLAP).any(axis=1)
+        rows.extend(k for k, c in zip(two, claimed) if not c)
+    rows_a = np.asarray(rows, np.int64)
+    evidence = class_evidence(xyxy[rows_a], xyxy[ev], score[ev], ev_prompt)
+    out_cls = np.empty(len(rows_a), np.int16)
+    col = {n: k for k, n in enumerate(EVIDENCE_COLUMNS)}
+    for i, r in enumerate(rows_a):
+        if prompt[r] < n_detect and names[int(cls[r])] == "person":
+            out_cls[i] = cls[r]
+        elif prompt[r] >= n_detect:  # an unclaimed two-wheeler
+            moto = evidence[i, col["motorcycle"]] > evidence[i, col["bike"]]
+            out_cls[i] = names.index("motorcycle" if moto else "bicycle")
+        else:
+            out_cls[i] = names.index(evidence_class(evidence[i]) or "car")
+    return rows_a, score[rows_a].astype(np.float32), out_cls, evidence

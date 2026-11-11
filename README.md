@@ -64,7 +64,7 @@ tachymetry devices                       # show GPUs and the worker plan
 report = tm.track_many(["site_a/", "site_b/*.mp4"], out="runs", devices="cuda:0,cuda:1")
 ```
 
-**Detection.** SAM 3 is the default detector. Its `vehicle` and `person` prompts give boxes and instance masks, and the class-evidence prompts (car, van, suv, bus, truck, bike, motorcycle) set each vehicle's class. RF-DETR-Seg (`--detector rfdetr-seg-l`, Apache-2.0 weights, 99 against 9.1 frames per second on one GPU, lower confidences) and UrbanOmniDetect-2 (`--detector uod2-x`, 3D cuboid corners, `pip install "tachymetry[uod2]"`) are the alternatives.
+**Detection.** SAM 3 is the default detector. Its `vehicle` and `person` prompts give boxes and instance masks, and the class-evidence prompts (car, van, suv, bus, truck, bike, motorcycle) vote for each vehicle's class over its frames, weighted toward near-field views; bike detections separate riders from pedestrians. RF-DETR-Seg (`--detector rfdetr-seg-l`, Apache-2.0 weights, 99 against 9.1 frames per second on one GPU, lower confidences) and UrbanOmniDetect-2 (`--detector uod2-x`, 3D cuboid corners, `pip install "tachymetry[uod2]"`) are the alternatives.
 
 **Calibration.** Automatic calibration (`camera="auto"`, the default) takes the camera orientation from road-marking and vertical vanishing points, or from a known horizontal field of view (`--hfov`), and the metric scale from vehicle silhouettes in the instance masks; dashed lane markings check the result. Manual calibration uses clicked correspondences against an orthophoto, a site plan or GPS coordinates.
 

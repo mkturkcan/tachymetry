@@ -6,7 +6,7 @@ After per-track hygiene ([Association and track hygiene](tracking.md)), `trackin
 
 1. **Stitching**, when `filters.stitch = True` (independent of `filters.enabled`).
 2. Tracks are sorted by start time and renumbered from 1.
-3. When `filters.enabled = True`: **duplicates**, then **passengers, riders and inferred cyclists**, then **shadows**, then **ghosts**.
+3. When `filters.enabled = True`: **duplicates**, then **riders, inferred cyclists and passengers**, then **shadows**, then **ghosts**.
 
 Each rule considers only tracks that are still `ok` when it runs, so the order matters: a track rejected as a duplicate is not tested again as a ghost. A duplicate is resolved against the other track of the pair even if that track is rejected by a later rule, in which case both are excluded.
 
@@ -31,17 +31,22 @@ Two concurrent tracks of one object arise from part-and-whole boxes (a trailer a
 
 **Catches:** overlapping duplicates. **Does not catch:** duplicates without temporal overlap (those are fragments; see stitching).
 
-## Passengers and reflections
+## Riders, inferred cyclists and passengers
 
-A person track whose box lies inside an `ok` vehicle box, with intersection over the person box above `passenger_ioa` (0.70), in more than `passenger_share` (0.60) of its samples is marked `passenger` (reason `box contained in a vehicle box`). This removes drivers and passengers seen through windows and people reflected in bus windows. A pedestrian who walks behind a bus for part of their track keeps the `ok` verdict as long as less than 60 % of the samples are contained.
+A person track is a pedestrian only when it is none of the following. The rules are applied to each person track in this order, and the first that holds decides (`mark_passengers_and_riders`).
 
-## Riders and inferred cyclists
+**Riders.** A person on a bicycle or motorcycle is one road user with it. The person track is marked `rider` when any of these holds:
 
-A person and a two-wheeler with at least 4 common frames are one road user when the person box overlaps the two-wheeler box, expanded by 15 % of its size on each side (*fixed*), with intersection over the person box above `rider_overlap` (0.30) in more than `rider_share` (0.50) of the common frames, or, with at least 5 common frames, when the ground positions are closer than `rider_distance_m` (1.2 m) in more than half of them (*fixed*). The person track is marked `rider` (reason `riding two-wheeler <id>`), and the two-wheeler keeps the id of its rider in `meta["rider"]`.
+1. **Bike under the person** (SAM 3): a `bike` detection scoring at least 0.5, enlarged by 15 % of its size on each side, covers more than 0.30 of the person's box (`bike_ride` evidence, [SAM 3 prompts](detection.md#sam-3-prompts)) in more than `rider_share` (0.50) of the person's detections, at least `rider_min_frames` (4);
+2. **Tracked two-wheeler**: the person's box overlaps the box of a two-wheeler track, enlarged in the same way, with intersection over the person box above `rider_overlap` (0.30) in more than `rider_share` of their common frames (at least `rider_min_frames`);
+3. **Co-location**: on every second detection of the person, the samples at which some vehicle or two-wheeler track is present count; when at least `rider_colocation_min` (5) of them exist and in more than half of them one of those tracks lies within `rider_distance_m` (1.2 m) on the ground, the person rides it;
+4. **Cycling speed**: the median speed of the person track exceeds `rider_speed_kmh` (12 km/h).
 
-With SAM 3, two-wheelers come from the class-evidence prompts: a `bike` or `motorcycle` detection that overlaps a `vehicle` detection gives it its class, and one that no vehicle detection covers is kept as a two-wheeler detection of its own ([SAM 3 prompts](detection.md#sam-3-prompts)), to which the rider rule then attaches the person.
+The reason records the rule (`bike detection under the person`, `on two-wheeler <id>`, `co-located with <class> <id>`, `moves at cycling speed`). When rule 2 or 3 names a partner, the person's `meta["partner"]` holds its id and the partner's `meta["rider"]` the person's.
 
-A person track that remains `ok`, lasts at least 2.0 s and has a median speed above 15 km/h over its moving samples (both *fixed*) is re-labelled `bicycle` with bicycle dimensions (1.75 × 0.6 × 1.6 m) and `meta["inferred"] = "person moving at cycling speed"`. This recovers cyclists whose bicycle was not detected. A cyclist slower than 15 km/h without a detected bicycle remains a pedestrian.
+**Inferred cyclists.** A person who only satisfies rule 4, for at least `cyclist_min_duration_s` (2.0 s), is a two-wheeler that no prompt detected: the track is kept, re-labelled `bicycle` with bicycle dimensions (1.75 × 0.6 × 1.6 m) and `meta["inferred"] = "person moving at cycling speed"`. A shorter fast person track is a `rider` without a partner.
+
+**Passengers and reflections.** A person track whose box lies inside a vehicle or two-wheeler detection box of the same frame (any detection, not only tracked ones), with intersection over the person box above `passenger_ioa` (0.70), in more than `passenger_share` (0.60) of its detections is marked `passenger` (reason `box contained in a vehicle box`). This removes drivers and passengers seen through windows and people reflected in bus windows. A pedestrian who walks behind a bus for part of their track keeps the `ok` verdict as long as less than 60 % of the detections are contained. Riders are tested first, so a motorcyclist whose box lies inside the `vehicle` detection of the motorcycle is a rider, not a passenger.
 
 ## Shadows
 

@@ -119,6 +119,9 @@ class FrameDetections:
     corners 0-3 touch the ground, 4-7 are the roof, and corners 0 and 3 form the
     front face. ``masks`` holds one instance-mask crop per detection
     (see :func:`crop_mask`) when the detector segments, else ``None``.
+    ``evidence`` holds per-detection class evidence ``(N, E)`` when the detector
+    provides it (SAM 3: the best matching score of each class prompt, see
+    :data:`tachymetry.detect.sam3.EVIDENCE_COLUMNS`), else ``None``.
     """
 
     frame: int
@@ -128,6 +131,7 @@ class FrameDetections:
     cls: np.ndarray
     cuboid: np.ndarray | None = None
     masks: list[MaskCrop | None] | None = None
+    evidence: np.ndarray | None = None
 
     def __len__(self) -> int:
         return len(self.score)
@@ -154,6 +158,7 @@ class FrameDetections:
             self.cls[idx],
             None if self.cuboid is None else self.cuboid[idx],
             None if self.masks is None else [self.masks[int(i)] for i in idx],
+            None if self.evidence is None else self.evidence[idx],
         )
 
 
@@ -173,9 +178,17 @@ class DetectionSet:
     processed_frames: np.ndarray = field(default_factory=lambda: np.zeros(0, np.int64))
     meta: dict[str, Any] = field(default_factory=dict)
     masks: MaskStore | None = None  #: instance masks when the detector segments
+    evidence: np.ndarray | None = None  #: (M, E) float32 class evidence when the detector provides it
+    evidence_names: tuple[str, ...] = ()  #: column names of ``evidence``
 
     def __len__(self) -> int:
         return len(self.score)
+
+    def evidence_column(self, name: str) -> np.ndarray | None:
+        """One column of :attr:`evidence` (zeros where a row has none), or ``None`` without it."""
+        if self.evidence is None or name not in self.evidence_names:
+            return None
+        return self.evidence[:, self.evidence_names.index(name)]
 
     @classmethod
     def from_frames(
@@ -185,9 +198,11 @@ class DetectionSet:
         image_size: tuple[int, int],
         fps: float,
         meta: dict[str, Any] | None = None,
+        evidence_names: tuple[str, ...] = (),
     ) -> DetectionSet:
         has_cub = any(f.cuboid is not None for f in frames)
         has_masks = any(f.masks is not None for f in frames)
+        has_ev = bool(evidence_names) and any(f.evidence is not None for f in frames)
         rows = [f for f in frames if len(f)]
         if rows:
             frame = np.concatenate([np.full(len(f), f.frame, np.int64) for f in rows])
@@ -216,6 +231,19 @@ class DetectionSet:
             for f in rows:
                 crops.extend(f.masks if f.masks is not None else [None] * len(f))
             masks = MaskStore.from_crops(crops)
+        evidence = None
+        if has_ev:
+            k = len(evidence_names)
+            evidence = (
+                np.concatenate(
+                    [
+                        f.evidence.astype(np.float32) if f.evidence is not None else np.zeros((len(f), k), np.float32)
+                        for f in rows
+                    ]
+                )
+                if rows
+                else np.zeros((0, k), np.float32)
+            )
         return cls(
             frame,
             time,
@@ -229,6 +257,8 @@ class DetectionSet:
             processed,
             dict(meta or {}),
             masks,
+            evidence,
+            tuple(evidence_names) if has_ev else (),
         )
 
     def frames(self) -> Iterator[FrameDetections]:
@@ -251,6 +281,7 @@ class DetectionSet:
                 self.cls[idx],
                 None if self.cuboid is None else self.cuboid[idx],
                 None if self.masks is None else self.masks.crops(idx),
+                None if self.evidence is None else self.evidence[idx],
             )
 
     def save(self, path: str | Path) -> Path:
@@ -277,6 +308,8 @@ class DetectionSet:
                 mask_origin=self.masks.origin,
                 mask_shape=self.masks.shape,
             )
+        if self.evidence is not None:
+            arrays.update(evidence=self.evidence.astype(np.float16), evidence_names=np.array(self.evidence_names))
         np.savez_compressed(path, **arrays)
         return path
 
@@ -298,4 +331,6 @@ class DetectionSet:
             MaskStore(z["mask_bits"], z["mask_offset"], z["mask_origin"], z["mask_shape"])
             if "mask_bits" in z
             else None,
+            z["evidence"].astype(np.float32) if "evidence" in z else None,
+            tuple(str(s) for s in z["evidence_names"]) if "evidence_names" in z else (),
         )

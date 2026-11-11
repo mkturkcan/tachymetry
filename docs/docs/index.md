@@ -11,7 +11,7 @@ Tachymetry converts video from a fixed traffic camera into road-user trajectorie
 
 | Stage | What it does | Page |
 |---|---|---|
-| Detection | SAM 3 (default): text prompts `vehicle` and `person` give boxes and instance masks, class-evidence prompts set the vehicle class. Alternatives: RF-DETR-Seg (boxes and masks), RF-DETR (boxes), UrbanOmniDetect-2 (boxes and 3D cuboid corners). Analysis at 15 Hz by default | [Detection](guide/detection.md) |
+| Detection | SAM 3 (default): text prompts `vehicle` and `person` give boxes and instance masks, class-evidence prompts vote for the vehicle class over each track, and bike detections separate riders from pedestrians. Alternatives: RF-DETR-Seg (boxes and masks), RF-DETR (boxes), UrbanOmniDetect-2 (boxes and 3D cuboid corners). Analysis at 15 Hz by default | [Detection](guide/detection.md) |
 | Calibration | Orientation from road-marking and vertical vanishing points or a known field of view, metric scale from vehicle silhouettes, a dash-regularity check; optional depth and segmentation or GeoCalib; manual correspondences; lens distortion included | [Calibration](guide/calibration.md) |
 | Association | Two-stage BYTE association with a continuous-time Kalman filter, DIoU cost, shape and super-class gates and a metric speed gate | [Tracking](guide/tracking.md) |
 | Vehicle footprints | Calibrated 3D-box silhouettes fitted to the instance masks of each vehicle track: shared dimensions, per-frame pose, occlusion handling, headings of stopped vehicles from the street axes | [Footprints](guide/footprints.md) |

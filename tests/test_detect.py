@@ -166,7 +166,7 @@ class _Sam3Stub:
 
 
 def _sam3_stub(found):
-    from tachymetry.detect.sam3 import SAM3_EVIDENCE, SAM3_PROMPTS, Sam3Detector
+    from tachymetry.detect.sam3 import EVIDENCE_COLUMNS, SAM3_EVIDENCE, SAM3_EVIDENCE_MIN, SAM3_PROMPTS, Sam3Detector
 
     det = Sam3Detector.__new__(Sam3Detector)
     det.cfg = DetectorConfig(name="sam3", class_conf={})
@@ -176,6 +176,8 @@ def _sam3_stub(found):
     det._std = torch.full((1, 3, 1, 1), 0.5)
     det.prompts = list(SAM3_PROMPTS) + list(SAM3_EVIDENCE)
     det.n_detect = len(SAM3_PROMPTS)
+    det._thr = [0.4] * len(SAM3_PROMPTS) + [SAM3_EVIDENCE_MIN[p] for p in SAM3_EVIDENCE]
+    det.evidence_names = EVIDENCE_COLUMNS
     det._cls = np.array([ROAD_CLASSES.index(c) for c in [*SAM3_PROMPTS.values(), *SAM3_EVIDENCE.values()]], np.int16)
     det.classes = sorted({*SAM3_PROMPTS.values(), *SAM3_EVIDENCE.values()}, key=ROAD_CLASSES.index)
     det._text = torch.arange(len(det.prompts), dtype=torch.float32).view(-1, 1, 1)
@@ -186,6 +188,8 @@ def _sam3_stub(found):
 
 
 def test_sam3_vehicle_classes_come_from_the_evidence_prompts():
+    from tachymetry.detect.sam3 import EVIDENCE_COLUMNS
+
     bus = [0.05, 0.05, 0.45, 0.45]
     car = [0.55, 0.55, 0.75, 0.75]
     moto = [0.55, 0.05, 0.65, 0.25]
@@ -201,12 +205,17 @@ def test_sam3_vehicle_classes_come_from_the_evidence_prompts():
             "motorcycle": [(0.65, moto)],
         }
     )
-    xyxy, score, cls, cub, crops = det([np.zeros((64, 96, 3), np.uint8)])[0]
+    xyxy, score, cls, cub, crops, ev = det([np.zeros((64, 96, 3), np.uint8)])[0]
     names = sorted(ROAD_CLASSES[c] for c in cls)
     assert cub is None and names == ["bicycle", "bus", "car", "motorcycle", "person"]
     k = [ROAD_CLASSES[c] for c in cls].index("bus")
     np.testing.assert_allclose(score[k], 0.9, atol=1e-3)  # the vehicle prompt's score, not the evidence score
     assert all(c is not None for c in crops)
+    col = {n: j for j, n in enumerate(EVIDENCE_COLUMNS)}
+    np.testing.assert_allclose(ev[k, col["bus"]], 0.7, atol=1e-3)
+    assert ev[k, col["truck"]] == 0  # 0.3 is below the truck floor of 0.40
+    m = [ROAD_CLASSES[c] for c in cls].index("motorcycle")
+    np.testing.assert_allclose(ev[m, [col["bike"], col["motorcycle"]]], [0.5, 0.65], atol=1e-3)
 
 
 def test_sam3_gated_repository_error(monkeypatch):

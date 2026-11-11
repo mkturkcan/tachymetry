@@ -118,4 +118,5 @@ class Track:
             "start_xy": [round(float(v), 3) for v in self.xy[0]],
             "end_xy": [round(float(v), 3) for v in self.xy[-1]],
             "mean_score": round(float(np.mean(self.score)), 3) if len(self.score) else 0.0,
+            "class_rule": str(self.meta.get("class_rule") or ""),
         }
