@@ -156,7 +156,8 @@ When no non-vehicle scale cue is given and the detections carry instance masks (
 
 - its score is at least 0.6;
 - its box keeps 6 px from the image border and covers less than 15 % of the image;
-- its mask has at least 600 pixels.
+- its mask has at least 600 pixels;
+- with SAM 3, a car-type prompt (`car`, `van` or `suv`) matched it and no `truck`, `bus`, `bike` or `motorcycle` detection did ([evidence vectors](detection.md#sam-3-prompts)). A single frame does not always tell a pickup from a car, and the car model fits neither pickups nor trucks: on `intersection-day`, admitting the car-labelled detections with truck evidence lowers the camera height from 27.4 m to 26.1 m, against the 27.7 m that the lane widths and dash lengths of the clip support.
 
 A tracklet needs at least 4 detections and 15 px of image motion. Up to 40 tracklets are used, the longest first, with 4 masks spread over each. The heading of a tracklet is the principal direction of its box-bottom ground points under the camera being evaluated (at least 3 points and 1.5 m of travel).
 

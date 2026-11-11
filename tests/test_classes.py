@@ -161,3 +161,45 @@ def test_persons_co_located_with_a_vehicle_are_riders_and_fast_ones_cyclists():
     short = _track(5, "person", "person", frames[:15], path[:15] + [0.0, 40.0], [[900, 0, 910, 10]] * 15, 5.0)
     mark_passengers_and_riders([short], FilterConfig())
     assert short.verdict == "rider" and short.cls == "person"
+
+
+def test_silhouette_calibration_uses_only_unambiguous_cars():
+    """Detections with truck evidence (pickups) do not enter the car-silhouette scale."""
+    from tachymetry.calib.from_silhouettes import car_tracklets
+    from tachymetry.detections import MaskStore, crop_mask
+
+    n = 8
+    boxes, ev, frame = [], [], []
+    for f in range(n):
+        for k, x in enumerate((200, 600)):  # a car and a pickup driving side by side
+            boxes.append([x + 4 * f, 300, x + 4 * f + 120, 360])
+            e = np.zeros(len(EVIDENCE_COLUMNS))
+            e[COL["car"]] = 0.8
+            if k == 1:
+                e[COL["truck"]] = 0.6
+            ev.append(e)
+            frame.append(f)
+    boxes = np.asarray(boxes, np.float32)
+    full = np.zeros((720, 1280), bool)
+    crops = []
+    for b in boxes:
+        m = full.copy()
+        m[int(b[1]) : int(b[3]), int(b[0]) : int(b[2])] = True
+        crops.append(crop_mask(m, b))
+    m = len(boxes)
+    dets = DetectionSet(
+        frame=np.asarray(frame),
+        time=np.asarray(frame) / 10.0,
+        xyxy=boxes,
+        score=np.full(m, 0.9, np.float32),
+        cls=np.full(m, ROAD_CLASSES.index("car"), np.int16),
+        image_size=(1280, 720),
+        fps=10.0,
+        processed_frames=np.arange(n),
+        masks=MaskStore.from_crops(crops),
+        evidence=np.asarray(ev, np.float32),
+        evidence_names=EVIDENCE_COLUMNS,
+    )
+    tracklets = car_tracklets(dets)
+    rows = {mk.row for t in tracklets for mk in t.masks}
+    assert tracklets and all(r % 2 == 0 for r in rows)  # only the car (even rows)

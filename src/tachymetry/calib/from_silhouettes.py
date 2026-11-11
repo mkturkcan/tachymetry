@@ -88,7 +88,13 @@ def car_tracklets(
     margin_px: int = 6,
     seed: int = 0,
 ) -> list[Tracklet]:
-    """Tracklets of confident, untruncated car masks linked by box overlap (no camera needed)."""
+    """Tracklets of confident, untruncated car masks linked by box overlap (no camera needed).
+
+    With class evidence (SAM 3), a detection enters only when car-type prompts (``car``, ``van``,
+    ``suv``) matched it and no ``truck``, ``bus``, ``bike`` or ``motorcycle`` detection did: a
+    single frame does not always tell a pickup from a car, and the car model fits neither
+    pickups nor trucks.
+    """
     if dets.masks is None or len(dets) == 0:
         return []
     names = list(dets.class_names)
@@ -106,6 +112,12 @@ def car_tracklets(
         & (b[:, 3] < h - 1 - margin_px)
         & ((b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1]) < 0.15 * w * h)
     )
+    if dets.evidence is not None and dets.evidence_names:
+        ev = {n: dets.evidence[:, k] for k, n in enumerate(dets.evidence_names)}
+        zero = np.zeros(len(dets), np.float32)
+        carlike = np.maximum.reduce([ev.get(n, zero) for n in ("car", "van", "suv")])
+        other = np.maximum.reduce([ev.get(n, zero) for n in ("truck", "bus", "bike", "motorcycle")])
+        ok &= (carlike > 0) & (other == 0)
     ok &= np.array([dets.masks.has(int(i)) for i in range(len(dets))], bool)
     frames = np.unique(dets.frame[ok])
     by_frame = {int(f): np.flatnonzero(ok & (dets.frame == f)) for f in frames}
