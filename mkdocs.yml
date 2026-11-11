@@ -1,7 +1,7 @@
 site_name: Tachymetry
 site_description: Metric trajectories, speeds and counts from traffic-camera video.
 site_author: Mehmet Kerem Turkcan
-site_url: https://mkturkcan.github.io/tachymetry/
+site_url: https://mehmetkeremturkcan.com/tachymetry/
 repo_url: https://github.com/mkturkcan/tachymetry
 repo_name: mkturkcan/tachymetry
 edit_uri: edit/main/docs/
@@ -105,7 +105,7 @@ plugins:
             heading_level: 2
 
 nav:
-  - Project page: https://mkturkcan.github.io/tachymetry/
+  - Project page: https://mehmetkeremturkcan.com/tachymetry/
   - Documentation:
       - Overview: docs/index.md
       - Installation: docs/installation.md

@@ -53,8 +53,8 @@ all = ["tachymetry[depth,parquet]"]
 tachymetry = "tachymetry.cli:main"
 
 [project.urls]
-Homepage = "https://mkturkcan.github.io/tachymetry/"
-Documentation = "https://mkturkcan.github.io/tachymetry/docs/"
+Homepage = "https://mehmetkeremturkcan.com/tachymetry/"
+Documentation = "https://mehmetkeremturkcan.com/tachymetry/docs/"
 Repository = "https://github.com/mkturkcan/tachymetry"
 Issues = "https://github.com/mkturkcan/tachymetry/issues"
 
