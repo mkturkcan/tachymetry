@@ -44,7 +44,13 @@ def _comment(lines: list[str], start: int, end: int) -> str:
     for ln in range(end, start - 1, -1):
         text = lines[ln - 1]
         if "#:" in text:
-            return text.split("#:", 1)[1].strip()
+            parts = [text.split("#:", 1)[1].strip()]
+            # a long description continues on the following lines that hold only a "#:" comment
+            nxt = end
+            while nxt < len(lines) and lines[nxt].strip().startswith("#:"):
+                parts.append(lines[nxt].strip()[2:].strip())
+                nxt += 1
+            return " ".join(p for p in parts if p)
     return ""
 
 
