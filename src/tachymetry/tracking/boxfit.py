@@ -278,6 +278,8 @@ def street_axes(raw_tracks: list[np.ndarray], dets: Any, obs: Any, cfg: Any, min
     than 8 m contributes the directions of its smoothed contact path where it
     is faster than ``min_speed_mps``.
     """
+    from collections import Counter
+
     from ..config import SUPER_CLASS
     from .signal import smooth_kinematics
 
@@ -286,8 +288,10 @@ def street_axes(raw_tracks: list[np.ndarray], dets: Any, obs: Any, cfg: Any, min
         rows = rows[obs.valid[rows]]
         if len(rows) < 8:
             continue
+        # majority class of the detections; a tie goes to the class seen first, so that the result
+        # does not depend on the iteration order of a set of strings (which changes between processes)
         names = [dets.class_names[int(c)] for c in dets.cls[rows]]
-        if SUPER_CLASS.get(max(set(names), key=names.count)) != "vehicle":
+        if SUPER_CLASS.get(Counter(names).most_common(1)[0][0]) != "vehicle":
             continue
         order = np.argsort(dets.time[rows], kind="stable")
         rows = rows[order]
