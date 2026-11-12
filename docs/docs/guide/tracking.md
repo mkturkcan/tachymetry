@@ -66,23 +66,26 @@ Rows with `valid = False` are removed, and when a track holds two detections in 
 
 Each detection gets a view weight $w = \sqrt{A}\cdot\max(\kappa, 0.05)$, with box area $A$ and centrality
 $\kappa = \big(1 - 0.8\,|x_m - W/2| / (W/2)\big)\cdot\big(0.4 + 0.6\,\operatorname{clip}(y_2 / H, 0, 1)\big)$,
-so that large, central, near-field views dominate and the far field, where vehicles look alike, barely votes (`view_weights`).
-The class of a track then follows from its detections (`class_vote`); the vote is repeated for each segment after splitting.
+where $x_m$ is the horizontal centre and $y_2$ the bottom edge of the box, and $W$ and $H$ are the image width and height.
+Large, central boxes low in the image dominate the vote; in an oblique view these are the near-field views, and the far field, where vehicles look alike, barely votes (`view_weights`). In a straight-down view the distance does not change across the image, and the weight still favours large boxes and boxes low and central in the image.
+The class of a track then follows from its detections (`class_vote`); the vote is repeated for each segment after splitting ([presplit](#presplit-at-gaps-and-teleports)).
 
-**With class evidence (SAM 3).** Every detection carries the score $e_p$ of the best-matching detection of each class prompt $p$ ([SAM 3 prompts](detection.md#sam-3-prompts)). The share of prompt $p$ is
+**With class evidence (SAM 3).** Every detection carries the score $e_p$ of the best-matching evidence detection of each class prompt $p$ ([SAM 3 prompts](detection.md#sam-3-prompts)). The share of prompt $p$ is
 
 $$
 S_p = \frac{\sum_i w_i\, e_{p,i}}{\sum_i w_i},
 $$
 
-summed over all detections of the track, those without a match included, so a hesitant far-field match counts little and a confident near-field one dominates. The slots of the vote are two-wheeler, `bus`, `truck`, `car`, `van` and `suv` (ties in this order); a detection's two-wheeler score is the larger of its `bike` and `motorcycle` evidence, since the `bike` prompt alone misses many motorcycles in some views (in the straight-down sample, `motorcycle` evidence is found on 51 % of the vehicle detections and `bike` evidence on 17 %). The class is the argmax slot, with `car`, `van` and `suv` folded into `car` and a two-wheeler a motorcycle when $S_\text{motorcycle} > S_\text{bike}$ and a bicycle otherwise, provided the largest share reaches 0.20 (`CLASS_SHARE_MIN`). Below it the evidence is too weak (far-field-only tracks), and two fallbacks apply in turn:
+summed over all detections of the track, those without a match included, so a hesitant far-field match counts little and a confident near-field one dominates. The slots of the vote are two-wheeler, `bus`, `truck`, `car`, `van` and `suv` (ties in this order). The two-wheeler score of a detection is the larger of its `bike` and `motorcycle` evidence, since the `bike` prompt alone misses many motorcycles in some views: in the straight-down sample `dhaka-roundabout`, `motorcycle` evidence is found on 51 % of the vehicle detections and `bike` evidence on 17 %. The slot with the largest share decides, provided that share reaches 0.20 (`CLASS_SHARE_MIN`): a `car`, `van` or `suv` slot gives the class `car`, and the two-wheeler slot gives a motorcycle when $S_\text{motorcycle} > S_\text{bike}$ and a bicycle otherwise. Below 0.20 the evidence is too weak (far-field-only tracks), and two fallbacks apply in turn:
 
-1. **bike flag**: when a confident `bike` detection lies within more than half of the track's detections (`bike_cover` evidence, at least 4 detections), the track is a two-wheeler;
-2. **size**: otherwise the track is fitted as a car, and its fitted size decides: a fit that reaches 6.7 m, close to the car length bound, is fitted again as a truck and kept as one if that fit is longer than 8.0 m; a fit that stays at the smallest car (length at most 3.15 m and width at most 1.65 m, the lower bounds of the car box) is smaller than any car, and the track becomes a two-wheeler (`size_small`: a motorcycle when its `motorcycle` share exceeds its `bike` share, else a bicycle). In the straight-down sample, 55 tracks have no usable evidence. The car fits of 51 of them stay at about 3.05 × 1.55 m; they are cycle-rickshaws, rickshaw vans and motorcycles, and become two-wheelers (18 bicycles, 33 motorcycles) instead of cars. The other 4 remain cars.
+1. **bike flag**: when more than half of the track's detections, and at least 4, contain a `bike` detection scoring at least 0.5 (`bike_cover` evidence), the track is a two-wheeler, a motorcycle or a bicycle as above;
+2. **size**: otherwise the track is fitted as a car ([box fit](footprints.md)), and the fitted size decides: a fit that reaches 6.7 m, within 0.1 m of the car length bound of 6.8 m, is fitted again as a truck and kept as one if that fit is longer than 8.0 m; any other track remains a car.
 
-`meta["class_rule"]` (`evidence`, `bike_flag`, `size` or `size_small`, and `inferred` for [inferred cyclists](verdicts.md#riders-inferred-cyclists-and-passengers)) and `meta["class_shares"]` record the decision; they are exported as `class_rule` and `class_shares` ([Outputs](outputs.md)).
+**Small vehicles** (`hygiene.small_vehicle_rule`, off by default; turn it on with `--set hygiene.small_vehicle_rule=true`). Vehicles outside the class scheme, such as cycle-rickshaws, receive almost no evidence from any class prompt, and the size fallback labels them cars. With the rule, a car fit that stays within 0.15 m of the smallest car box (3.0 m long and 1.5 m wide, `BOX_BOUNDS` in `tracking/maskgeom.py`), that is at most 3.15 m long and 1.65 m wide, makes the track a two-wheeler (`size_small`), a motorcycle or a bicycle as above; the track is then fitted again as one. The rule uses only the fitted size, so every unresolved track whose car fit stays that small becomes a two-wheeler; it is meant for traffic in which such vehicles are common. The sample `dhaka-roundabout` turns it on ([Drone footage](../examples/drone.md#cycle-rickshaws)).
 
-**Without class evidence** (RF-DETR, UrbanOmniDetect-2), the per-detection labels vote with the weight $s \cdot w$, with the detection score $s$ (`meta["class_rule"] = "detections"`).
+`meta["class_rule"]` (`evidence`, `bike_flag`, `size`, `size_small`, and `inferred` for [inferred cyclists](verdicts.md#riders-inferred-cyclists-and-passengers)) and `meta["class_shares"]` record the decision; they are exported as `class_rule` and `class_shares` ([Outputs](outputs.md)).
+
+**Without class evidence** (RF-DETR, UrbanOmniDetect-2), the per-detection labels vote with the weight $s \cdot w$, with the detection score $s$ (`meta["class_rule"] = "detections"`). The 0.20 minimum, the fallbacks and the small-vehicle rule do not apply.
 
 ### Presplit at gaps and teleports
 

@@ -70,7 +70,7 @@ One row per track including rejected ones (`results.SUMMARY_FIELDS`, from `Track
 | `speed_mean_kmh`, `speed_median_kmh`, `speed_p85_kmh`, `speed_max_kmh` | km/h | over samples faster than 3 km/h (0 if none) |
 | `moving_share` | | fraction of samples faster than 3 km/h |
 | `mean_score` | | mean detection score |
-| `class_rule` | | how the class was decided ([class vote](tracking.md#class-vote)): `evidence`, `bike_flag`, `size` or `size_small` with SAM 3, `detections` with the other back-ends, `inferred` for cyclists inferred from person tracks |
+| `class_rule` | | how the class was decided ([class vote](tracking.md#class-vote)): `evidence`, `bike_flag` or `size` with SAM 3 (and `size_small` with `hygiene.small_vehicle_rule`), `detections` with the other back-ends, `inferred` for cyclists inferred from person tracks |
 
 ## `tracks.json`
 

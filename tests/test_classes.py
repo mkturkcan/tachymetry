@@ -1,11 +1,14 @@
 """Vehicle classes from SAM 3 class evidence, and the separation of riders and passengers from pedestrians."""
 
+from dataclasses import replace
+
 import numpy as np
 
-from tachymetry.config import ROAD_CLASSES, FilterConfig
+from tachymetry.config import ROAD_CLASSES, FilterConfig, PipelineConfig
 from tachymetry.detect.sam3 import EVIDENCE_COLUMNS, class_evidence, evidence_class
 from tachymetry.detections import DetectionSet
-from tachymetry.tracking.hygiene import class_vote
+from tachymetry.tracking.builder import build_tracks
+from tachymetry.tracking.hygiene import SIZE_FALLBACK_SMALL_LW, class_vote
 from tachymetry.tracking.model import Flags, Track
 from tachymetry.tracking.verdicts import mark_passengers_and_riders
 
@@ -76,6 +79,48 @@ def test_weak_evidence_falls_back_to_the_bike_flag_and_then_to_a_car():
     ev[:, COL["bike_cover"]] = 0.0
     cls, info = class_vote(*_evidence_track(boxes, ev), (1920, 1080))
     assert cls == "car" and info["rule"] == "size"
+
+
+def test_motorcycle_evidence_fills_the_two_wheeler_slot():
+    """A motorcycle that the ``bike`` prompt barely matches is a two-wheeler through its ``motorcycle`` evidence."""
+    boxes = [[900, 600, 1000, 760]] * 6
+    ev = np.zeros((6, len(EVIDENCE_COLUMNS)))
+    ev[:, COL["motorcycle"]] = 0.7
+    ev[:1, COL["bike"]] = 0.45  # share 0.075: alone it would lose to car
+    ev[:3, COL["car"]] = 0.5  # share 0.25
+    cls, info = class_vote(*_evidence_track(boxes, ev), (1920, 1080))
+    assert cls == "motorcycle" and info["rule"] == "evidence"
+    assert info["shares"]["two_wheeler"] > info["shares"]["car"] > info["shares"]["bike"]
+    assert evidence_class(ev[0]) == "motorcycle"  # the same rule for a single frame
+
+
+def _small_vehicle():
+    """Detections with masks of a 2.2 m by 1.0 m vehicle (a cycle-rickshaw) that no class prompt matched."""
+    from tachymetry.geometry import Camera
+    from tachymetry.synthetic.traffic import Agent, TrafficSpec, render_detections
+
+    cam = Camera.from_pose(
+        (1280, 720), focal=1100.0, height=12.0, pitch=25.0, yaw=45.0, roll=0.5, position=(-14.0, -14.0)
+    )
+    t = np.arange(60) / 15.0
+    xy = np.column_stack([-8.0 + 4.0 * t, np.full(len(t), -2.0)])
+    agent = Agent(1, "car", 2.2, 1.0, 1.5, t, xy, np.zeros(len(t)), np.full(len(t), 4.0))
+    spec = TrafficSpec(duration_s=4.0, rate_hz=15.0, masks=True, ghost_rate=0.0, miss_prob=0.0, seed=3)
+    ds = render_detections(cam, [agent], spec)
+    ev = np.zeros((len(ds), len(EVIDENCE_COLUMNS)), np.float32)
+    return replace(ds, evidence=ev, evidence_names=EVIDENCE_COLUMNS), cam
+
+
+def test_small_vehicle_rule_is_opt_in():
+    """Without class evidence, a car fit at the smallest car stays a car unless ``hygiene.small_vehicle_rule``."""
+    ds, cam = _small_vehicle()
+    cfg = PipelineConfig()
+    ok = [tr for tr in build_tracks(ds, cam, cfg)[0] if tr.is_ok]
+    assert len(ok) == 1 and ok[0].cls == "car" and ok[0].meta["class_rule"] == "size"
+    assert ok[0].length <= SIZE_FALLBACK_SMALL_LW[0] and ok[0].width <= SIZE_FALLBACK_SMALL_LW[1]
+    cfg.hygiene.small_vehicle_rule = True
+    ok = [tr for tr in build_tracks(ds, cam, cfg)[0] if tr.is_ok]
+    assert len(ok) == 1 and ok[0].cls == "bicycle" and ok[0].meta["class_rule"] == "size_small"
 
 
 def _track(tid, cls, sup, frames, xy, boxes, speed_mps=0.0):

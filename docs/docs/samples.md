@@ -17,7 +17,7 @@ The video properties are those reported by `tachymetry.io.VideoSource`; all seve
 **Cameras.**
 
 - **Intersection.** The five intersection clips come from one camera pose; their backgrounds register to each other within 4.2 px (the infrared night clip up to 12.4 px at the image corners). `intersection-day` is calibrated automatically with a 47.5° field of view, which GeoCalib estimated on four of the clips. The other four load that camera from the package (`tachymetry/assets/cameras/svbrd-intersection.json`), because calibrating each clip separately adds the per-clip variance of automatic calibration ([Calibration verification](guide/calibration.md#calibration-verification)).
-- **Motorway.** The 59° field of view of `motorway-overpass` is checked by its lane markings. Under the resulting camera, the five dashes of the chain found on the road measure 2.76 to 3.07 m, with a dash-regularity spread of 0.019 (`docs/media/calib_dashes.jpg`), consistent with urban-expressway markings.
+- **Motorway.** The 59° field of view of `motorway-overpass` is checked by its lane markings. Under the resulting camera, the five dashes of the chain found on the road measure 2.85 to 3.16 m, with a dash-regularity spread of 0.019 (`docs/media/calib_dashes.jpg`), consistent with urban-expressway markings.
 - **Drone.** The straight-down camera of `dhaka-roundabout` comes from its flight log ([Drone footage](examples/drone.md)).
 
 ## Sources and attribution
@@ -62,7 +62,7 @@ intersection-day-3   CC BY 4.0 known camera {}
 intersection-turn    CC BY 4.0 known camera {}
 intersection-night   CC BY 4.0 known camera {}
 motorway-overpass    MIT       automatic    {'calibration.hfov_deg': 59.0}
-dhaka-roundabout     CC BY 4.0 known camera {}
+dhaka-roundabout     CC BY 4.0 known camera {'hygiene.small_vehicle_rule': True}
 Small-Crowd-and-Traffic-Video-Footages by parsafaramarzi (Hugging Face), MIT, https://huggingface.co/datasets/parsafaramarzi/Small-Crowd-and-Traffic-Video-Footages
 ```
 
@@ -86,7 +86,7 @@ One run per clip with the default configuration (SAM 3, 15 Hz) and the camera or
 The shared intersection camera is an earlier automatic calibration of `intersection-day`: f = 2182 px, 27.7 m high, pitched 17.9° down, roll −0.18°. The clip's current automatic calibration is 1 % lower ([one camera, several clips](guide/calibration.md#one-camera-several-clips)).
 
 - **Truck labels.** Vehicle classes come from SAM 3's class-evidence prompts, voted over each track ([class vote](guide/tracking.md#class-vote)). The `truck` prompt scores pickups higher than `car` (0.7 to 0.9 against 0.5 to 0.7), so the eight truck tracks of `intersection-day` are seven pickups and a utility trailer.
-- **Two-wheelers in mixed traffic.** In the straight-down clip, 175 motorcycles are classed from `motorcycle` evidence. Cycle-rickshaws and rickshaw vans receive almost no evidence from any prompt; their car fits stay at the smallest car, so the size rule makes them two-wheelers (18 bicycles, 33 motorcycles). Three bicycles are cyclists inferred from fast person tracks, and 34 persons are riders on two-wheelers ([Limitations](limitations.md#mixed-traffic-and-class-dependent-scale)).
+- **Two-wheelers in mixed traffic.** In `dhaka-roundabout`, 175 motorcycles are classed from `motorcycle` evidence. The clip's override `hygiene.small_vehicle_rule` makes two-wheelers of 51 tracks without usable evidence, nearly all of them cycle-rickshaws and rickshaw vans, which would otherwise be cars: 18 bicycles and 33 motorcycles ([Drone footage](examples/drone.md#cycle-rickshaws)). The other 3 of the 21 bicycles are cyclists inferred from fast person tracks, and 34 person tracks are riders, 31 of them on a tracked two-wheeler ([Limitations](limitations.md#mixed-traffic-and-class-dependent-scale)).
 - **Motorway speeds.** Moving vehicles on the motorway have a median speed of 61.8 km/h. Under the selected camera (8.4 m high), the five dashes of the checked chain measure 2.85 to 3.16 m with periods of 8.9 to 9.4 m, the 3 m dashes and 6 m gaps of the markings. An earlier cuboid-based calibration of this clip, without a known field of view, gave about 95 km/h; under that camera the dashes of the same chain grow from 3.35 m to 6.28 m along the road (spread 0.165). The dash check is what exposes such a calibration.
 
 <figure markdown="span">

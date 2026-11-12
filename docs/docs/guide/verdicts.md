@@ -75,7 +75,7 @@ On the public sample clip (`intersection-day`, default configuration with SAM 3 
 | `ghost` | 1 |
 | `duplicate` | 1 |
 
-Both riders are cyclists with a `bike` detection under them. On the straight-down sample (`dhaka-roundabout`), 34 of the person tracks are riders, 31 of them on a tracked two-wheeler and 3 by their speed, and 3 more become inferred cyclists.
+Both riders are cyclists with a `bike` detection under them. On the straight-down sample (`dhaka-roundabout`, run with its sample override), 34 of the person tracks are riders, 31 of them on a tracked two-wheeler and 3 by their speed, and 3 more become inferred cyclists.
 
 The rejected tracks and their reasons are listed in the [end-to-end example](../examples/intersection.md). The contribution of stitching and verdicts on synthetic traffic with ground truth (fragments per object, false tracks) is the last row of the [benchmarks](../benchmarks.md).
 

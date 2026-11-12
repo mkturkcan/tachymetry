@@ -88,8 +88,8 @@ BIKE_FLAG_MIN_FRAMES = 4
 SIZE_FALLBACK_CAR_L = 6.7
 #: ... and are trucks when that fit is longer than this.
 SIZE_FALLBACK_TRUCK_L = 8.0
-#: Unresolved tracks whose car fit stays at the lower bounds of a car (length and width at most these)
-#: are smaller than any car, and become two-wheelers (the small-vehicle size rule).
+#: With ``HygieneConfig.small_vehicle_rule``, unresolved tracks whose car fit stays within 0.15 m of the
+#: smallest car box (``maskgeom.BOX_BOUNDS``; length and width at most these) become two-wheelers.
 SIZE_FALLBACK_SMALL_LW = (3.15, 1.65)
 
 
@@ -123,10 +123,10 @@ def class_vote(dets: DetectionSet, rows: np.ndarray, image_size: tuple[int, int]
     Otherwise a track with a confident bike detection covering more than half of
     its detections (at least four) is a two-wheeler, and any other track a car,
     subject to the size fallback of :func:`process_raw_track`: a car fit at the car
-    length bound is refitted as a truck, and one at the smallest car (see
-    :data:`SIZE_FALLBACK_SMALL_LW`) makes the track a two-wheeler (``info["rule"]`` is
-    ``"evidence"``, ``"bike_flag"`` or ``"size"``; ``meta["class_rule"]`` becomes
-    ``"size_small"`` in the last case).
+    length bound is refitted as a truck, and, with ``HygieneConfig.small_vehicle_rule``,
+    one at the smallest car (see :data:`SIZE_FALLBACK_SMALL_LW`) makes the track a
+    two-wheeler (``info["rule"]`` is ``"evidence"``, ``"bike_flag"`` or ``"size"``;
+    ``meta["class_rule"]`` becomes ``"size_small"`` in the last case).
 
     Without evidence, the per-detection classes vote with the view weight times the
     detection score (``info["rule"] == "detections"``).
@@ -756,6 +756,7 @@ def process_raw_track(rows: np.ndarray, ctx: TrackContext, stats: HygieneStats |
         elif (
             tr is not None
             and rule == "size"
+            and ctx.cfg.small_vehicle_rule
             and tr.length <= SIZE_FALLBACK_SMALL_LW[0]
             and tr.width <= SIZE_FALLBACK_SMALL_LW[1]
         ):

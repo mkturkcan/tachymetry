@@ -158,6 +158,10 @@ class HygieneConfig:
     boxfit_slow_hz: float = 3.0  #: pose-fit rate inside stopped stretches (offsets are frozen there)
     steep_view_deg: tuple[float, float] = (60.0, 80.0)  #: depression angles over which ground points without a
     #: footprint or box fit move from contact plus ray offset to the silhouette centroid (see tracking/hygiene.py)
+    # track classes from SAM 3 class evidence (tracking/hygiene.py, class_vote)
+    small_vehicle_rule: bool = False  #: tracks without usable class evidence whose car fit stays at the smallest
+    #: car become two-wheelers (cycle-rickshaws and other small vehicles that no class prompt recognises); by
+    #: default they remain cars
 
 
 @dataclass

@@ -13,7 +13,7 @@ The sample `dhaka-roundabout` is 30 s of dense mixed traffic at a roundabout, re
 tachymetry demo --sample dhaka-roundabout -o runs/dhaka
 ```
 
-The demo downloads the 30 s excerpt (about 390 MB), prints its attribution and the camera, and runs the default pipeline with the sample's known camera (`tachymetry.data.sample_camera`). The sections below make each step explicit.
+The demo downloads the 30 s excerpt (about 390 MB), prints its attribution and the camera, and runs the pipeline with the sample's known camera (`tachymetry.data.sample_camera`) and its configuration override for cycle-rickshaws (`tachymetry.data.sample_overrides`, [below](#cycle-rickshaws)). The sections below make each step explicit.
 
 ## The camera
 
@@ -101,7 +101,12 @@ print(cam.describe())
 print(f"ground sampling distance {100 * cam.height / cam.focal:.2f} cm/px")
 cam.save("cam.json")
 
-run = tm.track(video, out="runs/dhaka", camera=cam)
+run = tm.track(
+    video,
+    out="runs/dhaka",
+    camera=cam,
+    hygiene__small_vehicle_rule=True,          # cycle-rickshaws, which no class prompt recognises
+)
 print(run.summary()["by_class"])
 print(run.report["timings"])
 ```
@@ -116,15 +121,22 @@ ground sampling distance 3.95 cm/px
 
 On one NVIDIA RTX PRO 6000 GPU, SAM 3 detection took 47 s for the 360 analysed frames. The background median and the camera took 17 s, and tracking 101 s, most of it the mask geometry of the vehicle tracks on the CPU. The class counts are those of the accepted tracks ([class vote](../guide/tracking.md#class-vote)).
 
-- **Two-wheelers and rickshaws.** 175 motorcycles are classed from their `motorcycle` evidence. Cycle-rickshaws and rickshaw vans receive almost no evidence from any class prompt; their car fits stay at the smallest car, and the size rule makes them two-wheelers (18 bicycles, and motorcycles where `motorcycle` scored them above `bike`). CNG auto-rickshaws with `car` or `van` evidence are cars ([Limitations](../limitations.md#mixed-traffic-and-class-dependent-scale)).
-- **Riders.** 34 person tracks are riders, 31 of them on a tracked two-wheeler, and 3 fast person tracks without a two-wheeler become cyclists ([Verdicts](../guide/verdicts.md#riders-inferred-cyclists-and-passengers)).
+- **Motorcycles.** 175 of the 208 motorcycles are classed from their evidence. The other 33 are rickshaws that the small-vehicle rule labels motorcycles ([below](#cycle-rickshaws)). Seen from above, the `bike` prompt misses most motorcycles: `motorcycle` evidence is found on 51 % of the vehicle detections and `bike` evidence on 17 %. The two-wheeler score of a detection is the larger of the two ([class vote](../guide/tracking.md#class-vote)).
+- **Riders.** 34 person tracks are riders and are not among the 32 persons: 31 ride a tracked two-wheeler, and 3 move at cycling speed for less than 2 s. 3 more person tracks move that fast for longer, without a two-wheeler, and become cyclists ([Verdicts](../guide/verdicts.md#riders-inferred-cyclists-and-passengers)).
 - **Small road users.** In steep views, persons and two-wheelers are placed at their mask centroid projected at a class height, not at their lowest mask point (`hygiene.steep_view_deg`, 60° to 80° of depression). Their lowest point is a foot or a wheel, far from the centre seen from above.
+
+### Cycle-rickshaws
+
+Cycle-rickshaws and rickshaw vans receive almost no evidence from any class prompt, and the class scheme has no three-wheeler class. By default the size fallback of the class vote labels them cars. Their car fits stay at the smallest car, and `hygiene.small_vehicle_rule` makes such tracks two-wheelers, the nearest classes of the scheme. The rule is off by default; this sample turns it on (`sample_overrides("dhaka-roundabout")`), so the demo applies it. In the run above, 55 tracks have no usable evidence. The car fits of 51 of them stay at about 3.05 × 1.55 m and end in that branch, nearly all of them cycle-rickshaws and rickshaw vans; the other 4 remain cars. The rule labels 18 of the 51 bicycles and 33 motorcycles; the 33 are those that the `motorcycle` prompt scored above `bike`, both far below the 0.20 share the vote needs.
+
+With the rule, the run gives 45 cars, 208 motorcycles and 21 bicycles in 314 accepted tracks. Without it, the same detections give 98 cars, 175 motorcycles and 3 bicycles in 316 tracks. The totals differ because fragments of a track are stitched together only when both are vehicles or both are two-wheelers, and one more track fails the plausibility checks with the rule. CNG auto-rickshaws (motorised three-wheelers) with `car` or `van` evidence are cars either way ([Limitations](../limitations.md#mixed-traffic-and-class-dependent-scale)).
 
 ## Command line
 
 ```bash
 python -c "import math, tachymetry as tm; tm.Camera.from_pose((3840, 2160), focal=1920 / math.tan(math.radians(34.2)), height=111.7, pitch=90.0).save('cam.json')"
-tachymetry run ~/.cache/tachymetry/samples/dhaka-roundabout.mp4 --camera cam.json --out runs --render
+tachymetry run ~/.cache/tachymetry/samples/dhaka-roundabout.mp4 --camera cam.json --out runs --render \
+    --set hygiene.small_vehicle_rule=true
 ```
 
 The sample is stored under `$TACHYMETRY_CACHE/samples`, by default `~/.cache/tachymetry/samples`, once `sample_video("dhaka-roundabout")` or the demo has fetched it. A camera given with `--camera` is used as is; it is resized if the video's resolution differs. For a flight with a different altitude or lens, change `height` and the field of view.
@@ -172,9 +184,9 @@ The known camera is not compared with ground truth: the clip has none. The quant
 |---|---|---|
 | Width of the swimming pool beside the roundabout, in the bird's-eye view | 24.3 m | 25 m if it is a standard 50 m pool; its far end lies outside the frame |
 | Roundabout island in the image | circle, axis ratio 0.98; diameter 29.7 m | a circular island under a nadir view |
-| Pedestrians, median of per-track median speeds (34 moving tracks) | 4.9 km/h | free walking speeds of 1.2 to 1.4 m/s (4.3 to 5.0 km/h) |
-| Cars, median of per-track median speeds (97 moving tracks) | 11.8 km/h | congested roundabout |
-| Motorcycles, median of per-track median speeds (200 moving tracks, rickshaws included) | 12.8 km/h | congested roundabout |
+| Pedestrians, median of per-track median speeds (28 moving tracks) | 4.8 km/h | free walking speeds of 1.2 to 1.4 m/s (4.3 to 5.0 km/h) |
+| Cars, median of per-track median speeds (28 moving tracks) | 11.1 km/h | congested roundabout |
+| Motorcycles, median of per-track median speeds (187 moving tracks, some rickshaws included) | 12.6 km/h | congested roundabout |
 
 The speeds are computed from `tracks_summary.csv` of the run above:
 
@@ -189,13 +201,13 @@ print(moving["class"].value_counts().to_dict())
 
 ```text
 class
-bicycle       16.9
-car           11.8
-motorcycle    12.8
-person         4.9
-truck         10.2
+bicycle       13.1
+car           11.1
+motorcycle    12.6
+person         4.8
+truck          7.7
 Name: speed_median_kmh, dtype: float64
-{'motorcycle': 200, 'car': 97, 'person': 34, 'truck': 10, 'bicycle': 1}
+{'motorcycle': 187, 'car': 28, 'person': 28, 'bicycle': 17, 'truck': 6}
 ```
 
 ## Rendering straight-down views
